@@ -11,8 +11,11 @@ export async function GET() {
       orderBy: { captured_at: 'desc' },
     })
 
+    // Count of filed items ingested in the past 7 days as citedAnswers proxy
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
     // Live queue depths, rule counts, dormant ratio, and sparkline data
-    const [relevanceCount, labelCount, rulesCount, allRules, recentSnapshots] = await Promise.all([
+    const [relevanceCount, labelCount, rulesCount, allRules, recentSnapshots, citedAnswersProxy] = await Promise.all([
       // relevance queue: uncertain + no axis classification yet
       prisma.item.count({
         where: { user_id: userId, status: 'uncertain', axis_type: null },
@@ -36,6 +39,14 @@ export async function GET() {
         orderBy: { captured_at: 'desc' },
         take: 8,
         select: { total_uncertain: true },
+      }),
+      // citedAnswers proxy: filed items ingested in the past 7 days
+      prisma.item.count({
+        where: {
+          user_id: userId,
+          status: 'filed',
+          ingested_at: { gte: oneWeekAgo },
+        },
       }),
     ])
 
@@ -64,7 +75,7 @@ export async function GET() {
         label: labelCount,
       },
       weekly: {
-        citedAnswers: null,       // Phase 4
+        citedAnswers: citedAnswersProxy,
         medianDecisionSec: null,  // Phase 3 — requires TriageDecision table (not yet instrumented)
       },
       auto: {
