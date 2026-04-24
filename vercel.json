@@ -1,7 +1,7 @@
 {
   "crons": [
-    { "path": "/api/cron/resolve", "schedule": "*/5 * * * *" },
-    { "path": "/api/rules/consolidation/cron", "schedule": "0 4 * * 0" },
-    { "path": "/api/taxonomy/merge-proposals/cron", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/resolve", "schedule": "0 2 * * *" },
+    { "path": "/api/rules/consolidation/cron", "schedule": "0 3 * * *" },
+    { "path": "/api/taxonomy/merge-proposals/cron", "schedule": "0 4 * * *" }
   ]
 }
