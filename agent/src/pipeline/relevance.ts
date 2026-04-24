@@ -1,5 +1,6 @@
 import { claudePrompt } from './claude.js';
 import type { ContentResult } from './extractor.js';
+import { fetchIdentityContext } from './identity.js';
 
 export type RelevanceDecision = 'keep' | 'ignore' | 'uncertain';
 
@@ -9,7 +10,7 @@ export interface RelevanceResult {
   reason: string;
 }
 
-function buildRelevancePrompt(filename: string, mimeType: string, content: ContentResult): string {
+function buildRelevancePrompt(filename: string, mimeType: string, content: ContentResult, identityContext = ''): string {
   const contentSection = content.metadataOnly
     ? `File type: ${mimeType}, size: ${content.sizeBytes} bytes (content not available — classify from metadata only)`
     : `File content (first 2000 chars):\n${(content.content ?? '').slice(0, 2000)}`;
@@ -20,7 +21,7 @@ File: ${filename}
 MIME type: ${mimeType}
 Size: ${content.sizeBytes} bytes
 ${contentSection}
-
+${identityContext ? `\nIdentity context:\n${identityContext}\n` : ''}
 Classify this file:
 - keep: clearly relevant professional document, contract, receipt, correspondence, reference material
 - ignore: clearly junk — installers, temp files, auto-downloads, marketing spam, duplicated noise
@@ -35,7 +36,7 @@ Rules:
 - No explanations outside the JSON`;
 }
 
-function buildGmailRelevancePrompt(msg: { subject?: string; from?: string; snippet?: string; sizeEstimate?: number }): string {
+function buildGmailRelevancePrompt(msg: { subject?: string; from?: string; snippet?: string; sizeEstimate?: number }, identityContext = ''): string {
   return `You are a personal filing assistant deciding if an email is worth keeping in Daniel's archive.
 
 Email:
@@ -43,7 +44,7 @@ Subject: ${msg.subject ?? '(no subject)'}
 From: ${msg.from ?? '(unknown)'}
 Preview: ${msg.snippet ?? '(no preview)'}
 Size: ${msg.sizeEstimate ?? 0} bytes
-
+${identityContext ? `\nIdentity context:\n${identityContext}\n` : ''}
 Classify this email:
 - keep: clearly relevant — contracts, receipts, professional correspondence, travel bookings
 - ignore: clearly junk — newsletters, marketing, notifications, automated alerts
@@ -80,7 +81,8 @@ export async function classifyRelevance(
   mimeType: string,
   content: ContentResult,
 ): Promise<RelevanceResult> {
-  const prompt = buildRelevancePrompt(filename, mimeType, content);
+  const identity = await fetchIdentityContext(process.env.CORTEX_USER_ID!);
+  const prompt = buildRelevancePrompt(filename, mimeType, content, identity.contextBlock);
   const text = await claudePrompt(prompt);
   return parseRelevanceResponse(text);
 }
@@ -91,7 +93,8 @@ export async function classifyGmailRelevance(gmailMsg: {
   snippet?: string;
   sizeEstimate?: number;
 }): Promise<RelevanceResult> {
-  const prompt = buildGmailRelevancePrompt(gmailMsg);
+  const identity = await fetchIdentityContext(process.env.CORTEX_USER_ID!);
+  const prompt = buildGmailRelevancePrompt(gmailMsg, identity.contextBlock);
   const text = await claudePrompt(prompt);
   return parseRelevanceResponse(text);
 }

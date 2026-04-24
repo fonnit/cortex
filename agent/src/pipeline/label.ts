@@ -1,4 +1,5 @@
 import { claudePrompt } from './claude.js';
+import { fetchIdentityContext } from './identity.js';
 
 export interface AxisProposal {
   value: string | null;
@@ -20,6 +21,7 @@ function buildLabelPrompt(
   mimeType: string,
   contentSnippet: string | null,
   existingTaxonomy: { types: string[]; froms: string[]; contexts: string[] },
+  identityContext = '',
 ): string {
   const taxonomySection = [
     existingTaxonomy.types.length ? `Known Types: ${existingTaxonomy.types.join(', ')}` : '',
@@ -34,7 +36,7 @@ MIME type: ${mimeType}
 ${contentSnippet ? `Content preview (first 1000 chars):\n${contentSnippet.slice(0, 1000)}` : '(no content — classify from filename and metadata only)'}
 
 ${taxonomySection ? `Existing taxonomy (prefer existing values when they fit):\n${taxonomySection}` : '(no existing taxonomy — propose new labels)'}
-
+${identityContext ? `\nIdentity context:\n${identityContext}\n` : ''}
 Propose labels on 3 axes:
 - Type: what kind of document (Invoice, Contract, Receipt, Photo, Article, Code, etc.)
 - From: who or what organisation it's from (use existing taxonomy or propose new)
@@ -55,6 +57,8 @@ Rules:
 - confidence >= 0.75 means you're confident; below 0.75 means unsure
 - value: null if you truly cannot propose (will route to label triage)
 - Prefer existing taxonomy values when they fit
+- 'from' axis: if content or filename contains a known person's name, use that person's name as the 'from' value (not an institution). For ID documents, use the document holder's name, not the issuing authority.
+- 'from' axis confidence: if you cannot determine which person a document belongs to, set confidence below 0.75 to route to triage — never auto-assign a person when uncertain.
 - No explanations outside the JSON`;
 }
 
@@ -104,7 +108,8 @@ export async function classifyLabel(
   contentSnippet: string | null,
   existingTaxonomy: { types: string[]; froms: string[]; contexts: string[] },
 ): Promise<LabelResult> {
-  const prompt = buildLabelPrompt(filename, mimeType, contentSnippet, existingTaxonomy);
+  const identity = await fetchIdentityContext(process.env.CORTEX_USER_ID!);
+  const prompt = buildLabelPrompt(filename, mimeType, contentSnippet, existingTaxonomy, identity.contextBlock);
   const text = await claudePrompt(prompt);
   const result = parseLabelResponse(text);
 
