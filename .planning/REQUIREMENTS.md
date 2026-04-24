@@ -135,13 +135,73 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| *(populated by roadmapper)* | | |
+| ING-01 | Phase 1 | Pending |
+| ING-02 | Phase 1 | Pending |
+| ING-03 | Phase 1 | Pending |
+| ING-04 | Phase 1 | Pending |
+| ING-05 | Phase 1 | Pending |
+| ING-06 | Phase 1 | Pending |
+| CLS-01 | Phase 1 | Pending |
+| CLS-02 | Phase 1 | Pending |
+| CLS-03 | Phase 1 | Pending |
+| CLS-04 | Phase 1 | Pending |
+| CLS-05 | Phase 1 | Pending |
+| CLS-06 | Phase 1 | Pending |
+| CLS-07 | Phase 1 | Pending |
+| CLS-08 | Phase 1 | Pending |
+| DRV-01 | Phase 1 | Pending |
+| OBS-01 | Phase 1 | Pending |
+| OBS-06 | Phase 1 | Pending |
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| TRI-01 | Phase 2 | Pending |
+| TRI-02 | Phase 2 | Pending |
+| TRI-03 | Phase 2 | Pending |
+| TRI-04 | Phase 2 | Pending |
+| TRI-05 | Phase 2 | Pending |
+| TRI-06 | Phase 2 | Pending |
+| TRI-07 | Phase 2 | Pending |
+| TRI-08 | Phase 2 | Pending |
+| TRI-09 | Phase 2 | Pending |
+| TRI-10 | Phase 2 | Pending |
+| DRV-02 | Phase 2 | Pending |
+| DRV-03 | Phase 2 | Pending |
+| DRV-04 | Phase 2 | Pending |
+| DRV-05 | Phase 2 | Pending |
+| DSN-01 | Phase 2 | Pending |
+| DSN-02 | Phase 2 | Pending |
+| DSN-03 | Phase 2 | Pending |
+| DSN-04 | Phase 2 | Pending |
+| DSN-05 | Phase 2 | Pending |
+| OBS-05 | Phase 2 | Pending |
+| TAX-01 | Phase 3 | Pending |
+| TAX-02 | Phase 3 | Pending |
+| TAX-03 | Phase 3 | Pending |
+| TAX-04 | Phase 3 | Pending |
+| TAX-05 | Phase 3 | Pending |
+| TAX-06 | Phase 3 | Pending |
+| TAX-07 | Phase 3 | Pending |
+| RUL-01 | Phase 3 | Pending |
+| RUL-02 | Phase 3 | Pending |
+| RUL-03 | Phase 3 | Pending |
+| RUL-04 | Phase 3 | Pending |
+| RUL-05 | Phase 3 | Pending |
+| RUL-06 | Phase 3 | Pending |
+| OBS-02 | Phase 3 | Pending |
+| OBS-03 | Phase 3 | Pending |
+| OBS-04 | Phase 3 | Pending |
+| RET-01 | Phase 4 | Pending |
+| RET-02 | Phase 4 | Pending |
+| RET-03 | Phase 4 | Pending |
+| RET-04 | Phase 4 | Pending |
+| RET-05 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 48 total
-- Mapped to phases: 0
-- Unmapped: 48 (awaiting roadmap)
+- v1 requirements: 61 total (file previously stated 48 — recount from actual requirement IDs)
+- Mapped to phases: 61
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-24*
-*Last updated: 2026-04-24 after initial definition*
+*Last updated: 2026-04-24 after roadmap creation — traceability populated*
