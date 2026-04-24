@@ -1,21 +1,4 @@
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import { claudePrompt } from './claude.js';
-
-function loadIdentity(): string {
-  try {
-    const raw = readFileSync(resolve(import.meta.dirname, '../../../.cortex-identity.json'), 'utf-8');
-    const id = JSON.parse(raw);
-    const lines = [`Owner: ${id.owner?.name} (${id.owner?.email})`];
-    if (id.known_people?.length) {
-      lines.push('Known people: ' + id.known_people.map((p: { name: string; relationship: string }) => `${p.name} (${p.relationship})`).join(', '));
-    }
-    if (id.filing_rules?.length) {
-      lines.push('Filing rules: ' + id.filing_rules.join('; '));
-    }
-    return lines.join('\n');
-  } catch { return ''; }
-}
 
 export interface AxisProposal {
   value: string | null;
@@ -44,10 +27,9 @@ function buildLabelPrompt(
     existingTaxonomy.contexts.length ? `Known Contexts: ${existingTaxonomy.contexts.join(', ')}` : '',
   ].filter(Boolean).join('\n');
 
-  const identity = loadIdentity();
-  return `You are a personal filing assistant proposing taxonomy labels for the owner's archive.
+  return `You are a personal filing assistant proposing taxonomy labels for Daniel's archive.
 
-${identity ? `Identity context:\n${identity}\n` : ''}File: ${filename}
+File: ${filename}
 MIME type: ${mimeType}
 ${contentSnippet ? `Content preview (first 1000 chars):\n${contentSnippet.slice(0, 1000)}` : '(no content — classify from filename and metadata only)'}
 
