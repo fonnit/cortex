@@ -1,0 +1,23 @@
+{
+  "name": "cortex-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --watch dist/index.js"
+  },
+  "dependencies": {
+    "chokidar": "5.0.0",
+    "googleapis": "171.4.0",
+    "@anthropic-ai/sdk": "0.91.0",
+    "keytar": "7.9.0",
+    "langfuse": "3.38.20",
+    "@neondatabase/serverless": "1.1.0",
+    "@prisma/client": "7.8.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "22.x"
+  }
+}

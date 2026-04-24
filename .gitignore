@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+agent/node_modules/
+
+# Environment variables — never commit; see .env.example
+.env
+.env.local
+.env.*.local
+
+# Prisma generated client
+node_modules/.prisma/
+
+# Next.js build output
+.next/
+out/
+
+# TypeScript compiled output
+agent/dist/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
