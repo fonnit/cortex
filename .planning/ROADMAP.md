@@ -23,7 +23,15 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
   3. A duplicate file (same SHA-256) dropped twice results in exactly one Neon row and one Drive upload
   4. A keep-classified item has a Drive blob at _Inbox/{YYYY-MM}/{name}; an ignore-classified item has only a minimal Neon row
   5. uncertain_rate and auto_filed_rate metrics are readable from Neon from day one; daemon heartbeat events appear in Langfuse every 5 minutes
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Neon schema (all models + irreversible columns) + agent ESM package + db push
+- [ ] 01-02-PLAN.md — Downloads FSEvents collector + polling fallback + daemon heartbeat + launchd plist
+- [ ] 01-03-PLAN.md — Gmail incremental sync + historyId 404 fallback + Google OAuth keytar storage
+- [ ] 01-04-PLAN.md — SHA-256 dedup + size-band extractor + Stage 1 relevance gate (keep/ignore/uncertain)
+- [ ] 01-05-PLAN.md — Stage 2 label classifier (3-axis + confidence) + Drive _Inbox upload
+- [ ] 01-06-PLAN.md — Langfuse trace IDs on Item rows + daily MetricSnapshot (uncertain_rate, auto_filed_rate)
 
 ### Phase 2: Triage & Web App
 **Goal**: Daniel can authenticate, open the triage queue, keyboard-navigate uncertain items, make relevance and label decisions, and see Drive blobs move from _Inbox to classified paths
@@ -64,7 +72,7 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/6 | Not started | - |
 | 2. Triage & Web App | 0/TBD | Not started | - |
 | 3. Taxonomy, Rules & Admin | 0/TBD | Not started | - |
 | 4. Retrieval | 0/TBD | Not started | - |
