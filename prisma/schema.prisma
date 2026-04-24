@@ -30,6 +30,7 @@ model Item {
   confirmed_drive_path    String?
   drive_inbox_id          String?  // Drive file ID at _Inbox/{content_hash}
   drive_filed_id          String?  // Drive file ID after resolve
+  resolve_error           String?  // JSON {message, at} — set on Drive move failure; cleared on success
 
   // Taxonomy axes
   axis_type               String?
