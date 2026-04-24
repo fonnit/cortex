@@ -3,7 +3,10 @@ import { stat, readdir } from 'fs/promises';
 import path from 'path';
 import Langfuse from 'langfuse';
 
-const DOWNLOADS_PATH = process.env.DOWNLOADS_PATH ?? `${process.env.HOME}/Downloads`;
+const WATCH_PATHS = (process.env.WATCH_PATHS ?? process.env.DOWNLOADS_PATH ?? `${process.env.HOME}/Downloads`)
+  .split(',')
+  .map((p) => p.trim())
+  .filter(Boolean);
 const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes — polling fallback
 const DEBOUNCE_MS = 2000;
 
@@ -12,8 +15,7 @@ export function startDownloadsCollector(
   onFile: (filePath: string) => Promise<void>,
   lastProcessedAt: Date,
 ): () => void {
-  // Primary: chokidar FSEvents watcher
-  const watcher = watch(DOWNLOADS_PATH, {
+  const watcher = watch(WATCH_PATHS, {
     persistent: true,
     ignoreInitial: false,
     awaitWriteFinish: { stabilityThreshold: DEBOUNCE_MS, pollInterval: 100 },
@@ -37,51 +39,53 @@ export function startDownloadsCollector(
 
   // Startup scan: catch files newer than lastProcessedAt missed during downtime
   (async () => {
-    try {
-      const entries = await readdir(DOWNLOADS_PATH, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isFile()) continue;
-        const fullPath = path.join(DOWNLOADS_PATH, entry.name);
-        const s = await stat(fullPath);
-        if (s.mtimeMs > lastProcessedAt.getTime()) {
-          await onFile(fullPath).catch((err: Error) => {
-            langfuse.trace({
-              name: 'startup_scan_error',
-              metadata: { filePath: fullPath, error: err.message },
+    for (const watchPath of WATCH_PATHS) {
+      try {
+        const entries = await readdir(watchPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile()) continue;
+          const fullPath = path.join(watchPath, entry.name);
+          const s = await stat(fullPath);
+          if (s.mtimeMs > lastProcessedAt.getTime()) {
+            await onFile(fullPath).catch((err: Error) => {
+              langfuse.trace({
+                name: 'startup_scan_error',
+                metadata: { filePath: fullPath, error: err.message },
+              });
             });
-          });
+          }
         }
+      } catch (err) {
+        langfuse.trace({ name: 'startup_scan_error', metadata: { error: String(err) } });
       }
-    } catch (err) {
-      langfuse.trace({ name: 'startup_scan_error', metadata: { error: String(err) } });
     }
   })();
 
-  // Secondary: polling fallback — catches events if FSEvents silently dies (Pitfall 1)
-  let lastMtime = 0;
+  // Polling fallback — catches events if FSEvents silently dies
+  const lastMtimes: Record<string, number> = {};
   const pollTimer = setInterval(async () => {
-    try {
-      const s = await stat(DOWNLOADS_PATH);
-      if (s.mtimeMs !== lastMtime) {
-        lastMtime = s.mtimeMs;
-        langfuse.trace({ name: 'downloads_poll_mtime_change', metadata: { mtime: s.mtimeMs } });
-        // Re-scan for new files not caught by FSEvents
-        const entries = await readdir(DOWNLOADS_PATH, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isFile()) continue;
-          const fullPath = path.join(DOWNLOADS_PATH, entry.name);
-          const fs = await stat(fullPath);
-          if (fs.mtimeMs > Date.now() - POLL_INTERVAL_MS) {
-            await onFile(fullPath).catch(() => {});
+    for (const watchPath of WATCH_PATHS) {
+      try {
+        const s = await stat(watchPath);
+        if (s.mtimeMs !== (lastMtimes[watchPath] ?? 0)) {
+          lastMtimes[watchPath] = s.mtimeMs;
+          langfuse.trace({ name: 'poll_mtime_change', metadata: { path: watchPath, mtime: s.mtimeMs } });
+          const entries = await readdir(watchPath, { withFileTypes: true });
+          for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            const fullPath = path.join(watchPath, entry.name);
+            const fs = await stat(fullPath);
+            if (fs.mtimeMs > Date.now() - POLL_INTERVAL_MS) {
+              await onFile(fullPath).catch(() => {});
+            }
           }
         }
+      } catch (err) {
+        langfuse.trace({ name: 'poll_fallback_error', metadata: { error: String(err) } });
       }
-    } catch (err) {
-      langfuse.trace({ name: 'poll_fallback_error', metadata: { error: String(err) } });
     }
   }, POLL_INTERVAL_MS);
 
-  // Return cleanup function
   return () => {
     clearInterval(pollTimer);
     watcher.close();
