@@ -19,7 +19,7 @@ const langfuse = new Langfuse({
   flushInterval: 30_000,
 });
 
-const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'daniel';
+const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'user_3CovgXkm1ISUmszeWA9lqO3eN2Y';
 const GMAIL_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Determine startup cursor — last time any item was successfully ingested

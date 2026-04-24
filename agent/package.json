@@ -8,16 +8,18 @@
     "dev": "node --watch dist/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.91.0",
+    "@neondatabase/serverless": "1.1.0",
+    "@prisma/client": "7.8.0",
     "chokidar": "5.0.0",
     "googleapis": "171.4.0",
-    "@anthropic-ai/sdk": "0.91.0",
     "keytar": "7.9.0",
-    "langfuse": "3.38.20",
-    "@neondatabase/serverless": "1.1.0",
-    "@prisma/client": "7.8.0"
+    "langfuse": "3.38.20"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
-    "@types/node": "22.x"
+    "@types/node": "22.x",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.21.0",
+    "typescript": "6.0.3"
   }
 }
