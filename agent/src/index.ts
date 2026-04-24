@@ -7,6 +7,8 @@ import { sql } from './db.js';
 import { computeHash, computeHashFromBuffer, isDuplicate } from './pipeline/dedup.js';
 import { extractContent } from './pipeline/extractor.js';
 import { classifyRelevance, classifyGmailRelevance } from './pipeline/relevance.js';
+import { classifyLabel } from './pipeline/label.js';
+import { uploadToInbox } from './drive.js';
 
 const langfuse = new Langfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -85,8 +87,8 @@ async function handleFile(filePath: string): Promise<void> {
     return;
   }
 
-  // decision === 'keep': continue to Plan 05 (label classifier + Drive upload)
-  // Store as 'processing' status — Plan 05 will update to 'certain' or 'uncertain'
+  // decision === 'keep': Stage 2 label classifier + Drive upload
+  // Insert as 'processing' first — will be updated to 'certain' or 'uncertain' after Stage 2
   await sql`
     INSERT INTO "Item" (
       id, user_id, content_hash, source, status,
@@ -99,8 +101,69 @@ async function handleFile(filePath: string): Promise<void> {
     )
     ON CONFLICT (content_hash) DO NOTHING
   `;
-  // TODO: Plan 05 wires label classifier + Drive upload here
-  span.update({ output: { status: 'keep_queued_for_label' } });
+
+  // Fetch existing taxonomy for label classifier context
+  const taxonomyRows = await sql`
+    SELECT axis, name FROM "TaxonomyLabel"
+    WHERE user_id = ${CORTEX_USER_ID} AND deprecated = false
+    ORDER BY item_count DESC
+    LIMIT 50
+  `;
+  const existingTaxonomy = {
+    types: taxonomyRows.filter((r) => r.axis === 'type').map((r) => r.name as string),
+    froms: taxonomyRows.filter((r) => r.axis === 'from').map((r) => r.name as string),
+    contexts: taxonomyRows.filter((r) => r.axis === 'context').map((r) => r.name as string),
+  };
+
+  // Stage 2: label classifier
+  const labelSpan = langfuse.trace({ name: 'label_classifier', input: { filename } });
+  const label = await classifyLabel(
+    filename,
+    content.mimeType,
+    content.content,
+    existingTaxonomy,
+  );
+  labelSpan.update({ output: label });
+
+  const finalStatus = label.allAxesConfident ? 'certain' : 'uncertain';
+
+  // CLS-08: write COMPLETE trace (stage1 + stage2) to Neon BEFORE Drive upload
+  const fullTrace = JSON.stringify({ stage1: relevance, stage2: label });
+  const itemRows = await sql`
+    UPDATE "Item"
+    SET status = ${finalStatus},
+        classification_trace = ${fullTrace}::jsonb,
+        proposed_drive_path = ${label.proposed_drive_path},
+        axis_type = ${label.axes.type.value},
+        axis_from = ${label.axes.from.value},
+        axis_context = ${label.axes.context.value},
+        axis_type_confidence = ${label.axes.type.confidence},
+        axis_from_confidence = ${label.axes.from.confidence},
+        axis_context_confidence = ${label.axes.context.confidence},
+        updated_at = now()
+    WHERE content_hash = ${contentHash}
+    RETURNING id
+  `;
+
+  // Drive upload AFTER Neon write — DRV-01 two-phase lifecycle
+  if (itemRows.length > 0) {
+    try {
+      const driveInboxId = await uploadToInbox(filePath, content.mimeType);
+      await sql`
+        UPDATE "Item"
+        SET drive_inbox_id = ${driveInboxId}, updated_at = now()
+        WHERE content_hash = ${contentHash}
+      `;
+      span.update({ output: { status: finalStatus, drive_inbox_id: driveInboxId } });
+    } catch (driveErr: unknown) {
+      // Drive upload failed — Neon row is intact; Drive upload can be retried
+      langfuse.trace({
+        name: 'drive_upload_error',
+        metadata: { filename, error: String(driveErr) },
+      });
+      span.update({ output: { status: finalStatus, drive_error: String(driveErr) } });
+    }
+  }
 }
 
 async function handleGmailMessage(msg: GmailMessage): Promise<void> {
