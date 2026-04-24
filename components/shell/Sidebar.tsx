@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 
 interface SidebarProps {
@@ -22,6 +23,21 @@ function Logo() {
 
 export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
   const { user } = useUser()
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+
+  useEffect(() => {
+    const stored = localStorage.getItem('theme')
+    if (stored === 'dark' || stored === 'light') {
+      setTheme(stored)
+    }
+  }, [])
+
+  function toggleTheme() {
+    const next = theme === 'light' ? 'dark' : 'light'
+    document.documentElement.setAttribute('data-theme', next)
+    localStorage.setItem('theme', next)
+    setTheme(next)
+  }
 
   const items = [
     { id: 'triage', label: 'Triage', kbd: 'T', count: queues.relevance + queues.label },
@@ -65,6 +81,11 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
         <div className="cx-foot-row">
           <span>gmail</span>
           <b>synced · —</b>
+        </div>
+        <div className="cx-foot-row">
+          <button className="cx-linkbtn" onClick={toggleTheme}>
+            {theme === 'light' ? 'dark' : 'light'}
+          </button>
         </div>
       </div>
     </aside>
