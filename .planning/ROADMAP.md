@@ -8,7 +8,7 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 
 - [x] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation (completed 2026-04-24)
 - [x] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron (completed 2026-04-24)
-- [ ] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics
+- [x] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics (completed 2026-04-24)
 - [ ] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations
 
 ## Phase Details
@@ -64,12 +64,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — TaxonomyMergeProposal schema + GET /api/taxonomy + TaxonomyView page (three-tab list + merge sidebar)
-- [ ] 03-02-PLAN.md — Taxonomy mutations: rename/merge/split/deprecate APIs + wired action modals
-- [ ] 03-03-PLAN.md — Fuzzy dedup gate (0.85 block) + nightly merge proposal cron
-- [ ] 03-04-PLAN.md — Rule schema + GET/POST /api/rules (hard cap + redundancy check) + RulesView page + weekly consolidation cron
-- [ ] 03-05-PLAN.md — Rule re-apply: two-phase PATCH (preview diff + confirm) + edit panel in RulesView
-- [ ] 03-06-PLAN.md — AdminView page + extended /api/metrics (dormantRatio, medianRulesInCtx, queueTrend) + MetricsStrip wiring + human checkpoint
+- [x] 03-01-PLAN.md — TaxonomyMergeProposal schema + GET /api/taxonomy + TaxonomyView page (three-tab list + merge sidebar)
+- [x] 03-02-PLAN.md — Taxonomy mutations: rename/merge/split/deprecate APIs + wired action modals
+- [x] 03-03-PLAN.md — Fuzzy dedup gate (0.85 block) + nightly merge proposal cron
+- [x] 03-04-PLAN.md — Rule schema + GET/POST /api/rules (hard cap + redundancy check) + RulesView page + weekly consolidation cron
+- [x] 03-05-PLAN.md — Rule re-apply: two-phase PATCH (preview diff + confirm) + edit panel in RulesView
+- [x] 03-06-PLAN.md — AdminView page + extended /api/metrics (dormantRatio, medianRulesInCtx, queueTrend) + MetricsStrip wiring + human checkpoint
 
 ### Phase 4: Retrieval
 **Goal**: Daniel can ask a natural-language question and receive a synthesized answer with inline citations linking to the source items in Drive
@@ -87,5 +87,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 6/6 | Complete    | 2026-04-24 |
 | 2. Triage & Web App | 5/5 | Complete    | 2026-04-24 |
-| 3. Taxonomy, Rules & Admin | 0/6 | Not started | - |
+| 3. Taxonomy, Rules & Admin | 6/6 | Complete    | 2026-04-24 |
 | 4. Retrieval | 0/TBD | Not started | - |
