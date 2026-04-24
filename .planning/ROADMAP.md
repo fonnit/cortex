@@ -40,11 +40,17 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Daniel logs in with Clerk MFA and the web app is the only entry point; user-initiated delete removes Drive blob, Neon rows, and embeddings atomically
   2. The triage queue renders in the archival aesthetic (Newsreader/Inter Tight/JetBrains Mono, ivory/ink/umber palette) matching the Claude Design handoff pixel-faithfully
-  3. Keyboard shortcuts K/X/S (relevance mode) and 1/2/3/N/S/Enter/A/I (label mode) with J/K navigation and U undo all work without mouse; each decision completes in under 3 seconds once taxonomy matures
+  3. Keyboard shortcuts K/X/S (relevance mode) and 1/2/3/N/S/Enter/A/I (label mode) with J/H navigation and U undo all work without mouse; each decision completes in under 3 seconds once taxonomy matures
   4. After a label decision is confirmed, the Drive blob moves from _Inbox to proposed_drive_path within the cron window; collision appends a short hash suffix; cascade moves are tracked per-item (not fire-and-forget)
   5. The metrics strip shows 6 cells with north star + 5 leading indicators on every page load
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 5 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Clerk middleware + globals.css design system + root layout + Prisma client
+- [ ] 02-02-PLAN.md — App shell (Sidebar + Topbar + MetricsStrip) + /api/metrics
+- [ ] 02-03-PLAN.md — Triage queue (TriageView + all keyboard shortcuts + API)
+- [ ] 02-04-PLAN.md — Drive resolve cron + delete API + schema resolve_error column
+- [ ] 02-05-PLAN.md — Integration wiring + dark mode + visual checkpoint
 
 ### Phase 3: Taxonomy, Rules & Admin
 **Goal**: Daniel can rename, merge, split, and deprecate taxonomy categories with cascading Drive moves; create and manage rules that pre-filter classification; and view the /admin metrics that validate the feedback loop hypothesis
@@ -73,6 +79,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 6/6 | Complete    | 2026-04-24 |
-| 2. Triage & Web App | 0/TBD | Not started | - |
+| 2. Triage & Web App | 0/5 | Not started | - |
 | 3. Taxonomy, Rules & Admin | 0/TBD | Not started | - |
 | 4. Retrieval | 0/TBD | Not started | - |
