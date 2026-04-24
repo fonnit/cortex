@@ -57,6 +57,7 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
     { id: 'taxonomy', label: 'Taxonomy', kbd: 'X' },
     { id: 'rules', label: 'Rules', kbd: 'R' },
     { id: 'admin', label: 'Admin', kbd: 'M' },
+    { id: 'settings', label: 'Settings', kbd: 'S' },
   ] as const
 
   const daemonLabel = status
