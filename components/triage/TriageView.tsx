@@ -87,6 +87,18 @@ export function TriageView() {
     }
   }, [activeIdx])
 
+  // Clear stale decided entries when server no longer returns those items
+  useEffect(() => {
+    const serverIds = new Set(items.map((it) => it.id))
+    setDecided((prev) => {
+      const next: Record<string, string> = {}
+      for (const [id, tag] of Object.entries(prev)) {
+        if (serverIds.has(id)) next[id] = tag
+      }
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next
+    })
+  }, [items])
+
   const item = items[activeIdx]
 
   const showToast = (t: ToastState) => {
