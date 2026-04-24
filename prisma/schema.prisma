@@ -135,3 +135,18 @@ model RuleConsolidationProposal {
 
   @@index([user_id, status])
 }
+
+model IdentityProfile {
+  id           String   @id @default(cuid())
+  user_id      String
+  role         String   // 'owner' | 'known_person'
+  name         String
+  email        String?
+  company      String?  // owner only
+  relationship String?  // for known_person: 'partner' | 'child' | 'parent' | 'sibling' | 'colleague' | etc.
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@unique([user_id, name])
+  @@index([user_id, role])
+}
