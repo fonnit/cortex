@@ -7,16 +7,7 @@ const config = {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: {
-        target: 'es2020',
-        module: 'commonjs',
-        moduleResolution: 'node',
-        esModuleInterop: true,
-        strict: false,
-        skipLibCheck: true,
-        jsx: 'react-jsx',
-        types: ['jest', 'node'],
-      },
+      tsconfig: './tsconfig.test.json',
     }],
   },
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],

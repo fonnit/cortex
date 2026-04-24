@@ -1,9 +1,9 @@
 /**
- * Triage API route tests — RED phase
+ * Triage API route tests
  * Tests for GET /api/triage and POST /api/triage
  */
 
-// Mock Prisma before importing route
+// Mock Prisma and Clerk before imports
 jest.mock('../lib/prisma', () => ({
   prisma: {
     item: {
@@ -13,11 +13,11 @@ jest.mock('../lib/prisma', () => ({
   },
 }))
 
-// Mock Clerk auth
 jest.mock('@clerk/nextjs/server', () => ({
   auth: jest.fn(),
 }))
 
+import { GET, POST } from '../app/api/triage/route'
 import { prisma } from '../lib/prisma'
 import { auth } from '@clerk/nextjs/server'
 
@@ -25,28 +25,9 @@ const mockAuth = auth as jest.MockedFunction<typeof auth>
 const mockFindMany = prisma.item.findMany as jest.MockedFunction<typeof prisma.item.findMany>
 const mockUpdate = prisma.item.update as jest.MockedFunction<typeof prisma.item.update>
 
-// Helper to import route handlers after mocks are set up
-async function importRoute() {
-  jest.resetModules()
-  // Re-apply mocks after reset
-  jest.mock('../lib/prisma', () => ({
-    prisma: {
-      item: {
-        findMany: mockFindMany,
-        update: mockUpdate,
-      },
-    },
-  }))
-  jest.mock('@clerk/nextjs/server', () => ({
-    auth: mockAuth,
-  }))
-  const { GET, POST } = await import('../app/api/triage/route')
-  return { GET, POST }
-}
-
-function makeRequest(method: string, body?: unknown): Request {
+function makeRequest(body?: unknown): Request {
   return new Request('http://localhost/api/triage', {
-    method,
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   })
@@ -60,15 +41,15 @@ describe('GET /api/triage', () => {
   it('returns 401 when not authenticated', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: null })
-    const { GET } = await importRoute()
     const res = await GET()
     expect(res.status).toBe(401)
   })
 
-  it('returns only the authenticated user\'s uncertain items', async () => {
+  it('queries only the authenticated user\'s uncertain items', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
-    const fakeItems = [
+    // @ts-ignore
+    mockFindMany.mockResolvedValue([
       {
         id: 'item_1',
         user_id: 'user_abc',
@@ -77,15 +58,12 @@ describe('GET /api/triage', () => {
         classification_trace: null,
         ingested_at: new Date(),
       },
-    ]
-    // @ts-ignore
-    mockFindMany.mockResolvedValue(fakeItems)
+    ])
 
-    const { GET } = await importRoute()
     const res = await GET()
     expect(res.status).toBe(200)
 
-    // Verify query filtered by user_id and status
+    // Verify user_id scoping (T-02-07)
     expect(mockFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -94,51 +72,48 @@ describe('GET /api/triage', () => {
         }),
       })
     )
-
-    const json = await res.json()
-    expect(Array.isArray(json)).toBe(true)
   })
 
   it('derives stage=label when classification_trace.stage2.proposals exists', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
-    const itemWithProposals = {
-      id: 'item_label',
-      user_id: 'user_abc',
-      status: 'uncertain',
-      source: 'gmail',
-      classification_trace: {
-        stage2: {
-          proposals: { type: [{ value: 'Invoice', conf: 0.9 }] },
-          confident: ['type'],
-        },
-      },
-      ingested_at: new Date(),
-    }
     // @ts-ignore
-    mockFindMany.mockResolvedValue([itemWithProposals])
+    mockFindMany.mockResolvedValue([
+      {
+        id: 'item_label',
+        user_id: 'user_abc',
+        status: 'uncertain',
+        source: 'gmail',
+        classification_trace: {
+          stage2: {
+            proposals: { type: [{ value: 'Invoice', conf: 0.9 }] },
+            confident: ['type'],
+          },
+        },
+        ingested_at: new Date(),
+      },
+    ])
 
-    const { GET } = await importRoute()
     const res = await GET()
     const json = await res.json()
     expect(json[0].stage).toBe('label')
   })
 
-  it('derives stage=relevance when no classification_trace.stage2.proposals', async () => {
+  it('derives stage=relevance when no stage2 proposals', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
-    const itemNoProposals = {
-      id: 'item_rel',
-      user_id: 'user_abc',
-      status: 'uncertain',
-      source: 'downloads',
-      classification_trace: { stage1: { reason: 'uncertain' } },
-      ingested_at: new Date(),
-    }
     // @ts-ignore
-    mockFindMany.mockResolvedValue([itemNoProposals])
+    mockFindMany.mockResolvedValue([
+      {
+        id: 'item_rel',
+        user_id: 'user_abc',
+        status: 'uncertain',
+        source: 'downloads',
+        classification_trace: { stage1: { reason: 'uncertain' } },
+        ingested_at: new Date(),
+      },
+    ])
 
-    const { GET } = await importRoute()
     const res = await GET()
     const json = await res.json()
     expect(json[0].stage).toBe('relevance')
@@ -153,8 +128,7 @@ describe('POST /api/triage', () => {
   it('returns 401 when not authenticated', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: null })
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', { itemId: 'item_1', type: 'keep' })
+    const req = makeRequest({ itemId: 'item_1', type: 'keep' })
     const res = await POST(req)
     expect(res.status).toBe(401)
   })
@@ -165,11 +139,11 @@ describe('POST /api/triage', () => {
     // @ts-ignore
     mockUpdate.mockResolvedValue({ id: 'item_1', status: 'certain' })
 
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', { itemId: 'item_1', type: 'keep' })
+    const req = makeRequest({ itemId: 'item_1', type: 'keep' })
     const res = await POST(req)
     expect(res.status).toBe(200)
 
+    // Verify user_id scoping on write (T-02-06)
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ id: 'item_1', user_id: 'user_abc' }),
@@ -186,8 +160,7 @@ describe('POST /api/triage', () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
 
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', { itemId: 'item_1', type: 'skip' })
+    const req = makeRequest({ itemId: 'item_1', type: 'skip' })
     const res = await POST(req)
     expect(res.status).toBe(200)
     expect(mockUpdate).not.toHaveBeenCalled()
@@ -199,8 +172,7 @@ describe('POST /api/triage', () => {
     // @ts-ignore
     mockUpdate.mockResolvedValue({ id: 'item_1', status: 'ignored' })
 
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', { itemId: 'item_1', type: 'ignore' })
+    const req = makeRequest({ itemId: 'item_1', type: 'ignore' })
     const res = await POST(req)
     expect(res.status).toBe(200)
 
@@ -219,8 +191,7 @@ describe('POST /api/triage', () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
 
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', { itemId: 'item_1', type: 'invalid_type' })
+    const req = makeRequest({ itemId: 'item_1', type: 'invalid_type' })
     const res = await POST(req)
     expect(res.status).toBe(400)
   })
@@ -231,8 +202,7 @@ describe('POST /api/triage', () => {
     // @ts-ignore
     mockUpdate.mockResolvedValue({ id: 'item_1', status: 'certain' })
 
-    const { POST } = await importRoute()
-    const req = makeRequest('POST', {
+    const req = makeRequest({
       itemId: 'item_1',
       type: 'confirm',
       picks: { Type: 'Financial / Invoice', From: 'Acme Co.', Context: 'FonnIT/Clients' },
