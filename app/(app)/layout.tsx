@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { ReactQueryProvider } from '@/lib/react-query'
 import { Sidebar } from '@/components/shell/Sidebar'
+import { MetricsStrip } from '@/components/shell/MetricsStrip'
 
 interface MetricsResponse {
   weekly: { citedAnswers: number | null; medianDecisionSec: number | null }
@@ -34,6 +35,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="cx-app">
       <Sidebar route={route} onRouteChange={onRouteChange} queues={queues} />
+      <MetricsStrip />
       <main className="cx-main">{children}</main>
     </div>
   )
