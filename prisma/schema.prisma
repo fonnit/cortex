@@ -1,0 +1,92 @@
+// Source: Prisma 7 docs + project architecture decisions
+// prisma/schema.prisma
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public")]
+}
+
+model Item {
+  id                      String   @id @default(cuid())
+  user_id                 String   // tenancy-ready from day one
+  content_hash            String   @unique
+  source                  String   // 'downloads' | 'gmail'
+  status                  String   // 'ignored' | 'uncertain' | 'certain' | 'resolved' | 'filed'
+
+  // Metadata
+  filename                String?
+  mime_type               String?
+  size_bytes              Int?
+  source_metadata         Json?    // email headers, sender, subject etc.
+
+  // Classification — CLS-08: full trace stored before any filing
+  classification_trace    Json?    // { stage1: {...}, stage2: {...} }
+  proposed_drive_path     String?
+  confirmed_drive_path    String?
+  drive_inbox_id          String?  // Drive file ID at _Inbox/{content_hash}
+  drive_filed_id          String?  // Drive file ID after resolve
+
+  // Taxonomy axes
+  axis_type               String?
+  axis_from               String?
+  axis_context            String?
+  axis_type_confidence    Float?
+  axis_from_confidence    Float?
+  axis_context_confidence Float?
+
+  // Dedup — near-duplicate detection
+  near_duplicate_of       String?
+  near_duplicate_of_item  Item?    @relation("NearDuplicate", fields: [near_duplicate_of], references: [id])
+  near_duplicates         Item[]   @relation("NearDuplicate")
+
+  // Embedding (Phase 4 — column exists from day one for schema stability)
+  embedding               Unsupported("halfvec(512)")?
+
+  ingested_at             DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  @@index([user_id, status])
+  @@index([content_hash])
+}
+
+model GmailCursor {
+  id                      String    @id @default(cuid())
+  user_id                 String    @unique
+  last_history_id         String?
+  last_successful_poll_at DateTime?
+  updated_at              DateTime  @updatedAt
+}
+
+model TaxonomyLabel {
+  id         String    @id @default(cuid())
+  user_id    String
+  axis       String    // 'type' | 'from' | 'context'
+  name       String
+  item_count Int       @default(0)
+  last_used  DateTime?
+  deprecated Boolean   @default(false)
+  created_at DateTime  @default(now())
+
+  @@unique([user_id, axis, name])
+  @@index([user_id, axis])
+}
+
+model MetricSnapshot {
+  id              String   @id @default(cuid())
+  user_id         String
+  captured_at     DateTime @default(now())
+  uncertain_rate  Float    // uncertain items / total items processed that day
+  auto_filed_rate Float    // certain items / (certain + uncertain) items that day
+  total_ingested  Int
+  total_uncertain Int
+  total_certain   Int
+  total_ignored   Int
+
+  @@index([user_id, captured_at])
+}
