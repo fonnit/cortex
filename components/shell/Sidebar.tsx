@@ -2,11 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useUser } from '@clerk/nextjs'
+import { useQuery } from '@tanstack/react-query'
 
 interface SidebarProps {
   route: string
   onRouteChange: (r: string) => void
   queues: { relevance: number; label: number }
+}
+
+interface StatusResponse {
+  daemon: { connected: boolean; lastSeen: string }
+  gmail: { connected: boolean; lastSync: string }
 }
 
 function Logo() {
@@ -24,6 +30,12 @@ function Logo() {
 export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
   const { user } = useUser()
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+
+  const { data: status } = useQuery<StatusResponse>({
+    queryKey: ['status'],
+    queryFn: () => fetch('/api/status').then((r) => r.json()),
+    refetchInterval: 30_000,
+  })
 
   useEffect(() => {
     const stored = localStorage.getItem('theme')
@@ -46,6 +58,18 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
     { id: 'rules', label: 'Rules', kbd: 'R' },
     { id: 'admin', label: 'Admin', kbd: 'M' },
   ] as const
+
+  const daemonLabel = status
+    ? status.daemon.connected
+      ? `connected · ${status.daemon.lastSeen}`
+      : `disconnected · ${status.daemon.lastSeen}`
+    : 'checking...'
+
+  const gmailLabel = status
+    ? status.gmail.connected
+      ? `synced · ${status.gmail.lastSync}`
+      : `not synced · ${status.gmail.lastSync}`
+    : 'checking...'
 
   return (
     <aside className="cx-sidebar" data-screen-label="Sidebar">
@@ -76,11 +100,11 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
         </div>
         <div className="cx-foot-row">
           <span>agent</span>
-          <b>launchd · connected</b>
+          <b>{daemonLabel}</b>
         </div>
         <div className="cx-foot-row">
           <span>gmail</span>
-          <b>synced · —</b>
+          <b>{gmailLabel}</b>
         </div>
         <div className="cx-foot-row">
           <button className="cx-linkbtn" onClick={toggleTheme}>
