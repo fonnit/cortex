@@ -18,7 +18,7 @@ const langfuse = new Langfuse({
   flushInterval: 5_000,
 });
 
-const USER_ID = process.env.CORTEX_USER_ID ?? 'user_3CovgXkm1ISUmszeWA9lqO3eN2Y';
+const USER_ID = process.env.CORTEX_USER_ID ?? 'user_3Cp3nYpipz83FkIeojsC3WnivVf';
 
 const files = process.argv.slice(2);
 if (files.length === 0) {
