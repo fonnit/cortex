@@ -7,9 +7,17 @@ import { Sidebar } from '@/components/shell/Sidebar'
 import { MetricsStrip } from '@/components/shell/MetricsStrip'
 
 interface MetricsResponse {
-  weekly: { citedAnswers: number | null; medianDecisionSec: number | null }
-  auto: { relevanceAutoPct: number | null; labelAutoPct: number | null; rules: number; dormantRatio: number | null }
   queues: { relevance: number; label: number }
+  weekly: { citedAnswers: number | null; medianDecisionSec: number | null }
+  auto: {
+    relevanceAutoPct: number | null
+    labelAutoPct: number | null
+    rules: number
+    medianRulesInCtx: number | null
+    dormantRatio: number | null
+  }
+  queueTrend: number[]
+  weeklyPulse: number | null
 }
 
 function AppShell({ children }: { children: React.ReactNode }) {

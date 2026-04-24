@@ -3,14 +3,17 @@
 import { useQuery } from '@tanstack/react-query'
 
 interface MetricsResponse {
+  queues: { relevance: number; label: number }
   weekly: { citedAnswers: number | null; medianDecisionSec: number | null }
   auto: {
     relevanceAutoPct: number | null
     labelAutoPct: number | null
     rules: number
+    medianRulesInCtx: number | null
     dormantRatio: number | null
   }
-  queues: { relevance: number; label: number }
+  queueTrend: number[]
+  weeklyPulse: number | null
 }
 
 export function MetricsStrip() {
@@ -33,12 +36,12 @@ export function MetricsStrip() {
     },
     {
       k: 'label auto-archive',
-      v: metrics?.auto.labelAutoPct != null ? metrics.auto.labelAutoPct + '%' : '—',
+      v: metrics?.auto.labelAutoPct != null ? `${metrics.auto.labelAutoPct.toFixed(0)}%` : '—',
       sub: 'target ≥ 60%',
     },
     {
       k: 'median decision',
-      v: metrics?.weekly.medianDecisionSec != null ? metrics.weekly.medianDecisionSec + 's' : '—',
+      v: metrics?.weekly.medianDecisionSec != null ? `${metrics.weekly.medianDecisionSec}s` : '—',
       sub: 'target < 3s',
     },
     {
@@ -49,7 +52,7 @@ export function MetricsStrip() {
     {
       k: 'dormant',
       v: metrics?.auto.dormantRatio != null
-        ? Math.round(metrics.auto.dormantRatio * 100) + '%'
+        ? `${Math.round(metrics.auto.dormantRatio * 100)}%`
         : '—',
       sub: 'of rule base',
     },
