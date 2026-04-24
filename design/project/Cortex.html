@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cortex — MVP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="triage.jsx"></script>
+<script type="text/babel" src="views.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dark": false,
+  "density": "regular",
+  "queueState": "cold",
+  "accent": "#8a4f1c",
+  "kbdChips": "always"
+}/*EDITMODE-END*/;
+
+// Queue scenes
+function buildItems(state) {
+  const all = window.SAMPLE_ITEMS;
+  if (state === "cold") {
+    // Cold-start: everything lands in relevance queue, noisy.
+    return all.map((it) => ({ ...it, stage: "relevance", proposals: null, confident: [],
+      reason: it.reason || "cold-start — no rules have fired yet; every item needs human review." }));
+  }
+  if (state === "mature") {
+    // Mature: only edge cases remain.
+    return all.filter((it) => it.stage === "label" && it.confident.length < 3).slice(0, 2);
+  }
+  return all;
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = React.useState("triage");
+
+  // Route hotkeys
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "t") setRoute("triage");
+      if (k === "a" && route !== "ask") setRoute("ask");
+      if (k === "r" && route !== "rules") setRoute("rules");
+      if (k === "m") setRoute("admin");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [route]);
+
+  // Apply tweaks to root
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = t.dark ? "dark" : "light";
+    document.documentElement.style.setProperty("--cx-accent", t.accent);
+    document.body.dataset.kbdChips = t.kbdChips;
+    document.body.dataset.cardSurface = t.cardSurface;
+  }, [t.dark, t.accent, t.kbdChips, t.cardSurface]);
+
+  const items = React.useMemo(() => buildItems(t.queueState), [t.queueState]);
+
+  const titles = {
+    triage: { t: "Triage", s: "Single card at a time. Keyboard-first. Compounding rules, not growing backlog." },
+    ask: { t: "Ask", s: "The only retrieval surface. Every answer is cited." },
+    taxonomy: { t: "Taxonomy", s: "Types, Entities, Contexts. Emergent. Rename, merge, split, deprecate — cascades into Drive." },
+    rules: { t: "Rules", s: "Structured predicates. Prefiltered at classify time. Consolidated weekly." },
+    admin: { t: "Admin", s: "Kill criteria live here. Week-4 targets tracked nightly." },
+  };
+  const { t: title, s: sub } = titles[route];
+
+  const queues = window.METRICS.queues;
+
+  return (
+    <div className="cx-app" data-screen-label={`App · ${title}`}>
+      <Sidebar route={route} setRoute={setRoute} queues={queues} />
+      <Topbar
+        title={title}
+        subtitle={null}
+        right={
+          <>
+            <div className="cx-topbar-h1" style={{ fontFamily: "var(--cx-ff-serif)" }}></div>
+          </>
+        }
+      />
+      <div className="cx-strip">
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.weekly.citedAnswers}</div>
+          <div className="cx-strip-k">cited answers / wk</div>
+          <div className="cx-strip-sub">target ≥ 20 · north star</div>
+        </div>
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.auto.relevanceAutoPct}%</div>
+          <div className="cx-strip-k">relevance auto</div>
+          <div className="cx-strip-sub">target ≥ 50% by wk 4</div>
+        </div>
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.auto.labelAutoPct}%</div>
+          <div className="cx-strip-k">label auto-archive</div>
+          <div className="cx-strip-sub">target ≥ 60% by wk 4</div>
+        </div>
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.weekly.medianDecisionSec}s</div>
+          <div className="cx-strip-k">median decision</div>
+          <div className="cx-strip-sub">target &lt; 3s</div>
+        </div>
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.queues.relevance + window.METRICS.queues.label}</div>
+          <div className="cx-strip-k">queue depth</div>
+          <div className="cx-strip-sub">{window.METRICS.queues.relevance} rel · {window.METRICS.queues.label} lbl</div>
+        </div>
+        <div className="cx-strip-cell">
+          <div className="cx-strip-v">{window.METRICS.auto.rules}</div>
+          <div className="cx-strip-k">rules</div>
+          <div className="cx-strip-sub">{window.METRICS.auto.medianRulesInCtx} median in context</div>
+        </div>
+      </div>
+      <main className="cx-main">
+        <div style={{ padding: "28px 22px 0" }}>
+          <h1 className="cx-topbar-h1" style={{
+            fontFamily: "var(--cx-ff-serif)", fontSize: 34, fontWeight: 500,
+            letterSpacing: "-0.015em", margin: "0 0 4px"
+          }}>{title}</h1>
+          <div style={{ color: "var(--cx-ink-60)", fontSize: 14, maxWidth: 720, marginBottom: 6 }}>{sub}</div>
+        </div>
+        {route === "triage" && <TriageView items={items} density={t.density} />}
+        {route === "ask" && <AskView thread={window.ASK_THREAD} />}
+        {route === "taxonomy" && <TaxonomyView taxonomy={window.TAXONOMY} merges={window.MERGE_PROPOSALS} />}
+        {route === "rules" && <RulesView rules={window.RULES} />}
+        {route === "admin" && <AdminView metrics={window.METRICS} />}
+      </main>
+
+      <TweaksPanel title="Cortex · tweaks">
+        <TweakSection label="Theme" />
+        <TweakToggle label="Dark mode" value={t.dark} onChange={(v) => setTweak("dark", v)} />
+        <TweakColor label="Accent" value={t.accent} onChange={(v) => setTweak("accent", v)} />
+        <TweakSection label="Layout" />
+        <TweakRadio label="Density" value={t.density}
+          options={["compact", "regular"]}
+          onChange={(v) => setTweak("density", v)} />
+        <TweakRadio label="Shortcut chips" value={t.kbdChips}
+          options={["always", "footer"]}
+          onChange={(v) => setTweak("kbdChips", v)} />
+        <TweakSection label="Scenario" />
+        <TweakRadio label="Queue state" value={t.queueState}
+          options={[
+            { value: "cold", label: "Cold" },
+            { value: "mid", label: "Mid" },
+            { value: "mature", label: "Mature" },
+          ]}
+          onChange={(v) => setTweak("queueState", v)} />
+        <TweakSection label="File info surface" />
+        <TweakRadio label="Style" value={t.cardSurface}
+          options={[
+            { value: "flat", label: "Flat" },
+            { value: "outline", label: "Outline" },
+            { value: "rule", label: "Ruled" },
+            { value: "index", label: "Index" },
+          ]}
+          onChange={(v) => setTweak("cardSurface", v)} />
+        <TweakSection label="Card surface" />
+        <TweakRadio label="Style" value={t.cardSurface}
+          options={[
+            { value: "none", label: "None" },
+            { value: "rule", label: "Ruled" },
+            { value: "outline", label: "Outline" },
+            { value: "panel", label: "Panel" },
+          ]}
+          onChange={(v) => setTweak("cardSurface", v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
