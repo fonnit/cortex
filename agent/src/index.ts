@@ -9,6 +9,7 @@ import { extractContent } from './pipeline/extractor.js';
 import { classifyRelevance, classifyGmailRelevance } from './pipeline/relevance.js';
 import { classifyLabel } from './pipeline/label.js';
 import { uploadToInbox } from './drive.js';
+import { snapshotMetrics } from './metrics.js';
 
 const langfuse = new Langfuse({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -33,7 +34,9 @@ async function getLastProcessedAt(): Promise<Date> {
 
 async function handleFile(filePath: string): Promise<void> {
   const filename = path.basename(filePath);
-  const span = langfuse.trace({ name: 'ingest_file', input: { filePath, filename } });
+  const traceClient = langfuse.trace({ name: 'ingest_file', input: { filePath, filename } });
+  const traceId = traceClient.id;
+  const span = traceClient;
 
   // 1. Dedup check — exits early if duplicate
   const contentHash = await computeHash(filePath);
@@ -61,7 +64,7 @@ async function handleFile(filePath: string): Promise<void> {
       ) VALUES (
         gen_random_uuid()::text, ${CORTEX_USER_ID}, ${contentHash}, 'downloads', 'ignored',
         ${filename}, ${content.mimeType}, ${content.sizeBytes},
-        ${JSON.stringify({ stage1: relevance })}::jsonb, now(), now()
+        ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now()
       )
       ON CONFLICT (content_hash) DO NOTHING
     `;
@@ -79,7 +82,7 @@ async function handleFile(filePath: string): Promise<void> {
       ) VALUES (
         gen_random_uuid()::text, ${CORTEX_USER_ID}, ${contentHash}, 'downloads', 'uncertain',
         ${filename}, ${content.mimeType}, ${content.sizeBytes},
-        ${JSON.stringify({ stage1: relevance })}::jsonb, now(), now()
+        ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now()
       )
       ON CONFLICT (content_hash) DO NOTHING
     `;
@@ -97,7 +100,7 @@ async function handleFile(filePath: string): Promise<void> {
     ) VALUES (
       gen_random_uuid()::text, ${CORTEX_USER_ID}, ${contentHash}, 'downloads', 'processing',
       ${filename}, ${content.mimeType}, ${content.sizeBytes},
-      ${JSON.stringify({ stage1: relevance })}::jsonb, now(), now()
+      ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now()
     )
     ON CONFLICT (content_hash) DO NOTHING
   `;
@@ -128,7 +131,7 @@ async function handleFile(filePath: string): Promise<void> {
   const finalStatus = label.allAxesConfident ? 'certain' : 'uncertain';
 
   // CLS-08: write COMPLETE trace (stage1 + stage2) to Neon BEFORE Drive upload
-  const fullTrace = JSON.stringify({ stage1: relevance, stage2: label });
+  const fullTrace = JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance, stage2: label });
   const itemRows = await sql`
     UPDATE "Item"
     SET status = ${finalStatus},
@@ -171,6 +174,9 @@ async function handleGmailMessage(msg: GmailMessage): Promise<void> {
   const contentHash = await computeHashFromBuffer(Buffer.from(msg.id));
   if (await isDuplicate(contentHash)) return;
 
+  const gmailTraceClient = langfuse.trace({ name: 'ingest_gmail', input: { id: msg.id } });
+  const gmailTraceId = gmailTraceClient.id;
+
   const relevance = await classifyGmailRelevance(msg);
 
   const status = relevance.decision === 'ignore' ? 'ignored'
@@ -184,11 +190,13 @@ async function handleGmailMessage(msg: GmailMessage): Promise<void> {
     ) VALUES (
       gen_random_uuid()::text, ${CORTEX_USER_ID}, ${contentHash}, 'gmail', ${status},
       ${JSON.stringify(msg)}::jsonb,
-      ${JSON.stringify({ stage1: relevance })}::jsonb,
+      ${JSON.stringify({ langfuse_trace_id: gmailTraceId, stage1: relevance })}::jsonb,
       now(), now()
     )
     ON CONFLICT (content_hash) DO NOTHING
   `;
+
+  gmailTraceClient.update({ output: { status } });
 }
 
 (async () => {
@@ -211,6 +219,20 @@ async function handleGmailMessage(msg: GmailMessage): Promise<void> {
 
   console.log('[cortex] daemon started');
   langfuse.trace({ name: 'daemon_start', metadata: { pid: process.pid } });
+
+  // Daily metrics snapshot — OBS-06
+  const runSnapshot = async () => {
+    try {
+      await snapshotMetrics();
+      langfuse.trace({ name: 'metrics_snapshot', metadata: { ts: Date.now() } });
+    } catch (err) {
+      langfuse.trace({ name: 'metrics_snapshot_error', metadata: { error: String(err) } });
+    }
+  };
+  // Run at startup (after a 10-second delay to let first items process)
+  setTimeout(runSnapshot, 10_000);
+  // Run every 24 hours
+  setInterval(runSnapshot, 24 * 60 * 60 * 1000);
 
   // Graceful cleanup on error
   process.on('uncaughtException', async (err) => {
