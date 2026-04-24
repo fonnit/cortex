@@ -1,5 +1,6 @@
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
 
 export async function GET() {
   try {
@@ -35,6 +36,24 @@ export async function GET() {
   } catch (err) {
     if (err instanceof Response) return err
     console.error('[/api/taxonomy] Unexpected error:', err)
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const userId = await requireAuth()
+    const { axis, name } = z.object({
+      axis: z.enum(['type', 'from', 'context']),
+      name: z.string().min(1).max(200),
+    }).parse(await req.json())
+    await prisma.taxonomyLabel.create({
+      data: { user_id: userId, axis, name, item_count: 0 },
+    })
+    return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
+  } catch (err) {
+    if (err instanceof Response) return err
+    console.error('[POST /api/taxonomy] Unexpected error:', err)
     return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
