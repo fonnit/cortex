@@ -106,3 +106,32 @@ model TaxonomyMergeProposal {
   @@index([user_id, status])
   @@index([user_id, axis])
 }
+
+model Rule {
+  id               String    @id @default(cuid())
+  user_id          String
+  text             String    // full predicate string, e.g. 'ext=dmg size>1MB → ignore'
+  prefilter_bucket String    // key derived from rule predicates for bucket grouping, e.g. 'ext:dmg'
+  fires            Int       @default(0)
+  last_fired_at    DateTime?
+  provenance       String    @default("manual")
+  status           String    @default("active") // 'active' | 'dormant' (computed at read time, stored for fast filter)
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([user_id, status])
+  @@index([user_id, prefilter_bucket])
+}
+
+model RuleConsolidationProposal {
+  id           String   @id @default(cuid())
+  user_id      String
+  rule_a_id    String
+  rule_b_id    String
+  evidence     String
+  status       String   @default("pending") // 'pending' | 'accepted' | 'rejected'
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([user_id, status])
+}
