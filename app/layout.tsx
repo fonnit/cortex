@@ -57,6 +57,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${newsreader.variable} ${interTight.variable} ${jetbrainsMono.variable}`}
     >
       <head>
