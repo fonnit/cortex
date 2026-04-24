@@ -90,3 +90,19 @@ model MetricSnapshot {
 
   @@index([user_id, captured_at])
 }
+
+model TaxonomyMergeProposal {
+  id                  String   @id @default(cuid())
+  user_id             String
+  axis                String   // 'type' | 'from' | 'context' | 'rule'
+  a                   String   // source label name
+  b                   String   // target label name
+  evidence            String   // human-readable evidence string
+  suggested_canonical String
+  status              String   @default("pending") // 'pending' | 'accepted' | 'rejected'
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@index([user_id, status])
+  @@index([user_id, axis])
+}
