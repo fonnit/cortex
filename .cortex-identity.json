@@ -1,0 +1,19 @@
+{
+  "owner": {
+    "name": "Daniel Fonnegra",
+    "email": "fonn@fonnit.com",
+    "company": "FonnIT"
+  },
+  "known_people": [
+    {
+      "name": "Example Person",
+      "relationship": "example — replace with real entries",
+      "notes": "Documents from this person should be filed under their name, not the owner's"
+    }
+  ],
+  "filing_rules": [
+    "Documents belonging to the owner (Daniel) should use 'Personal' as context unless clearly work-related",
+    "Documents belonging to known_people should use their name in the 'from' axis",
+    "ID documents: use the person's name as 'from', not the issuing authority"
+  ]
+}

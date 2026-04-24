@@ -5,7 +5,7 @@ import { getGoogleOAuthClient } from '../auth/google.js';
 
 const USER_ID = 'me';
 // Hardcoded single-operator user_id for MVP — tenancy-ready schema, single user
-const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'daniel';
+const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'user_3Cp3nYpipz83FkIeojsC3WnivVf';
 
 export interface GmailMessage {
   id: string;

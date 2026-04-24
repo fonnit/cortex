@@ -1,5 +1,22 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { claudePrompt } from './claude.js';
 import type { ContentResult } from './extractor.js';
+
+function loadIdentity(): string {
+  try {
+    const raw = readFileSync(resolve(import.meta.dirname, '../../../.cortex-identity.json'), 'utf-8');
+    const id = JSON.parse(raw);
+    const lines = [`Owner: ${id.owner?.name} (${id.owner?.email})`];
+    if (id.known_people?.length) {
+      lines.push('Known people: ' + id.known_people.map((p: { name: string; relationship: string }) => `${p.name} (${p.relationship})`).join(', '));
+    }
+    if (id.filing_rules?.length) {
+      lines.push('Filing rules: ' + id.filing_rules.join('; '));
+    }
+    return lines.join('\n');
+  } catch { return ''; }
+}
 
 export type RelevanceDecision = 'keep' | 'ignore' | 'uncertain';
 
@@ -14,9 +31,10 @@ function buildRelevancePrompt(filename: string, mimeType: string, content: Conte
     ? `File type: ${mimeType}, size: ${content.sizeBytes} bytes (content not available — classify from metadata only)`
     : `File content (first 2000 chars):\n${(content.content ?? '').slice(0, 2000)}`;
 
-  return `You are a personal filing assistant deciding if a file is worth keeping in Daniel's archive.
+  const identity = loadIdentity();
+  return `You are a personal filing assistant deciding if a file is worth keeping in the owner's archive.
 
-File: ${filename}
+${identity ? `Identity context:\n${identity}\n` : ''}File: ${filename}
 MIME type: ${mimeType}
 Size: ${content.sizeBytes} bytes
 ${contentSection}
@@ -36,9 +54,10 @@ Rules:
 }
 
 function buildGmailRelevancePrompt(msg: { subject?: string; from?: string; snippet?: string; sizeEstimate?: number }): string {
-  return `You are a personal filing assistant deciding if an email is worth keeping in Daniel's archive.
+  const identity = loadIdentity();
+  return `You are a personal filing assistant deciding if an email is worth keeping in the owner's archive.
 
-Email:
+${identity ? `Identity context:\n${identity}\n` : ''}Email:
 Subject: ${msg.subject ?? '(no subject)'}
 From: ${msg.from ?? '(unknown)'}
 Preview: ${msg.snippet ?? '(no preview)'}
