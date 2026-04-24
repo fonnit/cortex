@@ -29,7 +29,7 @@ function buildProposals(item: {
   axis_context_confidence: number | null
 }) {
   const trace = item.classification_trace as Record<string, unknown> | null
-  const stage2 = trace?.stage2 as Record<string, { value: string | null; confidence: number }> | undefined
+  const stage2 = trace?.stage2 as Record<string, unknown> | undefined
   const axes = stage2?.axes as Record<string, { value: string | null; confidence: number }> | undefined
   if (!axes) return null
 
