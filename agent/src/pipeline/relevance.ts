@@ -1,13 +1,11 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { claudePrompt } from './claude.js';
 import type { ContentResult } from './extractor.js';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export type RelevanceDecision = 'keep' | 'ignore' | 'uncertain';
 
 export interface RelevanceResult {
   decision: RelevanceDecision;
-  confidence: number; // 0.0 - 1.0
+  confidence: number;
   reason: string;
 }
 
@@ -57,9 +55,9 @@ Respond with JSON only:
 
 function parseRelevanceResponse(text: string): RelevanceResult {
   try {
-    // Strip any markdown fencing if Claude adds it
-    const clean = text.replace(/```json\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(clean) as { decision?: string; confidence?: number; reason?: string };
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { decision: 'uncertain', confidence: 0, reason: 'no_json_found' };
+    const parsed = JSON.parse(jsonMatch[0]) as { decision?: string; confidence?: number; reason?: string };
 
     const decision = (['keep', 'ignore', 'uncertain'].includes(parsed.decision ?? ''))
       ? (parsed.decision as RelevanceDecision)
@@ -69,7 +67,6 @@ function parseRelevanceResponse(text: string): RelevanceResult {
       ? Math.max(0, Math.min(1, parsed.confidence))
       : 0.5;
 
-    // Enforce: low confidence -> uncertain regardless of stated decision (CLS-01 threshold 0.75)
     const finalDecision: RelevanceDecision = confidence >= 0.75 ? decision : 'uncertain';
 
     return { decision: finalDecision, confidence, reason: parsed.reason ?? '' };
@@ -84,13 +81,7 @@ export async function classifyRelevance(
   content: ContentResult,
 ): Promise<RelevanceResult> {
   const prompt = buildRelevancePrompt(filename, mimeType, content);
-  const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 256,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+  const text = await claudePrompt(prompt);
   return parseRelevanceResponse(text);
 }
 
@@ -101,12 +92,6 @@ export async function classifyGmailRelevance(gmailMsg: {
   sizeEstimate?: number;
 }): Promise<RelevanceResult> {
   const prompt = buildGmailRelevancePrompt(gmailMsg);
-  const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 256,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+  const text = await claudePrompt(prompt);
   return parseRelevanceResponse(text);
 }

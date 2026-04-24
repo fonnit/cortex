@@ -1,20 +1,18 @@
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { claudePrompt } from './claude.js';
 
 export interface AxisProposal {
-  value: string | null;   // null = no confident proposal
-  confidence: number;     // 0.0 – 1.0
+  value: string | null;
+  confidence: number;
 }
 
 export interface LabelResult {
   axes: {
-    type: AxisProposal;    // e.g. "Invoice", "Contract", "Photo"
-    from: AxisProposal;    // e.g. "Anthropic", "Family", "HSBC"
-    context: AxisProposal; // e.g. "Work", "Personal", "Finance"
+    type: AxisProposal;
+    from: AxisProposal;
+    context: AxisProposal;
   };
-  proposed_drive_path: string;  // e.g. "Finance/Invoices/Anthropic"
-  allAxesConfident: boolean;    // true if all axes >= 0.75 → status=certain
+  proposed_drive_path: string;
+  allAxesConfident: boolean;
 }
 
 function buildLabelPrompt(
@@ -62,8 +60,9 @@ Rules:
 
 function parseLabelResponse(text: string): Omit<LabelResult, 'allAxesConfident'> {
   try {
-    const clean = text.replace(/```json\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(clean) as {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('no json');
+    const parsed = JSON.parse(jsonMatch[0]) as {
       type?: { value?: string | null; confidence?: number };
       from?: { value?: string | null; confidence?: number };
       context?: { value?: string | null; confidence?: number };
@@ -106,14 +105,7 @@ export async function classifyLabel(
   existingTaxonomy: { types: string[]; froms: string[]; contexts: string[] },
 ): Promise<LabelResult> {
   const prompt = buildLabelPrompt(filename, mimeType, contentSnippet, existingTaxonomy);
-
-  const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 512,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
+  const text = await claudePrompt(prompt);
   const result = parseLabelResponse(text);
 
   const allAxesConfident =
