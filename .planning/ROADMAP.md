@@ -7,7 +7,7 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 ## Phases
 
 - [x] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation (completed 2026-04-24)
-- [ ] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron
+- [x] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron (completed 2026-04-24)
 - [ ] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics
 - [ ] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations
 
@@ -46,11 +46,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Clerk middleware + globals.css design system + root layout + Prisma client
-- [ ] 02-02-PLAN.md — App shell (Sidebar + Topbar + MetricsStrip) + /api/metrics
-- [ ] 02-03-PLAN.md — Triage queue (TriageView + all keyboard shortcuts + API)
-- [ ] 02-04-PLAN.md — Drive resolve cron + delete API + schema resolve_error column
-- [ ] 02-05-PLAN.md — Integration wiring + dark mode + visual checkpoint
+- [x] 02-01-PLAN.md — Clerk middleware + globals.css design system + root layout + Prisma client
+- [x] 02-02-PLAN.md — App shell (Sidebar + Topbar + MetricsStrip) + /api/metrics
+- [x] 02-03-PLAN.md — Triage queue (TriageView + all keyboard shortcuts + API)
+- [x] 02-04-PLAN.md — Drive resolve cron + delete API + schema resolve_error column
+- [x] 02-05-PLAN.md — Integration wiring + dark mode + visual checkpoint
 
 ### Phase 3: Taxonomy, Rules & Admin
 **Goal**: Daniel can rename, merge, split, and deprecate taxonomy categories with cascading Drive moves; create and manage rules that pre-filter classification; and view the /admin metrics that validate the feedback loop hypothesis
@@ -79,6 +79,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 6/6 | Complete    | 2026-04-24 |
-| 2. Triage & Web App | 0/5 | Not started | - |
+| 2. Triage & Web App | 5/5 | Complete    | 2026-04-24 |
 | 3. Taxonomy, Rules & Admin | 0/TBD | Not started | - |
 | 4. Retrieval | 0/TBD | Not started | - |
