@@ -1,5 +1,5 @@
 // One-shot scanner — runs the full pipeline on files passed as arguments.
-// Usage: node --env-file=.env.local --import=tsx agent/src/scan.ts <file1> [file2] ...
+// Usage: node --env-file=.env --import=tsx agent/src/scan.ts <file1> [file2] ...
 
 import path from 'path';
 import Langfuse from 'langfuse';

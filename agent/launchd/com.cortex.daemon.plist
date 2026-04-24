@@ -7,8 +7,12 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/node</string>
-    <string>/Users/dfonnegrag/.cortex/agent/dist/index.js</string>
+    <string>--env-file=/Users/dfonnegrag/Projects/cortex/.env</string>
+    <string>--import=tsx</string>
+    <string>/Users/dfonnegrag/Projects/cortex/agent/src/index.ts</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/dfonnegrag/Projects/cortex</string>
   <key>KeepAlive</key>
   <true/>
   <key>RunAtLoad</key>
