@@ -6,7 +6,7 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 
 ## Phases
 
-- [ ] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation
+- [x] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation (completed 2026-04-24)
 - [ ] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron
 - [ ] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics
 - [ ] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations
@@ -26,12 +26,12 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 **Plans**: 6 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Neon schema (all models + irreversible columns) + agent ESM package + db push
-- [ ] 01-02-PLAN.md — Downloads FSEvents collector + polling fallback + daemon heartbeat + launchd plist
-- [ ] 01-03-PLAN.md — Gmail incremental sync + historyId 404 fallback + Google OAuth keytar storage
-- [ ] 01-04-PLAN.md — SHA-256 dedup + size-band extractor + Stage 1 relevance gate (keep/ignore/uncertain)
-- [ ] 01-05-PLAN.md — Stage 2 label classifier (3-axis + confidence) + Drive _Inbox upload
-- [ ] 01-06-PLAN.md — Langfuse trace IDs on Item rows + daily MetricSnapshot (uncertain_rate, auto_filed_rate)
+- [x] 01-01-PLAN.md — Neon schema (all models + irreversible columns) + agent ESM package + db push
+- [x] 01-02-PLAN.md — Downloads FSEvents collector + polling fallback + daemon heartbeat + launchd plist
+- [x] 01-03-PLAN.md — Gmail incremental sync + historyId 404 fallback + Google OAuth keytar storage
+- [x] 01-04-PLAN.md — SHA-256 dedup + size-band extractor + Stage 1 relevance gate (keep/ignore/uncertain)
+- [x] 01-05-PLAN.md — Stage 2 label classifier (3-axis + confidence) + Drive _Inbox upload
+- [x] 01-06-PLAN.md — Langfuse trace IDs on Item rows + daily MetricSnapshot (uncertain_rate, auto_filed_rate)
 
 ### Phase 2: Triage & Web App
 **Goal**: Daniel can authenticate, open the triage queue, keyboard-navigate uncertain items, make relevance and label decisions, and see Drive blobs move from _Inbox to classified paths
@@ -72,7 +72,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/6 | Not started | - |
+| 1. Foundation | 6/6 | Complete    | 2026-04-24 |
 | 2. Triage & Web App | 0/TBD | Not started | - |
 | 3. Taxonomy, Rules & Admin | 0/TBD | Not started | - |
 | 4. Retrieval | 0/TBD | Not started | - |
