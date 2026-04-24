@@ -25,3 +25,4 @@ agent/dist/
 npm-debug.log*
 .vercel
 .env*.local
+.env
