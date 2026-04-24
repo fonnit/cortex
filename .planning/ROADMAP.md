@@ -61,8 +61,15 @@ Plans:
   2. A new label creation is blocked or redirected if a fuzzy-match against existing taxonomy exceeds 0.85 similarity; the entity merge proposal inbox surfaces nightly proposals with side-by-side evidence
   3. Rules are structured predicates, capped at 20 per classification prompt, with redundancy check on write; dormant rules (60-day zero-fire) surface for deprecation review; re-apply with preview diff is available
   4. /admin page shows queue depths, auto-decision rates, rule count, median rules-in-context, dormant-rule ratio, retrieval latency, and weekly pulse score
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 6 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — TaxonomyMergeProposal schema + GET /api/taxonomy + TaxonomyView page (three-tab list + merge sidebar)
+- [ ] 03-02-PLAN.md — Taxonomy mutations: rename/merge/split/deprecate APIs + wired action modals
+- [ ] 03-03-PLAN.md — Fuzzy dedup gate (0.85 block) + nightly merge proposal cron
+- [ ] 03-04-PLAN.md — Rule schema + GET/POST /api/rules (hard cap + redundancy check) + RulesView page + weekly consolidation cron
+- [ ] 03-05-PLAN.md — Rule re-apply: two-phase PATCH (preview diff + confirm) + edit panel in RulesView
+- [ ] 03-06-PLAN.md — AdminView page + extended /api/metrics (dormantRatio, medianRulesInCtx, queueTrend) + MetricsStrip wiring + human checkpoint
 
 ### Phase 4: Retrieval
 **Goal**: Daniel can ask a natural-language question and receive a synthesized answer with inline citations linking to the source items in Drive
@@ -80,5 +87,5 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 6/6 | Complete    | 2026-04-24 |
 | 2. Triage & Web App | 5/5 | Complete    | 2026-04-24 |
-| 3. Taxonomy, Rules & Admin | 0/TBD | Not started | - |
+| 3. Taxonomy, Rules & Admin | 0/6 | Not started | - |
 | 4. Retrieval | 0/TBD | Not started | - |
