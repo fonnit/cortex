@@ -9,7 +9,7 @@ Schema and daemon first — no data, no product. Phase 1 stands up the Neon sche
 - [x] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation (completed 2026-04-24)
 - [x] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron (completed 2026-04-24)
 - [x] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics (completed 2026-04-24)
-- [ ] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations
+- [x] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations (completed 2026-04-24)
 
 ## Phase Details
 
@@ -82,9 +82,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — embedTexts helper + POST /api/cron/embed (filed-only, batch 50) + HNSW migration
-- [ ] 04-02-PLAN.md — POST /api/ask (embed query → ANN → Haiku synthesis → AskResponse)
-- [ ] 04-03-PLAN.md — AskPage (/ask) pixel-faithful to design prototype + citedAnswers in /api/metrics + human checkpoint
+- [x] 04-01-PLAN.md — embedTexts helper + POST /api/cron/embed (filed-only, batch 50) + HNSW migration
+- [x] 04-02-PLAN.md — POST /api/ask (embed query → ANN → Haiku synthesis → AskResponse)
+- [x] 04-03-PLAN.md — AskPage (/ask) pixel-faithful to design prototype + citedAnswers in /api/metrics + human checkpoint
 
 ## Progress
 
@@ -93,4 +93,4 @@ Plans:
 | 1. Foundation | 6/6 | Complete    | 2026-04-24 |
 | 2. Triage & Web App | 5/5 | Complete    | 2026-04-24 |
 | 3. Taxonomy, Rules & Admin | 6/6 | Complete    | 2026-04-24 |
-| 4. Retrieval | 0/3 | Not started | - |
+| 4. Retrieval | 3/3 | Complete    | 2026-04-24 |
