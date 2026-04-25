@@ -94,15 +94,6 @@ export function ExpandedCard({
 
   return (
     <div className="cx-expanded" onClick={(e) => e.stopPropagation()}>
-      <style>{`
-        .cx-id-suggest { padding:12px 14px; border:1px solid var(--cx-rule); border-radius:8px; background:var(--cx-panel); display:flex; flex-direction:column; gap:10px; }
-        .cx-id-suggest-label { font-size:13.5px; }
-        .cx-id-suggest-fields { display:flex; gap:8px; flex-wrap:wrap; }
-        .cx-id-suggest-input { border:1px solid var(--cx-rule); border-radius:5px; padding:6px 10px; font:inherit; font-size:13px; background:var(--cx-bg); color:var(--cx-ink); outline:none; flex:1; min-width:120px; }
-        .cx-id-suggest-actions { display:flex; gap:8px; }
-        .cx-id-suggest-saved { font-size:12.5px; }
-      `}</style>
-
       <div className="cx-card-preview">
         <div className="cx-preview-label">preview</div>
         <p className="cx-preview-body">{snippet}</p>
@@ -159,28 +150,42 @@ export function ExpandedCard({
       )}
 
       {identitySuggest && !identitySaved && (
-        <div className="cx-id-suggest">
-          <div className="cx-id-suggest-label">Add &ldquo;{identitySuggest.name}&rdquo; as identity?</div>
-          <div className="cx-id-suggest-fields">
-            <input
-              className="cx-prop-newinput cx-id-suggest-input"
-              list="cx-id-suggest-types"
-              placeholder="type (e.g. company, partner)"
-              value={identitySuggest.type}
-              onChange={e => setIdentitySuggest(s => s ? { ...s, type: e.target.value } : s)}
-            />
-            <datalist id="cx-id-suggest-types">
-              {['owner', 'company', 'partner', 'colleague', 'client'].map(t => <option key={t} value={t} />)}
-            </datalist>
-            <input
-              className="cx-prop-newinput cx-id-suggest-input"
-              type="email"
-              placeholder="email (optional)"
-              value={identitySuggest.email}
-              onChange={e => setIdentitySuggest(s => s ? { ...s, email: e.target.value } : s)}
-            />
+        <div className="cx-axis" style={{ marginTop: 12 }}>
+          <div className="cx-axis-head">
+            <span className="cx-axis-name">add identity — {identitySuggest.name}</span>
+            <span className="cx-axis-status cx-axis-status-alert">new</span>
           </div>
-          <div className="cx-id-suggest-actions">
+          <div className="cx-axis-body">
+            {['owner', 'company', ...new Set(identities.map(i => i.type))].filter((v, i, a) => a.indexOf(v) === i).map((t, i) => (
+              <button key={t} className="cx-prop" onClick={() => setIdentitySuggest(s => s ? { ...s, type: t } : s)}>
+                <span className="cx-prop-n">{i + 1}</span>
+                <span className="cx-prop-v">{t}</span>
+                <span className="cx-prop-conf">
+                  {identitySuggest.type === t && <span className="cx-check" />}
+                </span>
+              </button>
+            ))}
+            <div className="cx-prop" style={{ cursor: 'default' }}>
+              <span className="cx-prop-n">n</span>
+              <input
+                className="cx-prop-newinput"
+                placeholder="custom type…"
+                value={!['owner', 'company', ...identities.map(i => i.type)].includes(identitySuggest.type) ? identitySuggest.type : ''}
+                onChange={e => setIdentitySuggest(s => s ? { ...s, type: e.target.value } : s)}
+              />
+            </div>
+            <div className="cx-prop" style={{ cursor: 'default' }}>
+              <span className="cx-prop-n">@</span>
+              <input
+                className="cx-prop-newinput"
+                type="email"
+                placeholder="email (optional)"
+                value={identitySuggest.email}
+                onChange={e => setIdentitySuggest(s => s ? { ...s, email: e.target.value } : s)}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, padding: '8px 6px' }}>
             <button
               className="cx-action cx-action-sm cx-action-primary"
               disabled={identityBusy || !identitySuggest.type.trim()}
@@ -207,7 +212,7 @@ export function ExpandedCard({
         </div>
       )}
       {identitySaved && (
-        <div className="cx-id-suggest cx-id-suggest-saved cx-muted">
+        <div className="cx-mono cx-muted" style={{ fontSize: '12.5px', padding: '8px 14px' }}>
           &ldquo;{identitySaved}&rdquo; saved as identity.
         </div>
       )}
