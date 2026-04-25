@@ -131,7 +131,11 @@ Plans:
   2. A new file landing under any path in `WATCH_PATHS` (or surfaced by the startup recursive scan) results in a `POST /api/ingest` call within seconds, authenticated with `CORTEX_API_KEY`; a new Gmail message surfaced via incremental historyId polling produces an analogous POST with subject, from, snippet, and headers
   3. A directory tree containing a `.git` or `node_modules` entry at any level is skipped entirely — no file inside a repo or `node_modules` is ever enqueued; hidden files (`.DS_Store`, dotfiles) are likewise never enqueued; subdirectory recursion is unbounded otherwise
   4. The daemon performs no classification calls and no Drive API uploads — Stage 1, Stage 2, and the Drive resolve cron remain the sole owners of those responsibilities; daemon code paths to `claude -p` and to Drive uploads no longer exist
-**Plans**: 2 plans (estimated)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — HTTP client + FIFO buffer + heartbeat extension on /api/ingest
+- [ ] 06-02-PLAN.md — Daemon refactor (delete v1.0 db/drive/pipeline; rewrite collectors/scan/heartbeat/index) + plist + package.json cleanup
 
 ### Phase 7: Stage 1 & Stage 2 Consumers
 **Goal**: Two separate local consumer processes drain the queue end-to-end — Stage 1 polls relevance with up to 10 concurrent classifications, Stage 2 polls labelling with up to 2 concurrent classifications, both invoke `claude -p` with file paths (or text prompts for Gmail) and POST results back, with Langfuse traces spanning the full daemon → API → consumer → API loop for every item
