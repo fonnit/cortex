@@ -163,7 +163,10 @@ Plans:
   3. Items dropped via the Downloads or Gmail collectors during the soak period flow through Stage 1 and Stage 2 and surface in the existing v1.0 triage UI for any operator review needed — no manual queue intervention is required at any step
   4. A runtime audit (`launchctl print` or equivalent) of the daemon process confirms `DATABASE_URL` is not in its environment; a runtime audit of consumer subprocess argv (captured via `ps -ww` or equivalent during a live Stage 1/2 run) confirms file content is never present in any `claude -p` argument
   5. A single ingested item can be reconstructed end-to-end in the Langfuse dashboard from daemon ingest POST → API row write → consumer queue claim → `claude -p` invocation → API classify POST, with linked spans across the daemon, API, and consumer processes
-**Plans**: 1 plan (estimated)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 08-01-PLAN.md — Acceptance scripts (audit-daemon-env, audit-consumer-argv, audit-langfuse-trace, soak-daemon, gmail-backfill) + RUNBOOK.md + ACCEPTANCE.md skeleton
 
 ## Progress
 
