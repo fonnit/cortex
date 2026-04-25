@@ -68,15 +68,18 @@ export async function GET(request: NextRequest) {
     }
 
     const stageNum: 1 | 2 = parsed.data.stage === '1' ? 1 : 2
-    const limit = parsed.data.limit
-    const stageKey = stageNum === 1 ? 'stage1' : 'stage2'
+    // Single source of derivation for status strings, stageKey, and nowIso
+    // (review fix [6]): the route used to recompute pendingStatus/
+    // processingStatus/stageKey inline AND call buildClaimParams just for
+    // nowIso. Now everything routes through the helper so a future rename
+    // of QUEUE_STATUSES reaches one site, not two.
+    const { pendingStatus, processingStatus, stageKey, limit, nowIso } = buildClaimParams(
+      stageNum,
+      parsed.data.limit,
+    )
     const sql = neon(process.env.DATABASE_URL!)
 
     const cutoffIso = new Date(Date.now() - STALE_CLAIM_TIMEOUT_MS).toISOString()
-    const pendingStatus =
-      stageNum === 1 ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
-    const processingStatus =
-      stageNum === 1 ? QUEUE_STATUSES.PROCESSING_STAGE_1 : QUEUE_STATUSES.PROCESSING_STAGE_2
 
     // ─── 1) STALE RECLAIM (current stage) ──────────────────────────────────
     // If a processing_stage{N} row's last_claim_at is older than the timeout
@@ -114,7 +117,6 @@ export async function GET(request: NextRequest) {
     // Single SQL statement; FOR UPDATE SKIP LOCKED ensures parallel callers
     // never receive the same id. classification_trace.queue.{stageN}.last_claim_at
     // is written in the same statement so stale-detection has a fresh signal.
-    const { nowIso } = buildClaimParams(stageNum, limit)
     const claimSpan = trace.span({ name: 'atomic-claim', input: { stage: stageNum, limit } })
     const claimedRows = await sql`
       UPDATE "Item"

@@ -18,6 +18,9 @@ describe('buildClaimParams', () => {
     const params = buildClaimParams(1, 10)
     expect(params.pendingStatus).toBe('pending_stage1')
     expect(params.processingStatus).toBe('processing_stage1')
+    // stageKey is now consumed by the route handler (review fix [6]) so the
+    // test pins it as part of the helper's contract.
+    expect(params.stageKey).toBe('stage1')
     expect(params.limit).toBe(10)
     expect(params.stage).toBe(1)
     expect(typeof params.nowIso).toBe('string')
@@ -27,6 +30,7 @@ describe('buildClaimParams', () => {
     const params = buildClaimParams(2, 2)
     expect(params.pendingStatus).toBe('pending_stage2')
     expect(params.processingStatus).toBe('processing_stage2')
+    expect(params.stageKey).toBe('stage2')
     expect(params.limit).toBe(2)
     expect(params.stage).toBe(2)
   })
