@@ -109,10 +109,12 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
           <b>{gmailLabel}</b>
         </div>
         {status?.counts && (
-          <div className="cx-foot-row">
-            <span>items</span>
-            <b>{status.counts.total} · {status.counts.ignored} ign · {status.counts.uncertain} unc · {status.counts.certain} filed</b>
-          </div>
+          <>
+            <div className="cx-foot-row"><span>processed</span><b>{status.counts.total}</b></div>
+            <div className="cx-foot-row"><span>ignored</span><b>{status.counts.ignored}</b></div>
+            <div className="cx-foot-row"><span>triage</span><b>{status.counts.uncertain}</b></div>
+            <div className="cx-foot-row"><span>filed</span><b>{status.counts.certain}</b></div>
+          </>
         )}
         <div className="cx-foot-row">
           <button className="cx-linkbtn" onClick={toggleTheme}>

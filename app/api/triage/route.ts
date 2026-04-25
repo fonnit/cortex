@@ -2,20 +2,19 @@ import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 
-function deriveStage(item: { classification_trace: unknown; axis_type: string | null }): 'label' | 'relevance' {
+function deriveStage(item: { classification_trace: unknown; axis_type: string | null }): 'label' | 'relevance' | 'awaiting' {
   if (!item.classification_trace || typeof item.classification_trace !== 'object') return 'relevance'
   const trace = item.classification_trace as Record<string, unknown>
   const stage1 = trace.stage1 as Record<string, unknown> | undefined
 
-  // If relevance decision is 'uncertain', user hasn't decided yet → relevance mode
   if (stage1?.decision === 'uncertain') return 'relevance'
 
-  // If relevance is 'keep' (decided by classifier or user), check if we have label data
   const stage2 = trace.stage2 as Record<string, unknown> | undefined
   if (stage2?.axes) return 'label'
 
-  // Keep decision but no label data yet → needs label classification
-  // This shouldn't happen in normal flow but treat as relevance fallback
+  // User kept it but label classification hasn't run yet
+  if (stage1?.decision === 'keep') return 'awaiting'
+
   return 'relevance'
 }
 
@@ -58,27 +57,29 @@ export async function GET() {
       take: 50,
     })
 
-    const mapped = items.map((item) => {
-      const stage = deriveStage(item)
-      const labelData = stage === 'label' ? buildProposals(item) : null
+    const mapped = items
+      .map((item) => {
+        const stage = deriveStage(item)
+        if (stage === 'awaiting') return null
 
-      // Rewrite classification_trace to match ExpandedCard's expected shape
-      const trace = (item.classification_trace as Record<string, unknown>) ?? {}
-      const normalizedTrace = { ...trace }
-      if (labelData) {
-        normalizedTrace.stage2 = {
-          ...(trace.stage2 as Record<string, unknown> ?? {}),
-          proposals: labelData.proposals,
-          confident: labelData.confident,
+        const labelData = stage === 'label' ? buildProposals(item) : null
+        const trace = (item.classification_trace as Record<string, unknown>) ?? {}
+        const normalizedTrace = { ...trace }
+        if (labelData) {
+          normalizedTrace.stage2 = {
+            ...(trace.stage2 as Record<string, unknown> ?? {}),
+            proposals: labelData.proposals,
+            confident: labelData.confident,
+          }
         }
-      }
 
-      return {
-        ...item,
-        classification_trace: normalizedTrace,
-        stage,
-      }
-    })
+        return {
+          ...item,
+          classification_trace: normalizedTrace,
+          stage,
+        }
+      })
+      .filter(Boolean)
 
     return Response.json(mapped)
   } catch {
