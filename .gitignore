@@ -6,6 +6,8 @@ agent/node_modules/
 .env
 .env.local
 .env.*.local
+.env.daemon
+.env.consumer
 
 # Prisma generated client
 node_modules/.prisma/
