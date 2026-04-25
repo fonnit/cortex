@@ -13,6 +13,7 @@ interface SidebarProps {
 interface StatusResponse {
   daemon: { connected: boolean; lastSeen: string }
   gmail: { connected: boolean; lastSync: string }
+  counts: { total: number; ignored: number; uncertain: number; certain: number; processing: number }
 }
 
 function Logo() {
@@ -107,6 +108,12 @@ export function Sidebar({ route, onRouteChange, queues }: SidebarProps) {
           <span>gmail</span>
           <b>{gmailLabel}</b>
         </div>
+        {status?.counts && (
+          <div className="cx-foot-row">
+            <span>items</span>
+            <b>{status.counts.total} · {status.counts.ignored} ign · {status.counts.uncertain} unc · {status.counts.certain} filed</b>
+          </div>
+        )}
         <div className="cx-foot-row">
           <button className="cx-linkbtn" onClick={toggleTheme}>
             {theme === 'light' ? 'dark' : 'light'}
