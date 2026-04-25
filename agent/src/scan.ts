@@ -24,12 +24,19 @@ export function shouldSkipFile(filePathOrName: string): boolean {
 
 /**
  * Skip a directory tree if the directory contains `.git` OR `node_modules` as
- * a direct child entry. Returns true on EACCES / ENOENT (treat as "skip").
+ * a direct child *directory* entry. Returns true on EACCES / ENOENT (treat as
+ * "skip").
+ *
+ * The `isDirectory()` check matters: a regular file literally named
+ * `node_modules` (no extension) is rare but real (e.g. a saved npm index page)
+ * and must NOT cause the entire enclosing tree to be skipped.
  */
 export async function shouldSkipDirectory(dirPath: string): Promise<boolean> {
   try {
-    const entries = await readdir(dirPath)
-    return entries.includes('.git') || entries.includes('node_modules')
+    const entries = await readdir(dirPath, { withFileTypes: true })
+    return entries.some(
+      (e) => (e.name === '.git' || e.name === 'node_modules') && e.isDirectory(),
+    )
   } catch {
     // EACCES / ENOENT — caller will skip; treat as "skip this dir".
     return true
@@ -56,8 +63,14 @@ export async function* walkDirectory(root: string): AsyncGenerator<string> {
   }
 
   // Apply tree-skip rule at THIS level: if root itself contains .git or
-  // node_modules, abort the subtree.
-  if (entries.some((e) => e.name === '.git' || e.name === 'node_modules')) {
+  // node_modules as a *directory*, abort the subtree. The isDirectory() check
+  // mirrors shouldSkipDirectory — a file named `.git` or `node_modules` should
+  // not trigger a tree-wide skip.
+  if (
+    entries.some(
+      (e) => (e.name === '.git' || e.name === 'node_modules') && e.isDirectory(),
+    )
+  ) {
     return
   }
 

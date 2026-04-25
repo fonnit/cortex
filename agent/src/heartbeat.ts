@@ -37,8 +37,12 @@ export function incrementCounter(key: keyof Counters, by = 1): void {
 /**
  * Start the dual heartbeat. Returns a stop function that clears both intervals.
  *
- * Also installs SIGTERM/SIGINT handlers that flush Langfuse and exit cleanly —
- * launchd sends SIGTERM on `launchctl stop` (Pitfall 6).
+ * NOTE: SIGTERM / SIGINT handlers live in `index.ts` (MN-06). Heartbeat used
+ * to install its own signal handler that called `process.exit(0)` immediately
+ * after a Langfuse flush — but that path raced the buffer drain and dropped
+ * any pending IngestRequest payloads on `launchctl stop`. The orderly shutdown
+ * sequence (stop timers → drain buffer with timeout → flush → exit) belongs to
+ * the main loop, which owns the buffer instance.
  */
 export function startHeartbeat(langfuse: Langfuse): () => void {
   const startedAt = Date.now()
@@ -77,19 +81,6 @@ export function startHeartbeat(langfuse: Langfuse): () => void {
       },
     })
   }, LANGFUSE_TRACE_INTERVAL_MS)
-
-  const shutdown = async () => {
-    clearInterval(apiTimer)
-    clearInterval(lfTimer)
-    try {
-      await langfuse.flushAsync()
-    } catch {
-      /* flush errors must not block exit */
-    }
-    process.exit(0)
-  }
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT', shutdown)
 
   return () => {
     clearInterval(apiTimer)

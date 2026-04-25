@@ -20,6 +20,13 @@ import type { IngestRequest } from './http/types.js'
 const REQUIRED_ENV = ['CORTEX_API_URL', 'CORTEX_API_KEY'] as const
 const GMAIL_POLL_INTERVAL_MS = 60 * 1000 // 60s — locked CONTEXT decision
 const BUFFER_DRAIN_INTERVAL_MS = 5 * 1000 // 5s — periodic drain in normal operation
+/**
+ * Hard cap on the shutdown drain (MN-06). postIngest's own retry budget is
+ * MAX_ATTEMPTS=5 × MAX_DELAY_MS=30s, so a single buffered entry can hold a
+ * drain for ~60s+ on a network outage. We cap the orderly shutdown at 5s so
+ * launchd doesn't escalate to SIGKILL on `launchctl stop`.
+ */
+const SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000
 
 export interface BootstrapEnvResult {
   ok: boolean
@@ -111,17 +118,56 @@ export async function bootstrap(opts?: { langfuse?: Langfuse }): Promise<void> {
     metadata: { pid: process.pid, version: '0.1.1' },
   })
 
-  const shutdown = async () => {
+  // Shutdown sequence (MN-06):
+  //   1. Stop all timers + watchers so no NEW work is enqueued.
+  //   2. Best-effort drain of the buffer with a hard cap — anything we can
+  //      flush before launchd's SIGKILL escalation gets POSTed; anything we
+  //      can't will be rediscovered on the next chokidar startup scan or the
+  //      next gmail historyId-based incremental sync.
+  //   3. Flush Langfuse so any traces queued during shutdown actually ship.
+  //
+  // Idempotent — guarded by `shuttingDown` so a double signal (SIGTERM ->
+  // SIGINT or vice-versa) doesn't run the sequence twice.
+  let shuttingDown = false
+  const shutdown = async (): Promise<void> => {
+    if (shuttingDown) return
+    shuttingDown = true
     clearInterval(drainTimer)
     clearInterval(gmailTimer)
     stopHeartbeat()
     stopDownloads()
+    try {
+      await Promise.race([
+        buffer.drain(),
+        new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_TIMEOUT_MS)),
+      ])
+    } catch {
+      /* drain catches its own errors; defensive */
+    }
     try {
       await langfuse.flushAsync()
     } catch {
       /* ignore */
     }
   }
+
+  // Signal handlers — moved here from heartbeat.ts (MN-06) so the orderly
+  // sequence above runs before the process exits. launchd sends SIGTERM on
+  // `launchctl stop`; SIGINT covers manual `Ctrl-C` foreground runs.
+  const onSignal = (signal: NodeJS.Signals) => {
+    void (async () => {
+      try {
+        await shutdown()
+      } finally {
+        // Use the conventional 128 + signal-number exit code so launchd
+        // understands the exit was signal-driven (not a crash).
+        const code = signal === 'SIGINT' ? 130 : 0
+        process.exit(code)
+      }
+    })()
+  }
+  process.on('SIGTERM', () => onSignal('SIGTERM'))
+  process.on('SIGINT', () => onSignal('SIGINT'))
 
   process.on('uncaughtException', async (err) => {
     langfuse.trace({ name: 'daemon_uncaught_error', metadata: { error: err.message } })

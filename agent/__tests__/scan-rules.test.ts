@@ -71,6 +71,24 @@ describe('agent/src/scan — shouldSkipDirectory', () => {
     await makeFile('normal/b.pdf')
     expect(await shouldSkipDirectory(path.join(testRoot, 'normal'))).toBe(false)
   })
+
+  it('Test 5b: does NOT skip when a regular FILE is named node_modules (MN-03)', async () => {
+    // A user could plausibly download a file literally named `node_modules`
+    // (no extension) — e.g. a saved npmjs.com index page. The skip rule must
+    // require the entry to be a *directory*; a file with that name must not
+    // cause the entire enclosing tree to be skipped.
+    await makeFile('odd/node_modules', 'this is a regular file, not a dir')
+    await makeFile('odd/keep.txt')
+    expect(await shouldSkipDirectory(path.join(testRoot, 'odd'))).toBe(false)
+  })
+
+  it('Test 5c: does NOT skip when a regular FILE is named .git (MN-03)', async () => {
+    // Same situation for `.git` as a regular file. The dotfile rule still
+    // catches it at file-emit time, but it should not cause the tree-skip.
+    await makeFile('odd2/.git', 'pretend this is a saved file')
+    await makeFile('odd2/keep.txt')
+    expect(await shouldSkipDirectory(path.join(testRoot, 'odd2'))).toBe(false)
+  })
 })
 
 async function collect(gen: AsyncGenerator<string>): Promise<string[]> {
@@ -108,6 +126,22 @@ describe('agent/src/scan — walkDirectory', () => {
 
     const files = await collect(walkDirectory(testRoot))
     expect(files).toEqual([path.join(testRoot, 'loose.txt')])
+  })
+
+  it('Test 8b: walks normally when node_modules is a regular file (MN-03)', async () => {
+    // A regular file named `node_modules` must NOT cause its enclosing tree
+    // to be skipped. The file itself is enqueued (it has no leading dot, so
+    // shouldSkipFile lets it through).
+    await makeFile('proj/node_modules', 'just a file')
+    await makeFile('proj/src/keep.txt')
+
+    const files = await collect(walkDirectory(testRoot))
+    expect(files.sort()).toEqual(
+      [
+        path.join(testRoot, 'proj/node_modules'),
+        path.join(testRoot, 'proj/src/keep.txt'),
+      ].sort(),
+    )
   })
 
   it('Test 9: skips hidden files', async () => {
