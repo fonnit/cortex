@@ -239,6 +239,37 @@ None — `CORTEX_API_KEY` was already declared in 05-01's USER-SETUP. No new env
 - No files under `app/api/queue/` (out of scope, belongs to 05-03) — verified
 - No `prisma/migrations/` directory created — verified
 
+## Code-Review Fixes (2026-04-25, post-review)
+
+After 05-VERIFICATION ran, gsd-code-reviewer flagged 11 findings in `05-REVIEW.md`. The following from the 02-deliverables (`app/api/classify/route.ts` and the auth helper that gates it) were fixed:
+
+### Critical fixes applied
+
+- **CR-01 — Stage 2 success with partial axes silently zeroed confidence columns.** Tightened the Zod schema so `axes` requires all three keys (`type`, `from`, `context`); a sparse axes payload now 400s before any DB write. Commit `d3c7d9b`.
+- **CR-02 — Stage 2 axis with `value: null, confidence ≥ 0.75` flipped status to `certain` while leaving the column null.** Added a Zod refinement on the per-axis schema that rejects this contradiction at the API boundary. Commit `d3c7d9b`.
+- **CR-03 — Slow consumer's POST /api/classify could overwrite a re-claimer's already-completed work after stale-reclaim.** Added a TOCTOU race guard: in-memory `item.status === expectedStatus` check after `findUnique`, plus a compound `where: { id, status: expectedStatus }` in `prisma.item.updateMany`. Returns `409 item_no_longer_claimed` when stale (both success and error paths). Commit `d3c7d9b`.
+- **CR-04 — Non-constant-time API key comparison leaked length information.** Replaced the JS `!==` in `lib/api-key.ts` with `crypto.timingSafeEqual` and exported a `safeEqual` helper. Length-mismatch path self-compares to avoid early-exit timing channels. Commit `8e8670a`.
+
+### Major fixes applied
+
+- **MR-07 — Stage 1 trace's optional fields (`confidence`, `reason`) were spread as `undefined` and clobbered prior values.** The trace patch is now built conditionally; omitted optional fields preserve any prior values written by an earlier attempt. Commit `d3c7d9b`.
+- **MR-08 — Two `as unknown as object` double-casts on `classification_trace` writes bypassed Prisma's `InputJsonValue` typing.** Replaced with `as Prisma.InputJsonValue` (single cast through the proper type). Commit `d3c7d9b`.
+
+### Test changes
+
+- `__tests__/classify-api.test.ts`: 14 → 24 tests. Added a third `describe` block ("review fix coverage") with 10 tests pinning each fix above. The default fixture's `status` flipped from `pending_stage1` to `processing_stage1` (the realistic state when a consumer POSTs). All `update` mock references migrated to `updateMany` with `{count: 1}` defaults.
+- `__tests__/api-key.test.ts`: 6 → 12 tests. Added a wrong-token-of-equal-length pin and a `safeEqual` describe block (5 tests covering equal/unequal × same-length/different-length × empty + UTF-8 multi-byte).
+
+### Skipped / deferred findings (out of scope per fix brief)
+
+- IN-09 (ingest dedup ignores `user_id`): tenancy concern; single-operator MVP. Documented in REVIEW; defer to v1.2 tenancy migration.
+- IN-10 (`OWNER_USER_ID` resolved at module load): test-ergonomics only; defer.
+- IN-11 (bare `!` on `process.env.DATABASE_URL`): opaque 500 on misconfig; defer.
+
+### Net test count after fixes
+
+Phase 5 sweep: **80/80** tests green (was 64/64; +16 from review-fix coverage).
+
 ---
 *Phase: 05-queue-api-surface*
 *Completed: 2026-04-25*

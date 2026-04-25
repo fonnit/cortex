@@ -316,6 +316,27 @@ All claimed commits exist in `git log`:
 Test execution confirmation (Phase 5 full sweep):
 - 8 test files, 64 tests, all passing
 
+## Code-Review Fixes (2026-04-25, post-review)
+
+After 05-VERIFICATION ran, gsd-code-reviewer flagged 11 findings in `05-REVIEW.md`. The following from the 03-deliverables (`app/api/queue/route.ts`, `lib/queue-sql.ts`) were fixed:
+
+### Major fixes applied
+
+- **MR-05 — Test-only SQL helpers hardcoded status string literals (`'pending_stage1'`, `'processing'`, etc.) instead of resolving from `QUEUE_STATUSES`.** Replaced every literal in `_atomicClaimSqlForTest`, `_staleReclaimSqlForTest`, and `_legacyReclaimSqlForTest` with references to the canonical `QUEUE_STATUSES` map. The legacy helper interpolates the constants directly into the SQL CASE branches (compile-time `as const` strings — no SQL injection surface). Future renames now reach this file at compile time, not at test-run silently. Commit `0511d5f`.
+- **MR-06 — `buildClaimParams` was near-dead code; only `nowIso` was consumed.** Refactored `app/api/queue/route.ts` to consume `pendingStatus`, `processingStatus`, `stageKey`, `limit`, and `nowIso` ALL from `buildClaimParams` in a single destructure. Added `stageKey: StageKey` to the helper's return shape so the route no longer needs the `stage === 1 ? ... : ...` ternary inline. Removed the duplicate inline derivation that ran below. Commit `0c70b65`.
+
+### Skipped / deferred findings (out of scope per fix brief)
+
+- IN-11 (bare `!` on `process.env.DATABASE_URL` in this file): opaque 500 on misconfig; defer.
+
+### Test changes
+
+- `__tests__/queue-sql.test.ts`: added `stageKey` assertions to the two existing per-stage tests (no new tests). The route's actual `_atomicClaimSqlForTest` / `_staleReclaimSqlForTest` integration tests caught the MR-05 change automatically.
+
+### Net test count after fixes
+
+Phase 5 sweep: **80/80** tests green (was 64/64; +16 from CR-01/02/03/04 review-fix coverage in plan 02 deliverables).
+
 ---
 *Phase: 05-queue-api-surface*
 *Completed: 2026-04-25*
