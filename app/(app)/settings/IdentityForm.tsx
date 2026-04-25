@@ -65,13 +65,6 @@ export function IdentityForm() {
 
   return (
     <>
-      <style>{`
-        .cx-id-addrow td { background: var(--cx-panel-2); }
-        .cx-input { border:1px solid var(--cx-rule); border-radius:6px; padding:6px 10px;
-          font:inherit; font-size:13.5px; background:var(--cx-bg); color:var(--cx-ink);
-          outline:none; width:100%; box-sizing:border-box; }
-      `}</style>
-
       <datalist id="cx-id-types">
         {existingTypes.map(t => <option key={t} value={t} />)}
       </datalist>
@@ -90,9 +83,9 @@ export function IdentityForm() {
             <tr key={row.id}>
               {editState?.id === row.id ? (
                 <>
-                  <td><input className="cx-input" value={editState.name} onChange={e => setEditState(s => s ? { ...s, name: e.target.value } : s)} /></td>
-                  <td><input className="cx-input" list="cx-id-types" value={editState.type} onChange={e => setEditState(s => s ? { ...s, type: e.target.value } : s)} /></td>
-                  <td><input className="cx-input" type="email" value={editState.email} onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)} /></td>
+                  <td><input className="cx-prop-newinput" value={editState.name} onChange={e => setEditState(s => s ? { ...s, name: e.target.value } : s)} /></td>
+                  <td><input className="cx-prop-newinput" list="cx-id-types" value={editState.type} onChange={e => setEditState(s => s ? { ...s, type: e.target.value } : s)} /></td>
+                  <td><input className="cx-prop-newinput" type="email" value={editState.email} onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)} /></td>
                   <td className="cx-right">
                     <button className="cx-linkbtn" onClick={handleEdit} disabled={busy}>save</button>
                     <button className="cx-linkbtn cx-muted" onClick={() => setEditState(null)}>cancel</button>
@@ -112,12 +105,10 @@ export function IdentityForm() {
             </tr>
           ))}
           {addOpen && (
-            <tr className="cx-id-addrow">
-              <td><input className="cx-input" placeholder="Name" value={addOpen.name} onChange={e => setAddOpen(s => s ? { ...s, name: e.target.value } : s)} /></td>
-              <td>
-                <input className="cx-input" placeholder="Type" list="cx-id-types" value={addOpen.type} onChange={e => setAddOpen(s => s ? { ...s, type: e.target.value } : s)} />
-              </td>
-              <td><input className="cx-input" type="email" placeholder="Email (optional)" value={addOpen.email} onChange={e => setAddOpen(s => s ? { ...s, email: e.target.value } : s)} /></td>
+            <tr>
+              <td><input className="cx-prop-newinput" placeholder="Name" autoFocus value={addOpen.name} onChange={e => setAddOpen(s => s ? { ...s, name: e.target.value } : s)} /></td>
+              <td><input className="cx-prop-newinput" placeholder="Type" list="cx-id-types" value={addOpen.type} onChange={e => setAddOpen(s => s ? { ...s, type: e.target.value } : s)} /></td>
+              <td><input className="cx-prop-newinput" type="email" placeholder="Email (optional)" value={addOpen.email} onChange={e => setAddOpen(s => s ? { ...s, email: e.target.value } : s)} /></td>
               <td className="cx-right">
                 <button className="cx-linkbtn" onClick={handleAdd} disabled={busy || !addOpen.name.trim() || !addOpen.type.trim()}>save</button>
                 <button className="cx-linkbtn cx-muted" onClick={() => setAddOpen(null)}>cancel</button>
