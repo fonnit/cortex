@@ -8,43 +8,43 @@ A personal AI-native information system that captures everything Daniel receives
 
 The triage feedback loop compounds fast enough that weekly triage load trends down, not flat or up — Cortex learns to file so Daniel doesn't have to.
 
-## Current Milestone: v1.1 Ingest Pipeline Rearchitecture
+## Shipped Milestones
 
-**Goal:** Restore backend isolation and make the ingest pipeline reliable — daemon becomes a thin metadata client, Neon access flows only through the Vercel API, and classification consumers pass file paths (not content) to `claude -p`.
-
-**Target features:**
-- Daemon refactor to thin metadata client (no `DATABASE_URL`, POSTs to `/api/ingest`)
-- API ingest/queue/classify routes guarded by `CORTEX_API_KEY` shared secret
-- Stage 1 (relevance) consumer — polls queue, claude reads files via path, max 10 concurrent
-- Stage 2 (label) consumer — runs for both Downloads and Gmail items, max 2 concurrent, retry on failure
-- Queue state machine on `Item.status` with explicit pending/processing/done/retry states
-- Directory scanning rules — skip trees containing `.git`/`node_modules`, skip hidden files, no depth limit
-- Operational acceptance — daemon runs 1h on Downloads+Documents with zero errors, Gmail 6-month backfill completes
+- **v1.0 — Initial Build** (2026-04-24): full vertical ingest → classify → triage → taxonomy → rules → retrieval, Phases 1–4. See `.planning/ROADMAP.md` for phase details.
+- **v1.1 — Ingest Pipeline Rearchitecture** (2026-04-25, code-complete; live operator acceptance pending): thin daemon, Vercel-API-only Neon access, queue-driven consumers passing file paths to `claude -p`, scan rule fixes, operational acceptance toolkit. Phases 5–8. Archive: `.planning/milestones/v1.1-ROADMAP.md`. Audit: `.planning/v1.1-MILESTONE-AUDIT.md`.
 
 ## Requirements
 
-### Validated
+### Validated (shipped in v1.0)
 
-(None yet — ship to validate)
+- [x] Downloads collector (launchd + fsevents, read-only, structurally sandboxed)
+- [x] Gmail collector (one account, OAuth read-only scope, incremental via historyId)
+- [x] Content-hash dedup across sources before any processing
+- [x] Two-stage triage pipeline: relevance gate then label classifier
+- [x] Relevance classifier with keep / ignore / uncertain routing
+- [x] Size-band pre-read thresholds (PDF 5 MB, images 10 MB, installers metadata-only, default 1 MB)
+- [x] Label classifier with partial-match routing and proposed_drive_path
+- [x] Rule system: structured predicates, prefilter, 20-rule cap, redundancy check on write
+- [x] Rule consolidation + deprecation jobs
+- [x] Triage UI: inline-expanding queue, keyboard-first, relevance + label modes
+- [x] Taxonomy management: rename, merge, split, deprecate with cascade + audit
+- [x] Drive two-phase lifecycle: _Inbox then model-proposed path; cascading moves on taxonomy ops
+- [x] MCP search tool + Claude Haiku Q&A with inline citations
+- [x] Clerk auth + MFA
+- [x] Langfuse observability + /admin metrics page
+- [x] User-initiated delete (Drive blob + Neon rows + embeddings)
+
+### Validated (shipped in v1.1)
+
+- [x] Daemon thin client — no DATABASE_URL, POSTs metadata to /api/ingest with CORTEX_API_KEY (DAEMON-01..06)
+- [x] API ingest/queue/classify surface — atomic claim (FOR UPDATE SKIP LOCKED), retry-with-cap, stale-claim reclaim (API-01..06, QUE-01..06)
+- [x] Stage 1 + Stage 2 consumer processes — file paths to claude -p, independent worker pools (CONS-01..06)
+- [x] Directory scanning rules — recurse unbounded, skip .git/node_modules trees, skip hidden files (SCAN-01..03)
+- [x] Operational acceptance toolkit — audit scripts, RUNBOOK, ACCEPTANCE skeleton (ACC-01..05; live operator runs pending)
 
 ### Active
 
-- [ ] Downloads collector (launchd + fsevents, read-only, structurally sandboxed)
-- [ ] Gmail collector (one account, OAuth read-only scope, incremental via historyId)
-- [ ] Content-hash dedup across sources before any processing
-- [ ] Two-stage triage pipeline: relevance gate then label classifier
-- [ ] Relevance classifier with keep / ignore / uncertain routing
-- [ ] Size-band pre-read thresholds (PDF 5 MB, images 10 MB, installers metadata-only, default 1 MB)
-- [ ] Label classifier with partial-match routing and proposed_drive_path
-- [ ] Rule system: structured predicates, prefilter, 20-rule cap, redundancy check on write
-- [ ] Rule consolidation + deprecation jobs
-- [ ] Triage UI: inline-expanding queue, keyboard-first, relevance + label modes
-- [ ] Taxonomy management: rename, merge, split, deprecate with cascade + audit
-- [ ] Drive two-phase lifecycle: _Inbox then model-proposed path; cascading moves on taxonomy ops
-- [ ] MCP search tool + Claude Haiku Q&A with inline citations
-- [ ] Clerk auth + MFA
-- [ ] Langfuse observability + /admin metrics page
-- [ ] User-initiated delete (Drive blob + Neon rows + embeddings)
+(None — milestone v1.1 ships next)
 
 ### Out of Scope
 
@@ -90,9 +90,9 @@ Design direction: archival/library meets operator tool. Newsreader serif for dis
 | Claude is sole retrieval surface | Forces NL retrieval to be good enough; no manual search crutch | — Pending |
 | Drive as blob store, not S3 | Daniel already uses Drive; keeps files accessible outside Cortex | — Pending |
 | Inline-expanding queue cards | Design iteration with Daniel: merged card + queue into one surface | — Pending |
-| v1.1: Daemon must not access Neon directly | v1.0 daemon held `DATABASE_URL` and bypassed all validation — any bug could corrupt the DB; backend isolation enforced via API-only access with `CORTEX_API_KEY` | — Pending |
-| v1.1: Pass file paths to `claude -p`, not content | argv content broke on binary files (null bytes), exceeded argument size limits, and exhausted file descriptors (EBADF/EMFILE) | — Pending |
-| v1.1: Queue-driven consumers, not inline scan | Inline classification stuck items at `processing` forever on failure; queue with retry counts and explicit state machine fixes this and unblocks Gmail Stage 2 | — Pending |
+| v1.1: Daemon must not access Neon directly | v1.0 daemon held `DATABASE_URL` and bypassed all validation — any bug could corrupt the DB; backend isolation enforced via API-only access with `CORTEX_API_KEY` | ✓ Shipped (Phase 6) |
+| v1.1: Pass file paths to `claude -p`, not content | argv content broke on binary files (null bytes), exceeded argument size limits, and exhausted file descriptors (EBADF/EMFILE) | ✓ Shipped (Phase 7) |
+| v1.1: Queue-driven consumers, not inline scan | Inline classification stuck items at `processing` forever on failure; queue with retry counts and explicit state machine fixes this and unblocks Gmail Stage 2 | ✓ Shipped (Phases 5+7) |
 
 ## Evolution
 
@@ -112,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 — milestone v1.1 (Ingest Pipeline Rearchitecture) started*
+*Last updated: 2026-04-25 — milestone v1.1 code-complete; live operator acceptance pending*
