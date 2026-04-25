@@ -8,6 +8,19 @@ A personal AI-native information system that captures everything Daniel receives
 
 The triage feedback loop compounds fast enough that weekly triage load trends down, not flat or up — Cortex learns to file so Daniel doesn't have to.
 
+## Current Milestone: v1.1 Ingest Pipeline Rearchitecture
+
+**Goal:** Restore backend isolation and make the ingest pipeline reliable — daemon becomes a thin metadata client, Neon access flows only through the Vercel API, and classification consumers pass file paths (not content) to `claude -p`.
+
+**Target features:**
+- Daemon refactor to thin metadata client (no `DATABASE_URL`, POSTs to `/api/ingest`)
+- API ingest/queue/classify routes guarded by `CORTEX_API_KEY` shared secret
+- Stage 1 (relevance) consumer — polls queue, claude reads files via path, max 10 concurrent
+- Stage 2 (label) consumer — runs for both Downloads and Gmail items, max 2 concurrent, retry on failure
+- Queue state machine on `Item.status` with explicit pending/processing/done/retry states
+- Directory scanning rules — skip trees containing `.git`/`node_modules`, skip hidden files, no depth limit
+- Operational acceptance — daemon runs 1h on Downloads+Documents with zero errors, Gmail 6-month backfill completes
+
 ## Requirements
 
 ### Validated
@@ -77,6 +90,9 @@ Design direction: archival/library meets operator tool. Newsreader serif for dis
 | Claude is sole retrieval surface | Forces NL retrieval to be good enough; no manual search crutch | — Pending |
 | Drive as blob store, not S3 | Daniel already uses Drive; keeps files accessible outside Cortex | — Pending |
 | Inline-expanding queue cards | Design iteration with Daniel: merged card + queue into one surface | — Pending |
+| v1.1: Daemon must not access Neon directly | v1.0 daemon held `DATABASE_URL` and bypassed all validation — any bug could corrupt the DB; backend isolation enforced via API-only access with `CORTEX_API_KEY` | — Pending |
+| v1.1: Pass file paths to `claude -p`, not content | argv content broke on binary files (null bytes), exceeded argument size limits, and exhausted file descriptors (EBADF/EMFILE) | — Pending |
+| v1.1: Queue-driven consumers, not inline scan | Inline classification stuck items at `processing` forever on failure; queue with retry counts and explicit state machine fixes this and unblocks Gmail Stage 2 | — Pending |
 
 ## Evolution
 
@@ -96,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-24 after initialization*
+*Last updated: 2026-04-25 — milestone v1.1 (Ingest Pipeline Rearchitecture) started*

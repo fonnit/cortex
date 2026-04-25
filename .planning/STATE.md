@@ -1,34 +1,34 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Roadmap written; STATE.md initialized; REQUIREMENTS.md traceability updated
-last_updated: "2026-04-24T20:30:34.749Z"
-last_activity: 2026-04-24
+milestone: v1.1
+milestone_name: ingest-rearchitect
+status: defining_requirements
+stopped_at: PROJECT.md updated for milestone v1.1; awaiting REQUIREMENTS.md and ROADMAP.md
+last_updated: "2026-04-25T00:00:00.000Z"
+last_activity: 2026-04-25
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 20
-  completed_plans: 20
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-24)
+See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** The triage feedback loop compounds fast enough that weekly triage load trends down — Cortex learns to file so Daniel doesn't have to.
-**Current focus:** Phase 1 — Foundation
+**Current focus:** Milestone v1.1 — Ingest Pipeline Rearchitecture
 
 ## Current Position
 
-Phase: 4 of 4 (retrieval)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-24
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-25 — Milestone v1.1 started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -36,18 +36,13 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 20 (cumulative across milestones)
 - Average duration: —
-- Total execution time: 0 hours
+- Total execution time: 0 hours (this milestone)
 
-**By Phase:**
+**By Phase (this milestone):**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 6 | - | - |
-| 2 | 5 | - | - |
-| 3 | 6 | - | - |
-| 4 | 3 | - | - |
+(none yet — roadmap pending)
 
 **Recent Trend:**
 
@@ -63,23 +58,25 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Pre-roadmap: Schema decisions for trace storage, cursor persistence, and near_duplicate_of FK cannot be retrofitted after data exists — must land in Phase 1
-- Pre-roadmap: uncertain_rate and auto_filed_rate must be instrumented from day one or the core hypothesis is untestable
-- Pre-roadmap: Langfuse cloud platform version (v3 vs v4) and Google OAuth token storage strategy (keytar vs encrypted JSON) need explicit decisions before Phase 1 implementation begins
+- v1.1: Daemon must not access Neon directly — only Vercel API has `DATABASE_URL`
+- v1.1: `claude -p` receives file *paths*, never content as argv (argv broke on binary files, EBADF, argument size limits)
+- v1.1: Queue-driven consumers replace inline scan classification — fixes stuck `processing` items and unblocks Gmail Stage 2
+- Carried over from v1.0: Schema decisions (trace storage, cursor persistence, near_duplicate_of FK) already landed in Phase 1
+- Carried over from v1.0: uncertain_rate and auto_filed_rate metrics are instrumented from day one
 
 ### Pending Todos
 
-None yet.
+None yet for v1.1 (will accumulate during phase execution).
 
 ### Blockers/Concerns
 
-- Phase 1: Verify Langfuse cloud platform version (>= 3.95.0?) before pinning SDK — determines v3 vs v4
-- Phase 1: Choose Google OAuth token storage on Mac (keytar vs encrypted JSON) — security decision with implementation consequences
-- Phase 1: Spike chokidar 5 ESM in launchd context before committing — 30-minute spike, may fall back to v4 (CJS)
-- Phase 4: Document-type-aware chunking strategy (email vs PDF) has meaningful recall impact — research-phase recommended before Phase 4 planning
+- v1.1: Confirm `CORTEX_API_KEY` storage strategy (env var only vs macOS Keychain) before Stage 1 of new phases
+- v1.1: Decide whether Stage 1 + Stage 2 consumers run as one launchd plist or two — affects ops surface
+- v1.1: Status enum migration for `Item.status` (additive only — no schema breaking changes per non-goals) needs explicit values agreed before first phase
+- Carried over from v1.0: Document-type-aware chunking strategy for future retrieval improvements (out of scope for this milestone)
 
 ## Session Continuity
 
-Last session: 2026-04-24
-Stopped at: Roadmap written; STATE.md initialized; REQUIREMENTS.md traceability updated
+Last session: 2026-04-25
+Stopped at: Milestone v1.1 PROJECT.md and STATE.md written; awaiting REQUIREMENTS.md and ROADMAP.md
 Resume file: None
