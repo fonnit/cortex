@@ -6,7 +6,7 @@
   <string>com.cortex.daemon</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/node</string>
+    <string>/Users/dfonnegrag/.nvm/versions/node/v22.12.0/bin/node</string>
     <string>--env-file=/Users/dfonnegrag/Projects/cortex/.env</string>
     <string>--import=tsx</string>
     <string>/Users/dfonnegrag/Projects/cortex/agent/src/index.ts</string>
@@ -27,6 +27,14 @@
     <string>production</string>
     <key>HOME</key>
     <string>/Users/dfonnegrag</string>
+    <key>PATH</key>
+    <string>/Users/dfonnegrag/.nvm/versions/node/v22.12.0/bin:/Users/dfonnegrag/Projects/cortex/node_modules/.bin:/Users/dfonnegrag/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CORTEX_API_URL</key>
+    <string>https://REPLACE_WITH_VERCEL_URL.vercel.app</string>
+    <key>CORTEX_API_KEY</key>
+    <string>REPLACE_WITH_API_KEY_FROM_VERCEL</string>
+    <key>WATCH_PATHS</key>
+    <string>/Users/dfonnegrag/Downloads,/Users/dfonnegrag/Documents</string>
   </dict>
 </dict>
 </plist>

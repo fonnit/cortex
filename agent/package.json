@@ -1,6 +1,6 @@
 {
   "name": "cortex-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -8,8 +8,6 @@
     "dev": "node --watch dist/index.js"
   },
   "dependencies": {
-    "@neondatabase/serverless": "1.1.0",
-    "@prisma/client": "7.8.0",
     "chokidar": "5.0.0",
     "googleapis": "171.4.0",
     "keytar": "7.9.0",
