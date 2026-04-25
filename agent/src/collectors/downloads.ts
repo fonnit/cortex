@@ -32,17 +32,6 @@ export function startDownloadsCollector(
     awaitWriteFinish: { stabilityThreshold: DEBOUNCE_MS, pollInterval: 100 },
   });
 
-  watcher.on('add', (filePath) => {
-    const name = path.basename(filePath);
-    if (name.startsWith('.') || SKIP_FILES.has(name)) return;
-    onFile(filePath).catch((err: Error) => {
-      langfuse.trace({
-        name: 'downloads_ingest_error',
-        metadata: { filePath, error: err.message },
-      });
-    });
-  });
-
   watcher.on('error', (err: unknown) => {
     langfuse.trace({
       name: 'fsevents_error',
@@ -68,12 +57,20 @@ export function startDownloadsCollector(
     }
   }
 
-  // Startup scan: sequential recursive walk — no EMFILE risk
+  // Startup scan first, then start watching for new files
   (async () => {
+    console.log(`[scan] scanning ${WATCH_PATHS.join(', ')}...`);
     for (const watchPath of WATCH_PATHS) {
       await scanDir(watchPath);
     }
-    console.log('[scan] startup scan complete');
+    console.log('[scan] startup scan complete — now watching for new files');
+    watcher.on('add', (filePath) => {
+      const name = path.basename(filePath);
+      if (name.startsWith('.') || SKIP_FILES.has(name)) return;
+      onFile(filePath).catch((err: Error) => {
+        langfuse.trace({ name: 'downloads_ingest_error', metadata: { filePath, error: err.message } });
+      });
+    });
   })();
 
   // Polling fallback — catches events if FSEvents silently dies
