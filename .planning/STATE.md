@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: ingest-rearchitect
-status: roadmap_complete
-stopped_at: ROADMAP.md written for v1.1 (Phases 5-8); awaiting /gsd-plan-phase 5
-last_updated: "2026-04-25T00:00:00.000Z"
-last_activity: 2026-04-25
+milestone: v1.0
+milestone_name: — Initial Build
+status: executing
+stopped_at: v1.1 ROADMAP.md and STATE.md written; REQUIREMENTS.md traceability filled in; awaiting `/gsd-plan-phase 5`
+last_updated: "2026-04-25T10:43:11.378Z"
+last_activity: 2026-04-25 -- Phase 5 execution started
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 8
-  completed_plans: 0
-  percent: 0
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 20
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** The triage feedback loop compounds fast enough that weekly triage load trends down — Cortex learns to file so Daniel doesn't have to.
-**Current focus:** Milestone v1.1 — Ingest Pipeline Rearchitecture
+**Current focus:** Phase 5 — Queue & API Surface
 
 ## Current Position
 
-Phase: 5 of 8 (v1.1 phases 5-8; v1.0 phases 1-4 complete)
-Plan: — (next: `/gsd-plan-phase 5`)
-Status: Roadmap complete; phase planning pending
-Last activity: 2026-04-25 — v1.1 ROADMAP.md written, traceability mapped
+Phase: 5 (Queue & API Surface) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 5
+Last activity: 2026-04-25 -- Phase 5 execution started
 
 Progress: [░░░░░░░░░░] 0% (v1.1 — 0/8 plans)
 
