@@ -196,9 +196,13 @@ export function _atomicClaimSqlForTest(
   limit: number,
   nowIso: string,
 ): { text: string; values: unknown[] } {
+  // Resolve status strings from QUEUE_STATUSES (review fix [5]) so a future
+  // rename of any literal forces a recompile here, not a silent test drift.
   const stageKey = stage === 1 ? 'stage1' : 'stage2'
-  const pendingStatus = stage === 1 ? 'pending_stage1' : 'pending_stage2'
-  const processingStatus = stage === 1 ? 'processing_stage1' : 'processing_stage2'
+  const pendingStatus =
+    stage === 1 ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
+  const processingStatus =
+    stage === 1 ? QUEUE_STATUSES.PROCESSING_STAGE_1 : QUEUE_STATUSES.PROCESSING_STAGE_2
   return {
     text: `
       UPDATE "Item"
@@ -232,8 +236,10 @@ export function _staleReclaimSqlForTest(
   cutoffIso: string,
 ): { text: string; values: unknown[] } {
   const stageKey = stage === 1 ? 'stage1' : 'stage2'
-  const pendingStatus = stage === 1 ? 'pending_stage1' : 'pending_stage2'
-  const processingStatus = stage === 1 ? 'processing_stage1' : 'processing_stage2'
+  const pendingStatus =
+    stage === 1 ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
+  const processingStatus =
+    stage === 1 ? QUEUE_STATUSES.PROCESSING_STAGE_1 : QUEUE_STATUSES.PROCESSING_STAGE_2
   return {
     text: `
       UPDATE "Item"
@@ -250,14 +256,18 @@ export function _staleReclaimSqlForTest(
 }
 
 export function _legacyReclaimSqlForTest(cutoffIso: string): { text: string; values: unknown[] } {
+  // The CASE branches are interpolated from QUEUE_STATUSES so a rename of
+  // PENDING_STAGE_1 / PENDING_STAGE_2 / LEGACY_PROCESSING reaches the test
+  // helper. The values are constants from a `as const` map, so this is a
+  // build-time string concat — no SQL injection surface.
   return {
     text: `
       UPDATE "Item"
       SET status = CASE
-        WHEN classification_trace ? 'stage2' THEN 'pending_stage2'
-        ELSE 'pending_stage1'
+        WHEN classification_trace ? 'stage2' THEN '${QUEUE_STATUSES.PENDING_STAGE_2}'
+        ELSE '${QUEUE_STATUSES.PENDING_STAGE_1}'
       END
-      WHERE status = 'processing'
+      WHERE status = '${QUEUE_STATUSES.LEGACY_PROCESSING}'
         AND ingested_at < $1::timestamptz
       RETURNING id, status
     `,
