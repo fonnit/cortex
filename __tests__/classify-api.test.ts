@@ -285,3 +285,168 @@ describe('POST /api/classify — success path', () => {
     expect(res.headers.get('X-Trace-Id')).toBeTruthy()
   })
 })
+
+describe('POST /api/classify — error path', () => {
+  beforeEach(() => {
+    process.env.CORTEX_API_KEY = 'test-secret'
+    jest.clearAllMocks()
+  })
+
+  it('Test 1: stage=1 outcome=error with no prior retries → retries=1, status=pending_stage1, last_error persisted', async () => {
+    // Item has no classification_trace yet — first failure mid-flight
+    mockFindUnique.mockResolvedValue(makeItem({ classification_trace: null }) as never)
+    mockUpdate.mockResolvedValue(makeItem({ status: 'pending_stage1' }) as never)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 1,
+        outcome: 'error',
+        error_message: 'boom',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    expect(json.status).toBe('pending_stage1')
+    expect(json.retries).toBe(1)
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    const updateArg = mockUpdate.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(updateArg.data.status).toBe('pending_stage1')
+    const trace = updateArg.data.classification_trace as {
+      queue: { stage1: { retries: number; last_error: string } }
+    }
+    expect(trace.queue.stage1.retries).toBe(1)
+    expect(trace.queue.stage1.last_error).toBe('boom')
+  })
+
+  it('Test 2: stage=1 outcome=error at retry cap (prev=4, new=5) → status=error (terminal), retries=5', async () => {
+    // Existing trace has 4 prior failures on stage1 — this 5th failure hits RETRY_CAP and goes terminal
+    mockFindUnique.mockResolvedValue(
+      makeItem({
+        classification_trace: { queue: { stage1: { retries: 4 } } },
+      }) as never,
+    )
+    mockUpdate.mockResolvedValue(makeItem({ status: 'error' }) as never)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 1,
+        outcome: 'error',
+        error_message: 'final straw',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('error')
+    expect(json.retries).toBe(5)
+
+    const updateArg = mockUpdate.mock.calls[0][0] as { data: Record<string, unknown> }
+    // Terminal status — note: NOT pending_stage1
+    expect(updateArg.data.status).toBe('error')
+    const trace = updateArg.data.classification_trace as {
+      queue: { stage1: { retries: number; last_error: string } }
+    }
+    expect(trace.queue.stage1.retries).toBe(5)
+    expect(trace.queue.stage1.last_error).toBe('final straw')
+  })
+
+  it('Test 3: stage=2 outcome=error at retry cap (prev=4, new=5) → status=error (terminal), retries=5', async () => {
+    // Stage isolation — stage2 retries hitting cap should NOT affect stage1 counter
+    mockFindUnique.mockResolvedValue(
+      makeItem({
+        classification_trace: {
+          stage1: { decision: 'keep' },
+          queue: { stage1: { retries: 1 }, stage2: { retries: 4 } },
+        },
+      }) as never,
+    )
+    mockUpdate.mockResolvedValue(makeItem({ status: 'error' }) as never)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'error',
+        error_message: 'stage2 collapsed',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('error')
+    expect(json.retries).toBe(5)
+
+    const updateArg = mockUpdate.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(updateArg.data.status).toBe('error')
+    const trace = updateArg.data.classification_trace as {
+      stage1: Record<string, unknown>
+      queue: {
+        stage1: { retries: number }
+        stage2: { retries: number; last_error: string }
+      }
+    }
+    // Stage 2 incremented to cap
+    expect(trace.queue.stage2.retries).toBe(5)
+    expect(trace.queue.stage2.last_error).toBe('stage2 collapsed')
+    // Stage 1 counter UNCHANGED (stage isolation)
+    expect(trace.queue.stage1.retries).toBe(1)
+    // Existing stage1 trace preserved
+    expect(trace.stage1.decision).toBe('keep')
+  })
+
+  it('Test 4: stage=2 outcome=error mid-flight (prev=2, new=3) → status=pending_stage2, retries=3', async () => {
+    mockFindUnique.mockResolvedValue(
+      makeItem({
+        classification_trace: { queue: { stage2: { retries: 2 } } },
+      }) as never,
+    )
+    mockUpdate.mockResolvedValue(makeItem({ status: 'pending_stage2' }) as never)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'error',
+        error_message: 'transient timeout',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('pending_stage2')
+    expect(json.retries).toBe(3)
+
+    const updateArg = mockUpdate.mock.calls[0][0] as { data: Record<string, unknown> }
+    // Below cap — bounce back to pending_stage2 for another attempt
+    expect(updateArg.data.status).toBe('pending_stage2')
+    const trace = updateArg.data.classification_trace as {
+      queue: { stage2: { retries: number; last_error: string } }
+    }
+    expect(trace.queue.stage2.retries).toBe(3)
+    expect(trace.queue.stage2.last_error).toBe('transient timeout')
+  })
+
+  it('Test 5: all error-path responses include header X-Trace-Id', async () => {
+    mockFindUnique.mockResolvedValue(makeItem() as never)
+    mockUpdate.mockResolvedValue(makeItem({ status: 'pending_stage1' }) as never)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 1,
+        outcome: 'error',
+        error_message: 'whatever',
+      },
+    })
+    const res = await POST(req)
+    const traceId = res.headers.get('X-Trace-Id')
+    expect(traceId).toBeTruthy()
+    expect(typeof traceId).toBe('string')
+    expect((traceId as string).length).toBeGreaterThan(0)
+  })
+})
