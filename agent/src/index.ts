@@ -23,26 +23,29 @@ const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'user_3Cp3nYpipz83FkIeojsC3
 const GMAIL_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Sequential queue — claude -p can only handle one call at a time
-const fileQueue: string[] = [];
+const fileQueue: Array<{ filePath: string; resolve: () => void }> = [];
 let processing = false;
 
 async function processQueue(): Promise<void> {
   if (processing) return;
   processing = true;
   while (fileQueue.length > 0) {
-    const filePath = fileQueue.shift()!;
+    const { filePath, resolve } = fileQueue.shift()!;
     try {
       await handleFile(filePath);
     } catch (err) {
       console.error(`[error] ${filePath}: ${err}`);
     }
+    resolve();
   }
   processing = false;
 }
 
-function enqueueFile(filePath: string): void {
-  fileQueue.push(filePath);
-  processQueue();
+function enqueueFile(filePath: string): Promise<void> {
+  return new Promise((resolve) => {
+    fileQueue.push({ filePath, resolve });
+    processQueue();
+  });
 }
 
 // Determine startup cursor — last time any item was successfully ingested
