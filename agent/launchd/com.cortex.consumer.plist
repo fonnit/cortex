@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cortex.consumer</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/dfonnegrag/.local/bin/node</string>
+    <string>--env-file=/Users/dfonnegrag/Projects/cortex/.env</string>
+    <string>--import=tsx</string>
+    <string>/Users/dfonnegrag/Projects/cortex/agent/src/consumer/index.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/dfonnegrag/Projects/cortex</string>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/cortex-consumer.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cortex-consumer-error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>HOME</key>
+    <string>/Users/dfonnegrag</string>
+    <key>PATH</key>
+    <string>/Users/dfonnegrag/.local/bin:/Users/dfonnegrag/.nvm/versions/node/v22.12.0/bin:/Users/dfonnegrag/Projects/cortex/node_modules/.bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CORTEX_API_URL</key>
+    <string>https://REPLACE_WITH_VERCEL_URL.vercel.app</string>
+    <key>CORTEX_API_KEY</key>
+    <string>REPLACE_WITH_API_KEY_FROM_VERCEL</string>
+    <key>LANGFUSE_PUBLIC_KEY</key>
+    <string>REPLACE_WITH_LANGFUSE_PUBLIC_KEY</string>
+    <key>LANGFUSE_SECRET_KEY</key>
+    <string>REPLACE_WITH_LANGFUSE_SECRET_KEY</string>
+    <key>LANGFUSE_HOST</key>
+    <string>https://cloud.langfuse.com</string>
+  </dict>
+</dict>
+</plist>
