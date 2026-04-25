@@ -4,36 +4,8 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 interface Identity { id: string; name: string; type: string; email: string | null }
-type EditState = { id: string; name: string; type: string; email: string; customType: boolean } | null
-type AddState = { name: string; type: string; email: string; customType: boolean } | null
-
-function TypePicker({ value, types, onChange }: { value: string; types: string[]; onChange: (v: string) => void }) {
-  const [custom, setCustom] = useState(!types.includes(value) && value !== '')
-  return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-      {types.map(t => (
-        <button
-          key={t}
-          className={'cx-linkbtn' + (value === t && !custom ? '' : ' cx-muted')}
-          onClick={() => { setCustom(false); onChange(t) }}
-          type="button"
-        >{t}</button>
-      ))}
-      {custom ? (
-        <input
-          className="cx-prop-newinput"
-          style={{ width: 80 }}
-          placeholder="custom…"
-          autoFocus
-          value={value}
-          onChange={e => onChange(e.target.value)}
-        />
-      ) : (
-        <button className="cx-linkbtn cx-muted" onClick={() => setCustom(true)} type="button">+</button>
-      )}
-    </div>
-  )
-}
+type EditState = { id: string; name: string; type: string; email: string } | null
+type AddState = { name: string; type: string; email: string } | null
 
 export function IdentityForm() {
   const queryClient = useQueryClient()
@@ -93,6 +65,10 @@ export function IdentityForm() {
 
   return (
     <>
+      <datalist id="cx-id-types">
+        {existingTypes.map(t => <option key={t} value={t} />)}
+      </datalist>
+
       <table className="cx-table">
         <thead>
           <tr>
@@ -108,7 +84,7 @@ export function IdentityForm() {
               {editState?.id === row.id ? (
                 <>
                   <td><input className="cx-prop-newinput" value={editState.name} onChange={e => setEditState(s => s ? { ...s, name: e.target.value } : s)} /></td>
-                  <td><TypePicker value={editState.type} types={existingTypes} onChange={v => setEditState(s => s ? { ...s, type: v } : s)} /></td>
+                  <td><input className="cx-prop-newinput" list="cx-id-types" value={editState.type} onChange={e => setEditState(s => s ? { ...s, type: e.target.value } : s)} /></td>
                   <td><input className="cx-prop-newinput" type="email" value={editState.email} onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)} /></td>
                   <td className="cx-right">
                     <button className="cx-linkbtn" onClick={handleEdit} disabled={busy}>save</button>
@@ -121,7 +97,7 @@ export function IdentityForm() {
                   <td className="cx-mono cx-muted">{row.type}</td>
                   <td className="cx-mono cx-muted">{row.email ?? '—'}</td>
                   <td className="cx-right">
-                    <button className="cx-linkbtn" onClick={() => setEditState({ id: row.id, name: row.name, type: row.type, email: row.email ?? '', customType: false })}>edit</button>
+                    <button className="cx-linkbtn" onClick={() => setEditState({ id: row.id, name: row.name, type: row.type, email: row.email ?? '' })}>edit</button>
                     <button className="cx-linkbtn cx-muted" onClick={() => handleDelete(row.id)} disabled={busy}>delete</button>
                   </td>
                 </>
@@ -131,7 +107,7 @@ export function IdentityForm() {
           {addOpen && (
             <tr>
               <td><input className="cx-prop-newinput" placeholder="Name" autoFocus value={addOpen.name} onChange={e => setAddOpen(s => s ? { ...s, name: e.target.value } : s)} /></td>
-              <td><TypePicker value={addOpen.type} types={existingTypes} onChange={v => setAddOpen(s => s ? { ...s, type: v } : s)} /></td>
+              <td><input className="cx-prop-newinput" list="cx-id-types" value={addOpen.type} onChange={e => setAddOpen(s => s ? { ...s, type: e.target.value } : s)} /></td>
               <td><input className="cx-prop-newinput" type="email" placeholder="Email (optional)" value={addOpen.email} onChange={e => setAddOpen(s => s ? { ...s, email: e.target.value } : s)} /></td>
               <td className="cx-right">
                 <button className="cx-linkbtn" onClick={handleAdd} disabled={busy || !addOpen.name.trim() || !addOpen.type.trim()}>save</button>
@@ -143,7 +119,7 @@ export function IdentityForm() {
       </table>
 
       {!addOpen && (
-        <button className="cx-linkbtn" style={{ marginTop: 12 }} onClick={() => setAddOpen({ name: '', type: '', email: '', customType: false })}>+ add identity</button>
+        <button className="cx-linkbtn" style={{ marginTop: 12 }} onClick={() => setAddOpen({ name: '', type: '', email: '' })}>+ add identity</button>
       )}
     </>
   )
