@@ -38,10 +38,13 @@ async function handleFile(filePath: string): Promise<void> {
   const traceId = traceClient.id;
   const span = traceClient;
 
+  console.log(`[file] ${filename}`);
+
   // 1. Dedup check — exits early if duplicate
   const contentHash = await computeHash(filePath);
   if (await isDuplicate(contentHash)) {
     span.update({ output: { status: 'duplicate_skip' } });
+    console.log(`  skip (duplicate)`);
     return;
   }
 
@@ -69,6 +72,7 @@ async function handleFile(filePath: string): Promise<void> {
       ON CONFLICT (content_hash) DO NOTHING
     `;
     span.update({ output: { status: 'ignored', reason: relevance.reason } });
+    console.log(`  → ignored (${relevance.reason})`);
     return;
   }
 
@@ -87,6 +91,7 @@ async function handleFile(filePath: string): Promise<void> {
       ON CONFLICT (content_hash) DO NOTHING
     `;
     span.update({ output: { status: 'uncertain' } });
+    console.log(`  → uncertain (${relevance.reason})`);
     return;
   }
 
@@ -129,6 +134,7 @@ async function handleFile(filePath: string): Promise<void> {
   labelSpan.update({ output: label });
 
   const finalStatus = label.allAxesConfident ? 'certain' : 'uncertain';
+  console.log(`  → ${finalStatus} | type:${label.axes.type.value} from:${label.axes.from.value} ctx:${label.axes.context.value}`);
 
   // CLS-08: write COMPLETE trace (stage1 + stage2) to Neon BEFORE Drive upload
   const fullTrace = JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance, stage2: label });
