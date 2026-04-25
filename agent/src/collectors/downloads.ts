@@ -3,9 +3,10 @@ import { stat, readdir } from 'fs/promises';
 import path from 'path';
 import Langfuse from 'langfuse';
 
-const WATCH_PATHS = (process.env.WATCH_PATHS ?? process.env.DOWNLOADS_PATH ?? `${process.env.HOME}/Downloads`)
+const home = process.env.HOME ?? '';
+const WATCH_PATHS = (process.env.WATCH_PATHS ?? process.env.DOWNLOADS_PATH ?? `${home}/Downloads`)
   .split(',')
-  .map((p) => p.trim())
+  .map((p) => p.trim().replace(/^~/, home))
   .filter(Boolean);
 const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes — polling fallback
 const DEBOUNCE_MS = 2000;
