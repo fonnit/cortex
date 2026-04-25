@@ -74,3 +74,85 @@ export interface QueueItem {
   file_path: string | null
 }
 
+/**
+ * The full response from `GET /api/queue`. `traceId` is the Langfuse parent
+ * trace surfaced via the `X-Trace-Id` header — consumers chain their own
+ * spans under it for end-to-end traceability (daemon → API → consumer).
+ */
+export interface QueueResponse {
+  items: QueueItem[]
+  reclaimed: number
+  traceId: string | null
+}
+
+/**
+ * One axis of a Stage 2 classification. AxisSchema in app/api/classify/route.ts
+ * refines `value:null` ⇒ confidence < 0.75; consumers should respect that.
+ */
+export interface ClassifyAxis {
+  value: string | null
+  confidence: number
+}
+
+/**
+ * The body the consumer POSTs to `/api/classify`. Discriminated on outcome
+ * so success-only and error-only fields cannot be mixed at the type level.
+ *
+ * Mirrors `ClassifyBodySchema` in app/api/classify/route.ts.
+ */
+export type ClassifyRequest =
+  | {
+      item_id: string
+      stage: 1 | 2
+      outcome: 'success'
+      decision?: 'keep' | 'ignore' | 'uncertain'
+      axes?: {
+        type: ClassifyAxis
+        from: ClassifyAxis
+        context: ClassifyAxis
+      }
+      confidence?: number
+      reason?: string
+      proposed_drive_path?: string
+    }
+  | {
+      item_id: string
+      stage: 1 | 2
+      outcome: 'error'
+      error_message: string
+    }
+
+/**
+ * The terminal outcome of a single `postClassify` call.
+ *
+ * - `ok`: 2xx — server accepted; record retries from response body.
+ * - `conflict`: 409 — stale-claim race; the item is no longer ours. The
+ *   consumer must NOT retry; the item will come back via the queue's stale-
+ *   reclaim path.
+ * - `skip`: either a 4xx (other than 409) or retries exhausted on 5xx/429/
+ *   network errors. Consumer drops this attempt; item stays in
+ *   `processing_*` and the queue's stale-reclaim picks it up.
+ */
+export type ClassifyOutcome =
+  | { kind: 'ok'; status: string; retries: number }
+  | { kind: 'conflict'; currentStatus: string }
+  | {
+      kind: 'skip'
+      reason: 'client_error' | 'retries_exhausted'
+      status?: number
+      error?: string
+    }
+
+/**
+ * Response shape from `GET /api/taxonomy/internal` — the requireApiKey-
+ * guarded surface that Stage 2 consumers fetch each batch (no Clerk).
+ *
+ * Each axis is a flat array of NON-deprecated label names. The web app's
+ * existing Clerk-protected `/api/taxonomy` route is untouched.
+ */
+export interface TaxonomyInternalResponse {
+  type: string[]
+  from: string[]
+  context: string[]
+}
+

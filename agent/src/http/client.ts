@@ -15,7 +15,16 @@
  * `requireApiKey` posture.
  */
 
-import type { IngestRequest, IngestOutcome, IngestSuccessResponse } from './types'
+import type {
+  IngestRequest,
+  IngestOutcome,
+  IngestSuccessResponse,
+  QueueItem,
+  QueueResponse,
+  ClassifyRequest,
+  ClassifyOutcome,
+  TaxonomyInternalResponse,
+} from './types'
 
 // Minimal Langfuse contract — only `.trace({ name, metadata })` is exercised.
 // We type it nominally to avoid pulling in the full langfuse module type and so
@@ -180,5 +189,224 @@ export async function postHeartbeat(opts?: PostOpts): Promise<IngestOutcome> {
   return postWithRetry({ heartbeat: true }, 'empty', { content_hash: null, source: 'heartbeat' }, opts)
 }
 
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Phase 7 Plan 01, Task 3: getQueue / postClassify / getTaxonomyInternal     */
+/*                                                                            */
+/* Reuses the existing retry primitives (MAX_ATTEMPTS, BASE_DELAY_MS,          */
+/* MAX_DELAY_MS, backoffDelay, isRetryableStatus, sleep, readEnv) so the new   */
+/* helpers behave identically to postIngest on transport failures.             */
+/*                                                                            */
+/* Differences from postIngest:                                                */
+/*   - getQueue / getTaxonomyInternal use GET, no body.                        */
+/*   - postClassify short-circuits on 409 with kind:'conflict' BEFORE the      */
+/*     generic retry-class check — stale-claim is never retried.               */
+/*   - getQueue surfaces the X-Trace-Id response header so the consumer can    */
+/*     chain Langfuse spans under the queue route's parent trace.              */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** Skip outcomes shared between getQueue/getTaxonomyInternal failures. */
+type FetchSkip =
+  | { kind: 'skip'; reason: 'client_error'; status: number }
+  | { kind: 'skip'; reason: 'retries_exhausted'; status?: number; error?: string }
+
+/**
+ * Poll the queue route. Returns parsed items + reclaimed counter + the
+ * Langfuse trace id for span chaining. On 4xx returns a skip outcome
+ * (caller decides whether to log + back off); on retries-exhausted
+ * returns a skip outcome with the last status/error.
+ */
+export async function getQueue(params: {
+  stage: 1 | 2
+  limit: number
+}): Promise<QueueResponse | FetchSkip> {
+  const { url, key } = readEnv()
+  const endpoint = `${url}/api/queue?stage=${params.stage}&limit=${params.limit}`
+
+  let lastStatus: number | undefined
+  let lastError: string | undefined
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response | undefined
+    try {
+      res = await globalThis.fetch(endpoint, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${key}` },
+      })
+    } catch (err) {
+      lastStatus = undefined
+      lastError = err instanceof Error ? err.message : String(err)
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+      break
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      const traceId = res.headers.get('X-Trace-Id')
+      const json = (await res.json()) as { items: QueueItem[]; reclaimed: number }
+      return { items: json.items, reclaimed: json.reclaimed, traceId }
+    }
+
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      return { kind: 'skip', reason: 'client_error', status: res.status }
+    }
+
+    lastStatus = res.status
+    lastError = `HTTP ${res.status}`
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(backoffDelay(attempt))
+      continue
+    }
+  }
+
+  return {
+    kind: 'skip',
+    reason: 'retries_exhausted',
+    ...(lastStatus !== undefined ? { status: lastStatus } : {}),
+    ...(lastError !== undefined ? { error: lastError } : {}),
+  }
+}
+
+/**
+ * POST a classification verdict to /api/classify. **409 returns kind:'conflict'
+ * IMMEDIATELY without retry** — the item is no longer ours (stale-claim race);
+ * the queue's stale-reclaim path will hand it to a fresh consumer. Any other
+ * 4xx returns kind:'skip' (client_error). 5xx/429/network retried with the
+ * shared exp-backoff up to MAX_ATTEMPTS, then kind:'skip' (retries_exhausted).
+ */
+export async function postClassify(payload: ClassifyRequest): Promise<ClassifyOutcome> {
+  const { url, key } = readEnv()
+  const endpoint = `${url}/api/classify`
+
+  let lastStatus: number | undefined
+  let lastError: string | undefined
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response | undefined
+    try {
+      res = await globalThis.fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(payload),
+      })
+    } catch (err) {
+      lastStatus = undefined
+      lastError = err instanceof Error ? err.message : String(err)
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+      break
+    }
+
+    // ── 409 stale-claim race: NEVER retry. ──
+    // The compound where { id, status: expectedStatus } in /api/classify's
+    // updateMany returned count=0, OR the pre-flight check returned 409.
+    // Either way, another consumer has the item now.
+    if (res.status === 409) {
+      let currentStatus = 'unknown'
+      try {
+        const body = (await res.json()) as { current_status?: string }
+        if (body && typeof body.current_status === 'string') {
+          currentStatus = body.current_status
+        }
+      } catch {
+        // Body wasn't JSON — fall back to 'unknown'.
+      }
+      return { kind: 'conflict', currentStatus }
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      const body = (await res.json()) as { ok: boolean; status: string; retries: number }
+      return { kind: 'ok', status: body.status, retries: body.retries }
+    }
+
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      return { kind: 'skip', reason: 'client_error', status: res.status }
+    }
+
+    lastStatus = res.status
+    lastError = `HTTP ${res.status}`
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(backoffDelay(attempt))
+      continue
+    }
+  }
+
+  return {
+    kind: 'skip',
+    reason: 'retries_exhausted',
+    ...(lastStatus !== undefined ? { status: lastStatus } : {}),
+    ...(lastError !== undefined ? { error: lastError } : {}),
+  }
+}
+
+/**
+ * Fetch the internal-only taxonomy snapshot for Stage 2. Throws on 4xx so the
+ * Stage 2 worker treats it as "skip this batch" — taxonomy without auth is a
+ * configuration error, not a transient failure. Throws on retries-exhausted
+ * with `cause` set to the last status/error.
+ */
+export async function getTaxonomyInternal(): Promise<TaxonomyInternalResponse> {
+  const { url, key } = readEnv()
+  const endpoint = `${url}/api/taxonomy/internal`
+
+  let lastStatus: number | undefined
+  let lastError: string | undefined
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response | undefined
+    try {
+      res = await globalThis.fetch(endpoint, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${key}` },
+      })
+    } catch (err) {
+      lastStatus = undefined
+      lastError = err instanceof Error ? err.message : String(err)
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+      break
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      return (await res.json()) as TaxonomyInternalResponse
+    }
+
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      throw new Error(`taxonomy fetch failed: ${res.status}`)
+    }
+
+    lastStatus = res.status
+    lastError = `HTTP ${res.status}`
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(backoffDelay(attempt))
+      continue
+    }
+  }
+
+  const err = new Error(
+    `taxonomy fetch failed after ${MAX_ATTEMPTS} attempts (lastStatus=${lastStatus ?? 'network'}, lastError=${lastError ?? 'unknown'})`,
+  )
+  // Standard Error.cause for downstream handlers.
+  ;(err as Error & { cause?: unknown }).cause = { lastStatus, lastError }
+  throw err
+}
+
 // Re-export the shared types so callers can `import { postIngest, IngestRequest } from './client'`.
-export type { IngestRequest, IngestOutcome, IngestSuccessResponse } from './types'
+export type {
+  IngestRequest,
+  IngestOutcome,
+  IngestSuccessResponse,
+  QueueItem,
+  QueueResponse,
+  ClassifyRequest,
+  ClassifyOutcome,
+  TaxonomyInternalResponse,
+} from './types'
