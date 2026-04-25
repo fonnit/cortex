@@ -78,6 +78,22 @@ async function buildPayload(filePath: string): Promise<IngestRequest | null> {
 }
 
 /**
+ * Returns true if `candidate` is `prefix` itself or a descendant path of
+ * `prefix` (joined by `path.sep`). Used to enforce SCAN-02 at runtime: any
+ * path under a known skip-prefix must be ignored, even if the path itself
+ * doesn't have `.git` / `node_modules` in its basename.
+ *
+ * Exported for unit testing.
+ */
+export function isUnderSkipPrefix(candidate: string, skipPrefixes: Set<string>): boolean {
+  for (const prefix of skipPrefixes) {
+    if (candidate === prefix) return true
+    if (candidate.startsWith(prefix + path.sep)) return true
+  }
+  return false
+}
+
+/**
  * Wire chokidar + a startup recursive scan against WATCH_PATHS. Each discovered
  * file becomes an IngestRequest payload that's pushed via `onPayload`.
  *
@@ -87,11 +103,27 @@ export function startDownloadsCollector(
   langfuse: Langfuse,
   onPayload: (p: IngestRequest) => void,
 ): () => void {
-  // chokidar `ignored`: skip dotfiles AND .git/node_modules trees at watcher level.
+  // SCAN-02 runtime enforcement (MJ-02): chokidar's `ignored` predicate is
+  // synchronous and only sees the path string, so it cannot itself stat the
+  // ancestor chain. We maintain a Set of "skip prefixes" — directory paths
+  // known to contain `.git` / `node_modules` as a direct child — and the
+  // predicate rejects any candidate that lives under one of them. The set is
+  // populated:
+  //   1) by the startup recursive scan (below), which discovers every existing
+  //      repo subtree under WATCH_PATHS up front, AND
+  //   2) by chokidar `addDir` events at runtime, which fire before any `add`
+  //      under a newly-discovered subdirectory.
+  // The `add` handler also performs a defensive `shouldSkipDirectory` check on
+  // the immediate parent to close any residual race window.
+  const skipPrefixes = new Set<string>()
+
+  // chokidar `ignored`: skip dotfiles, names matching `.git`/`node_modules`
+  // directly, AND any path under a known skip prefix (the SCAN-02 tree-skip).
   const ignored = (testPath: string): boolean => {
     const base = path.basename(testPath)
     if (base.startsWith('.')) return true
     if (base === 'node_modules' || base === '.git') return true
+    if (isUnderSkipPrefix(testPath, skipPrefixes)) return true
     return false
   }
 
@@ -99,10 +131,41 @@ export function startDownloadsCollector(
     persistent: true,
     ignoreInitial: true, // initial state handled by the startup scan below
     ignored,
+    // MN-04: align with walkDirectory's symlink-skip behaviour. The startup
+    // walker uses Dirent.isDirectory() (no symlink follow). chokidar's default
+    // is followSymlinks=true, which can produce infinite-recursion / event
+    // floods on cyclic symlinks. We mirror the walker.
+    followSymlinks: false,
     awaitWriteFinish: { stabilityThreshold: DEBOUNCE_MS, pollInterval: 100 },
   })
 
+  // Maintain the skip-prefix set as chokidar discovers directories. addDir
+  // fires before any `add` under that directory, so the predicate above will
+  // see the prefix in time for descendant events.
+  watcher.on('addDir', async (dirPath) => {
+    try {
+      if (await shouldSkipDirectory(dirPath)) skipPrefixes.add(dirPath)
+    } catch {
+      // shouldSkipDirectory already swallows readdir errors and returns true
+      // on EACCES/ENOENT; if anything else throws, fail-open here — the `add`
+      // handler will re-check on each file event.
+    }
+  })
+
+  watcher.on('unlinkDir', (dirPath) => {
+    skipPrefixes.delete(dirPath)
+  })
+
   watcher.on('add', async (filePath) => {
+    // Defensive SCAN-02 check at the file event: if the immediate parent is a
+    // repo root (contains .git / node_modules), skip. This closes the chokidar
+    // ordering race where `add` may fire before `addDir` registered the parent.
+    const parentDir = path.dirname(filePath)
+    if (await shouldSkipDirectory(parentDir)) {
+      skipPrefixes.add(parentDir)
+      return
+    }
+    if (isUnderSkipPrefix(filePath, skipPrefixes)) return
     const payload = await buildPayload(filePath)
     if (payload) onPayload(payload)
   })
@@ -115,8 +178,12 @@ export function startDownloadsCollector(
   ;(async () => {
     for (const root of WATCH_PATHS) {
       // Apply directory-level skip at the root too (in case the user pointed
-      // WATCH_PATHS at a repo root).
-      if (await shouldSkipDirectory(root)) continue
+      // WATCH_PATHS at a repo root). Also seed the skip-prefix set so any
+      // runtime event under that root is rejected by `ignored`.
+      if (await shouldSkipDirectory(root)) {
+        skipPrefixes.add(root)
+        continue
+      }
       for await (const filePath of walkDirectory(root)) {
         // walkDirectory already skipped hidden files + .git/node_modules trees.
         const payload = await buildPayload(filePath)
