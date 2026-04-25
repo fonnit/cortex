@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AxisGroup } from './AxisGroup'
 
 export interface TriageItem {
@@ -43,6 +44,7 @@ interface ExpandedCardProps {
   setNewOpen: (a: string | null) => void
   onPick: (axis: string, val: string) => void
   onAction: (a: TriageAction) => void
+  identities?: Array<{ name: string; type: string }>
 }
 
 function Kbd({ children }: { children: React.ReactNode }) {
@@ -56,9 +58,14 @@ export function ExpandedCard({
   setNewOpen,
   onPick,
   onAction,
+  identities = [],
 }: ExpandedCardProps) {
   const isLabel = item.stage === 'label'
   const axes = isLabel ? ['Type', 'From', 'Context'] : []
+
+  const [identitySuggest, setIdentitySuggest] = useState<{ name: string; type: string; email: string } | null>(null)
+  const [identityBusy, setIdentityBusy] = useState(false)
+  const [identitySaved, setIdentitySaved] = useState<string | null>(null)
 
   // Normalize confident axes to Title Case to match axis names
   const confidentRaw = item.classification_trace?.stage2?.confident ?? []
@@ -74,8 +81,28 @@ export function ExpandedCard({
   const suggestedRule = item.classification_trace?.stage1?.suggestedRule
   const proposedPath = item.proposed_drive_path
 
+  function handlePick(axis: string, val: string) {
+    onPick(axis, val)
+    if (axis === 'From') {
+      const known = identities.some(i => i.name.toLowerCase() === val.toLowerCase())
+      if (!known) {
+        setIdentitySuggest({ name: val, type: '', email: '' })
+        setIdentitySaved(null)
+      }
+    }
+  }
+
   return (
     <div className="cx-expanded" onClick={(e) => e.stopPropagation()}>
+      <style>{`
+        .cx-id-suggest { padding:12px 14px; border:1px solid var(--cx-rule); border-radius:8px; background:var(--cx-panel); display:flex; flex-direction:column; gap:10px; }
+        .cx-id-suggest-label { font-size:13.5px; }
+        .cx-id-suggest-fields { display:flex; gap:8px; flex-wrap:wrap; }
+        .cx-id-suggest-input { border:1px solid var(--cx-rule); border-radius:5px; padding:6px 10px; font:inherit; font-size:13px; background:var(--cx-bg); color:var(--cx-ink); outline:none; flex:1; min-width:120px; }
+        .cx-id-suggest-actions { display:flex; gap:8px; }
+        .cx-id-suggest-saved { font-size:12.5px; }
+      `}</style>
+
       <div className="cx-card-preview">
         <div className="cx-preview-label">preview</div>
         <p className="cx-preview-body">{snippet}</p>
@@ -106,7 +133,7 @@ export function ExpandedCard({
               }
               confident={confident}
               picked={picks[a]}
-              onPick={onPick}
+              onPick={handlePick}
               newOpen={newOpen}
               setNewOpen={setNewOpen}
             />
@@ -128,6 +155,60 @@ export function ExpandedCard({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {identitySuggest && !identitySaved && (
+        <div className="cx-id-suggest">
+          <div className="cx-id-suggest-label">Add &ldquo;{identitySuggest.name}&rdquo; as identity?</div>
+          <div className="cx-id-suggest-fields">
+            <input
+              className="cx-prop-newinput cx-id-suggest-input"
+              list="cx-id-suggest-types"
+              placeholder="type (e.g. company, partner)"
+              value={identitySuggest.type}
+              onChange={e => setIdentitySuggest(s => s ? { ...s, type: e.target.value } : s)}
+            />
+            <datalist id="cx-id-suggest-types">
+              {['owner', 'company', 'partner', 'colleague', 'client'].map(t => <option key={t} value={t} />)}
+            </datalist>
+            <input
+              className="cx-prop-newinput cx-id-suggest-input"
+              type="email"
+              placeholder="email (optional)"
+              value={identitySuggest.email}
+              onChange={e => setIdentitySuggest(s => s ? { ...s, email: e.target.value } : s)}
+            />
+          </div>
+          <div className="cx-id-suggest-actions">
+            <button
+              className="cx-action cx-action-sm cx-action-primary"
+              disabled={identityBusy || !identitySuggest.type.trim()}
+              onClick={async () => {
+                setIdentityBusy(true)
+                try {
+                  await fetch('/api/identity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      name: identitySuggest.name,
+                      type: identitySuggest.type.trim(),
+                      email: identitySuggest.email.trim() || null,
+                    }),
+                  })
+                  setIdentitySaved(identitySuggest.name)
+                } finally {
+                  setIdentityBusy(false)
+                }
+              }}
+            ><span>Save identity</span></button>
+            <button className="cx-action cx-action-ghost cx-action-sm" onClick={() => setIdentitySuggest(null)}><span>Skip</span></button>
+          </div>
+        </div>
+      )}
+      {identitySaved && (
+        <div className="cx-id-suggest cx-id-suggest-saved cx-muted">
+          &ldquo;{identitySaved}&rdquo; saved as identity.
         </div>
       )}
 

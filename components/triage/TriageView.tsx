@@ -51,6 +51,12 @@ export function TriageView() {
     refetchInterval: 10_000,
   })
 
+  const { data: identities = [] } = useQuery<Array<{ name: string; type: string }>>({
+    queryKey: ['identity'],
+    queryFn: () => fetch('/api/identity').then((r) => r.json()),
+    staleTime: 60_000,
+  })
+
   const mutation = useMutation({
     mutationFn: (d: TriageDecision) =>
       fetch('/api/triage', {
@@ -328,6 +334,7 @@ export function TriageView() {
                       setNewOpen={setNewOpen}
                       onPick={pickAxis}
                       onAction={handleAction}
+                      identities={identities}
                     />
                   )}
                 </div>
