@@ -1,57 +1,32 @@
-import { google, gmail_v1 } from 'googleapis';
-import Langfuse from 'langfuse';
-import { sql } from '../db.js';
-import { getGoogleOAuthClient } from '../auth/google.js';
+// agent/src/collectors/gmail.ts — Phase 6 Plan 02 Task 3
+// Polls Gmail incrementally via historyId; emits IngestRequest payloads
+// (one per message) to a callback. No Neon access — cursor lives in
+// agent/src/cursor/gmail-cursor.ts (a local file under ~/.config/cortex/).
+//
+// Preserves the v1.0 historyId 404 → fullSyncFallback behaviour (ING-06).
 
-const USER_ID = 'me';
-// Hardcoded single-operator user_id for MVP — tenancy-ready schema, single user
-const CORTEX_USER_ID = process.env.CORTEX_USER_ID ?? 'user_3Cp3nYpipz83FkIeojsC3WnivVf';
+import { google, gmail_v1 } from 'googleapis'
+import crypto from 'crypto'
+import type Langfuse from 'langfuse'
 
-export interface GmailMessage {
-  id: string;
-  threadId: string;
-  subject?: string;
-  from?: string;
-  date?: string;
-  snippet?: string;
-  sizeEstimate?: number;
+import { getGoogleOAuthClient } from '../auth/google.js'
+import { readCursor, writeCursor } from '../cursor/gmail-cursor.js'
+import type { IngestRequest } from '../http/types.js'
+
+const USER_ID = 'me'
+
+interface GmailMessage {
+  id: string
+  threadId: string
+  subject?: string
+  from?: string
+  date?: string
+  snippet?: string
+  sizeEstimate?: number
+  headers?: Record<string, string>
 }
 
-async function getOrCreateCursor(): Promise<{ last_history_id: string | null; last_successful_poll_at: Date | null }> {
-  const rows = await sql`
-    SELECT last_history_id, last_successful_poll_at
-    FROM "GmailCursor"
-    WHERE user_id = ${CORTEX_USER_ID}
-    LIMIT 1
-  `;
-  if (rows.length > 0) {
-    return {
-      last_history_id: rows[0].last_history_id as string | null,
-      last_successful_poll_at: rows[0].last_successful_poll_at
-        ? new Date(rows[0].last_successful_poll_at as string)
-        : null,
-    };
-  }
-  // First run — insert cursor row
-  await sql`
-    INSERT INTO "GmailCursor" (id, user_id, updated_at)
-    VALUES (gen_random_uuid()::text, ${CORTEX_USER_ID}, now())
-    ON CONFLICT (user_id) DO NOTHING
-  `;
-  return { last_history_id: null, last_successful_poll_at: null };
-}
-
-async function persistCursor(historyId: string): Promise<void> {
-  await sql`
-    UPDATE "GmailCursor"
-    SET last_history_id = ${historyId},
-        last_successful_poll_at = now(),
-        updated_at = now()
-    WHERE user_id = ${CORTEX_USER_ID}
-  `;
-}
-
-async function extractMessageMetadata(
+async function fetchMetadata(
   gmail: gmail_v1.Gmail,
   messageId: string,
 ): Promise<GmailMessage> {
@@ -59,82 +34,105 @@ async function extractMessageMetadata(
     userId: USER_ID,
     id: messageId,
     format: 'metadata',
-    metadataHeaders: ['Subject', 'From', 'Date'],
-  });
-
-  const headers = msg.data.payload?.headers ?? [];
-  const get = (name: string) => headers.find((h) => h.name === name)?.value ?? undefined;
-
-  return {
+    metadataHeaders: ['Subject', 'From', 'Date', 'Message-ID', 'List-Unsubscribe'],
+  })
+  const headers = msg.data.payload?.headers ?? []
+  const get = (name: string) => headers.find((h) => h.name === name)?.value ?? undefined
+  const headerMap: Record<string, string> = {}
+  for (const h of headers) if (h.name && h.value) headerMap[h.name] = h.value
+  const result: GmailMessage = {
     id: messageId,
     threadId: msg.data.threadId ?? messageId,
-    subject: get('Subject'),
-    from: get('From'),
-    date: get('Date'),
-    snippet: msg.data.snippet ?? undefined,
-    sizeEstimate: msg.data.sizeEstimate ?? undefined,
-  };
+    headers: headerMap,
+  }
+  const subject = get('Subject')
+  if (subject !== undefined) result.subject = subject
+  const from = get('From')
+  if (from !== undefined) result.from = from
+  const date = get('Date')
+  if (date !== undefined) result.date = date
+  if (msg.data.snippet) result.snippet = msg.data.snippet
+  if (typeof msg.data.sizeEstimate === 'number') result.sizeEstimate = msg.data.sizeEstimate
+  return result
+}
+
+function toIngestRequest(msg: GmailMessage): IngestRequest {
+  // Dedup key: SHA-256 of the gmail message id (same convention as v1.0).
+  const content_hash = crypto.createHash('sha256').update(msg.id).digest('hex')
+  return {
+    source: 'gmail',
+    content_hash,
+    source_metadata: {
+      gmail_id: msg.id,
+      threadId: msg.threadId,
+      subject: msg.subject,
+      from: msg.from,
+      date: msg.date,
+      snippet: msg.snippet,
+      sizeEstimate: msg.sizeEstimate,
+      headers: msg.headers,
+    },
+  }
 }
 
 async function fullSyncFallback(
   gmail: gmail_v1.Gmail,
   langfuse: Langfuse,
-  onMessage: (msg: GmailMessage) => Promise<void>,
-  since: Date | null,
+  onPayload: (p: IngestRequest) => void,
+  since: string | null,
 ): Promise<void> {
   langfuse.trace({
     name: 'gmail_fullsync_fallback',
-    metadata: {
-      reason: 'historyId_expired_or_null',
-      since: since?.toISOString() ?? 'epoch',
-    },
-  });
+    metadata: { reason: 'historyId_expired_or_null', since: since ?? 'epoch' },
+  })
+  const afterDate = since ? new Date(since) : new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+  const afterEpochSeconds = Math.floor(afterDate.getTime() / 1000)
 
-  // List messages since the fallback timestamp (or last 7 days if no cursor)
-  const afterDate = since ?? new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
-  const afterEpochSeconds = Math.floor(afterDate.getTime() / 1000);
-
-  let pageToken: string | undefined;
+  let pageToken: string | undefined
   do {
     const listRes = await gmail.users.messages.list({
       userId: USER_ID,
       q: `after:${afterEpochSeconds}`,
       pageToken,
       maxResults: 100,
-    });
-
-    const messages = listRes.data.messages ?? [];
-    for (const msg of messages) {
-      if (!msg.id) continue;
-      const metadata = await extractMessageMetadata(gmail, msg.id);
-      await onMessage(metadata).catch((err: Error) => {
-        langfuse.trace({ name: 'gmail_message_error', metadata: { id: msg.id, error: err.message } });
-      });
+    })
+    const messages = listRes.data.messages ?? []
+    for (const m of messages) {
+      if (!m.id) continue
+      try {
+        const meta = await fetchMetadata(gmail, m.id)
+        onPayload(toIngestRequest(meta))
+      } catch (err) {
+        langfuse.trace({
+          name: 'gmail_message_error',
+          metadata: { id: m.id, error: String(err) },
+        })
+      }
     }
+    pageToken = listRes.data.nextPageToken ?? undefined
+  } while (pageToken)
 
-    pageToken = listRes.data.nextPageToken ?? undefined;
-  } while (pageToken);
-
-  // Fetch current historyId to reset cursor
-  const profile = await gmail.users.getProfile({ userId: USER_ID });
-  if (profile.data.historyId) {
-    await persistCursor(profile.data.historyId);
-  }
+  const profile = await gmail.users.getProfile({ userId: USER_ID })
+  if (profile.data.historyId) await writeCursor(profile.data.historyId)
 }
 
+/**
+ * One Gmail poll cycle. Reads the persisted cursor, runs an incremental
+ * `users.history.list` against the stored `historyId`, and emits an
+ * IngestRequest per added message. On historyId 404 (cursor expired), falls
+ * back to a full sync. The cursor is updated on every successful path.
+ */
 export async function pollGmail(
   langfuse: Langfuse,
-  onMessage: (msg: GmailMessage) => Promise<void>,
+  onPayload: (p: IngestRequest) => void,
 ): Promise<void> {
-  const auth = await getGoogleOAuthClient();
-  const gmail = google.gmail({ version: 'v1', auth });
+  const auth = await getGoogleOAuthClient()
+  const gmail = google.gmail({ version: 'v1', auth })
+  const cursor = await readCursor()
 
-  const cursor = await getOrCreateCursor();
-
-  if (!cursor.last_history_id) {
-    // First run — fall back to full sync
-    await fullSyncFallback(gmail, langfuse, onMessage, cursor.last_successful_poll_at);
-    return;
+  if (!cursor || !cursor.last_history_id) {
+    await fullSyncFallback(gmail, langfuse, onPayload, cursor?.last_successful_poll_at ?? null)
+    return
   }
 
   try {
@@ -142,35 +140,33 @@ export async function pollGmail(
       userId: USER_ID,
       startHistoryId: cursor.last_history_id,
       historyTypes: ['messageAdded'],
-    });
-
-    const records = res.data.history ?? [];
+    })
+    const records = res.data.history ?? []
     for (const record of records) {
-      const added = record.messagesAdded ?? [];
+      const added = record.messagesAdded ?? []
       for (const entry of added) {
-        if (!entry.message?.id) continue;
-        const metadata = await extractMessageMetadata(gmail, entry.message.id);
-        await onMessage(metadata).catch((err: Error) => {
-          langfuse.trace({ name: 'gmail_message_error', metadata: { id: entry.message?.id, error: err.message } });
-        });
+        if (!entry.message?.id) continue
+        try {
+          const meta = await fetchMetadata(gmail, entry.message.id)
+          onPayload(toIngestRequest(meta))
+        } catch (err) {
+          langfuse.trace({
+            name: 'gmail_message_error',
+            metadata: { id: entry.message.id, error: String(err) },
+          })
+        }
       }
     }
-
-    // Persist new cursor — ING-06: cursor in Neon, not local file
-    if (res.data.historyId) {
-      await persistCursor(res.data.historyId);
-    }
+    if (res.data.historyId) await writeCursor(res.data.historyId)
   } catch (err: unknown) {
-    const gaxiosErr = err as { code?: number; status?: number };
-    const statusCode = gaxiosErr.code ?? gaxiosErr.status;
-
+    const e = err as { code?: number; status?: number }
+    const statusCode = e.code ?? e.status
     if (statusCode === 404) {
-      // Explicit 404 handling — ING-06: not a silent drop
-      await fullSyncFallback(gmail, langfuse, onMessage, cursor.last_successful_poll_at);
+      // ING-06: explicit fallback on cursor expiry.
+      await fullSyncFallback(gmail, langfuse, onPayload, cursor.last_successful_poll_at)
     } else {
-      // Re-throw non-404 errors for the caller to handle
-      langfuse.trace({ name: 'gmail_poll_error', metadata: { error: String(err) } });
-      throw err;
+      langfuse.trace({ name: 'gmail_poll_error', metadata: { error: String(err) } })
+      throw err
     }
   }
 }
