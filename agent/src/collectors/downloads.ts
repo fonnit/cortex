@@ -18,7 +18,7 @@ export function startDownloadsCollector(
 ): () => void {
   const watcher = watch(WATCH_PATHS, {
     persistent: true,
-    ignoreInitial: false,
+    ignoreInitial: true,
     ignored: (filePath: string) => {
       const parts = filePath.split('/');
       return parts.some(p =>
@@ -45,28 +45,35 @@ export function startDownloadsCollector(
     });
   });
 
-  // Startup scan: catch files newer than lastProcessedAt missed during downtime
-  (async () => {
-    for (const watchPath of WATCH_PATHS) {
-      try {
-        const entries = await readdir(watchPath, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isFile()) continue;
-          const fullPath = path.join(watchPath, entry.name);
+  const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', 'venv', '.venv', '.next', '.cache']);
+
+  async function scanDir(dir: string): Promise<void> {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(entry.name)) await scanDir(fullPath);
+        } else if (entry.isFile()) {
           const s = await stat(fullPath);
           if (s.mtimeMs > lastProcessedAt.getTime()) {
             await onFile(fullPath).catch((err: Error) => {
-              langfuse.trace({
-                name: 'startup_scan_error',
-                metadata: { filePath: fullPath, error: err.message },
-              });
+              langfuse.trace({ name: 'startup_scan_error', metadata: { filePath: fullPath, error: err.message } });
             });
           }
         }
-      } catch (err) {
-        langfuse.trace({ name: 'startup_scan_error', metadata: { error: String(err) } });
       }
+    } catch (err) {
+      langfuse.trace({ name: 'startup_scan_error', metadata: { dir, error: String(err) } });
     }
+  }
+
+  // Startup scan: sequential recursive walk — no EMFILE risk
+  (async () => {
+    for (const watchPath of WATCH_PATHS) {
+      await scanDir(watchPath);
+    }
+    console.log('[scan] startup scan complete');
   })();
 
   // Polling fallback — catches events if FSEvents silently dies
