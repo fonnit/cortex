@@ -100,7 +100,7 @@ Restore backend isolation and make the ingest pipeline reliable. Daemon stops to
 
 - [x] **Phase 5: Queue & API Surface** - Additive `Item.status` enum + ingest/queue/classify routes + `CORTEX_API_KEY` middleware + atomic claim semantics + retry/stale-claim handling (completed 2026-04-25)
 - [x] **Phase 6: Daemon Thin Client** - Daemon refactor: drops `DATABASE_URL`, POSTs to `/api/ingest`, applies new scan rules (skip `.git`/`node_modules` trees, skip hidden files), no classification or Drive uploads (completed 2026-04-25)
-- [ ] **Phase 7: Stage 1 & Stage 2 Consumers** - Two separate local processes polling `/api/queue`, invoking `claude -p` with file paths (Downloads) or text prompts (Gmail), POSTing results to `/api/classify` with Langfuse traces
+- [x] **Phase 7: Stage 1 & Stage 2 Consumers** - Two separate local processes polling `/api/queue`, invoking `claude -p` with file paths (Downloads) or text prompts (Gmail), POSTing results to `/api/classify` with Langfuse traces (completed 2026-04-25)
 - [ ] **Phase 8: Operational Acceptance** - End-to-end validation: 1h zero-error daemon run on Downloads+Documents, Gmail 6-month backfill completes, runtime audits confirm no `DATABASE_URL` in daemon env and no file content in consumer argv
 
 ### Phase Details (v1.1)
@@ -175,5 +175,5 @@ Plans:
 | 4. Retrieval | 3/3 | Complete    | 2026-04-24 |
 | 5. Queue & API Surface | 3/3 | Complete    | 2026-04-25 |
 | 6. Daemon Thin Client | 2/2 | Complete    | 2026-04-25 |
-| 7. Stage 1 & Stage 2 Consumers | 0/2 | Not started | - |
+| 7. Stage 1 & Stage 2 Consumers | 2/2 | Complete    | 2026-04-25 |
 | 8. Operational Acceptance | 0/1 | Not started | - |
