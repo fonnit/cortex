@@ -51,3 +51,26 @@ export type IngestOutcome =
 
 /** Convenience union for any request body the client can emit. */
 export type IngestResponse = IngestSuccessResponse
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* Phase 7 Plan 01: queue-side types consumed by Stage 1 / Stage 2 workers.   */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A single item returned by `GET /api/queue?stage=1|2` (Phase 5).
+ * Mirrors the response item shape from `app/api/queue/route.ts` exactly.
+ *
+ * `file_path` is `null` for Gmail items and populated for downloads items
+ * (the route already extracts it from `source_metadata.file_path`).
+ */
+export interface QueueItem {
+  id: string
+  source: 'downloads' | 'gmail'
+  filename: string | null
+  mime_type: string | null
+  size_bytes: number | null
+  content_hash: string
+  source_metadata: Record<string, unknown> | null
+  file_path: string | null
+}
+
