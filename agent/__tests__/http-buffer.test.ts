@@ -207,4 +207,108 @@ describe('agent/src/http/buffer', () => {
   it('Test 9: BUFFER_CAP constant equals 100', () => {
     expect(BUFFER_CAP).toBe(100)
   })
+
+  it('Test 10: concurrent drain() calls are concurrency=1 — second drain returns immediately while first runs', async () => {
+    // Manually-controlled deferred promises so we can hold the first drain mid-flight
+    // while a second drain is invoked.
+    const resolvers: Array<(v: IngestOutcome) => void> = []
+    const callOrder: string[] = []
+    const postIngest = jest.fn((p: IngestRequest): Promise<IngestOutcome> => {
+      callOrder.push(p.content_hash)
+      return new Promise<IngestOutcome>((resolve) => {
+        resolvers.push(resolve)
+      })
+    })
+    const langfuse = { trace: jest.fn() }
+    const buffer = new IngestBuffer({ postIngest, langfuse, now })
+
+    buffer.enqueue(makePayload('a'))
+    buffer.enqueue(makePayload('b'))
+    buffer.enqueue(makePayload('c'))
+
+    // Kick off two parallel drains. The second must NOT race the first.
+    const drain1 = buffer.drain()
+    const drain2 = buffer.drain()
+
+    // Allow microtasks to flush. Only the FIRST postIngest call should be in-flight,
+    // because drain2 saw `draining === true` and returned immediately.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(postIngest).toHaveBeenCalledTimes(1)
+    expect(callOrder).toEqual(['sha256_a'])
+
+    // drain2 should already be settled (it returned early); awaiting it must not
+    // hang and must not have triggered any extra postIngest calls.
+    await drain2
+    expect(postIngest).toHaveBeenCalledTimes(1)
+
+    // Resolve sequentially — drain1 owns the loop and processes b, then c, in order.
+    resolvers[0](successOutcome)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(postIngest).toHaveBeenCalledTimes(2)
+    expect(callOrder).toEqual(['sha256_a', 'sha256_b'])
+
+    resolvers[1](successOutcome)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(postIngest).toHaveBeenCalledTimes(3)
+    expect(callOrder).toEqual(['sha256_a', 'sha256_b', 'sha256_c'])
+
+    resolvers[2](successOutcome)
+    await drain1
+    expect(buffer.size()).toBe(0)
+
+    // After drain1 finishes, a fresh drain() should work normally (guard reset).
+    buffer.enqueue(makePayload('d'))
+    const drain3 = buffer.drain()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(postIngest).toHaveBeenCalledTimes(4)
+    resolvers[3](successOutcome)
+    await drain3
+    expect(buffer.size()).toBe(0)
+  })
+
+  it('Test 11: items enqueued during an in-flight drain are picked up by the same drain — no work lost when concurrent caller is short-circuited', async () => {
+    const resolvers: Array<(v: IngestOutcome) => void> = []
+    const callOrder: string[] = []
+    const postIngest = jest.fn((p: IngestRequest): Promise<IngestOutcome> => {
+      callOrder.push(p.content_hash)
+      return new Promise<IngestOutcome>((resolve) => {
+        resolvers.push(resolve)
+      })
+    })
+    const langfuse = { trace: jest.fn() }
+    const buffer = new IngestBuffer({ postIngest, langfuse, now })
+
+    buffer.enqueue(makePayload('a'))
+    const drain1 = buffer.drain()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(postIngest).toHaveBeenCalledTimes(1)
+
+    // Mid-flight: enqueue more items + invoke drain() again. The second drain
+    // returns immediately, but the first drain MUST notice the new items in its
+    // while-loop check and process them — nothing is lost.
+    buffer.enqueue(makePayload('b'))
+    buffer.enqueue(makePayload('c'))
+    await buffer.drain() // returns immediately due to in-flight guard
+
+    // Allow drain1 to advance: a → b → c in FIFO order.
+    resolvers[0](successOutcome)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(callOrder).toEqual(['sha256_a', 'sha256_b'])
+
+    resolvers[1](successOutcome)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(callOrder).toEqual(['sha256_a', 'sha256_b', 'sha256_c'])
+
+    resolvers[2](successOutcome)
+    await drain1
+    expect(buffer.size()).toBe(0)
+    expect(postIngest).toHaveBeenCalledTimes(3)
+  })
 })

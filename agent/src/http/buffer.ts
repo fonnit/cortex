@@ -52,6 +52,16 @@ export interface IngestBufferDeps {
  */
 export class IngestBuffer {
   private queue: BufferEntry[] = []
+  /**
+   * In-flight guard for `drain()` — enforces concurrency = 1 across overlapping
+   * callers. The 5s drain timer, downloads `add` callback, and gmail message
+   * callback all invoke `buffer.drain()` independently; without this guard two
+   * drains could shift entries off the queue interleaved and issue parallel
+   * `postIngest` calls, violating the documented "1 POST at a time" contract
+   * (CONTEXT D-buffer-overflow). Mirrors the `pingInFlight` pattern in
+   * heartbeat.ts.
+   */
+  private draining = false
 
   constructor(private deps: IngestBufferDeps) {}
 
@@ -96,20 +106,30 @@ export class IngestBuffer {
    *   terminal-skip telemetry (`http_client_terminal_skip`).
    */
   async drain(): Promise<void> {
-    while (this.queue.length > 0) {
-      const entry = this.queue.shift()!
-      try {
-        await this.deps.postIngest(entry.payload)
-      } catch (err) {
-        // Defensive: client should not throw, but if it does, log and continue.
-        this.deps.langfuse.trace({
-          name: 'buffer_drain_error',
-          metadata: {
-            content_hash: entry.payload.content_hash,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        })
+    // Concurrency-1 guard: if a previous `drain()` invocation is still running
+    // we return immediately so the active drain processes the queue (including
+    // anything newly enqueued while it was running). This is safe because the
+    // active drain re-checks `this.queue.length > 0` on every iteration.
+    if (this.draining) return
+    this.draining = true
+    try {
+      while (this.queue.length > 0) {
+        const entry = this.queue.shift()!
+        try {
+          await this.deps.postIngest(entry.payload)
+        } catch (err) {
+          // Defensive: client should not throw, but if it does, log and continue.
+          this.deps.langfuse.trace({
+            name: 'buffer_drain_error',
+            metadata: {
+              content_hash: entry.payload.content_hash,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          })
+        }
       }
+    } finally {
+      this.draining = false
     }
   }
 
