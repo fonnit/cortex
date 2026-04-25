@@ -1,120 +1,75 @@
-// One-shot scanner — runs the full pipeline on files passed as arguments.
-// Usage: node --env-file=.env --import=tsx agent/src/scan.ts <file1> [file2] ...
+// agent/src/scan.ts — Phase 6 Plan 02 Task 2
+// Recursive directory walker with .git / node_modules tree-skip and hidden-file skip.
+// Pure — no Langfuse, no HTTP, no Neon. Used by collectors/downloads.ts.
+//
+// Rules (locked in CONTEXT 06):
+// - SCAN-01: unbounded recursion
+// - SCAN-02: if a directory contains `.git` OR `node_modules` as a direct child,
+//            skip the entire subtree (do NOT enqueue any file under it).
+// - SCAN-03: skip files whose basename starts with `.` (covers .DS_Store, dotfiles).
 
-import path from 'path';
-import Langfuse from 'langfuse';
-import { sql } from './db.js';
-import { computeHash, isDuplicate } from './pipeline/dedup.js';
-import { extractContent } from './pipeline/extractor.js';
-import { classifyRelevance } from './pipeline/relevance.js';
-import { classifyLabel } from './pipeline/label.js';
-import { uploadToInbox } from './drive.js';
+import { readdir } from 'fs/promises'
+import path from 'path'
 
-const langfuse = new Langfuse({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  baseUrl: process.env.LANGFUSE_BASE_URL ?? 'https://cloud.langfuse.com',
-  flushAt: 1,
-  flushInterval: 5_000,
-});
-
-const USER_ID = process.env.CORTEX_USER_ID ?? 'user_3Cp3nYpipz83FkIeojsC3WnivVf';
-
-const files = process.argv.slice(2);
-if (files.length === 0) {
-  console.error('Usage: npx tsx agent/src/scan.ts <file1> [file2] ...');
-  process.exit(1);
+/**
+ * Skip files whose basename starts with `.`.
+ *
+ * Only the basename matters here — intermediate dot-dirs in a path are handled
+ * by `shouldSkipDirectory` walking the tree, not by this predicate.
+ */
+export function shouldSkipFile(filePathOrName: string): boolean {
+  const basename = path.basename(filePathOrName)
+  return basename.startsWith('.')
 }
 
-for (const filePath of files) {
-  const abs = path.resolve(filePath);
-  const filename = path.basename(abs);
-  console.log(`\n── ${filename} ──`);
-
-  const traceClient = langfuse.trace({ name: 'scan_file', input: { filePath: abs, filename } });
-  const traceId = traceClient.id;
-
-  // 1. Dedup
-  const contentHash = await computeHash(abs);
-  if (await isDuplicate(contentHash)) {
-    console.log('  ⏭ duplicate — skipped');
-    continue;
+/**
+ * Skip a directory tree if the directory contains `.git` OR `node_modules` as
+ * a direct child entry. Returns true on EACCES / ENOENT (treat as "skip").
+ */
+export async function shouldSkipDirectory(dirPath: string): Promise<boolean> {
+  try {
+    const entries = await readdir(dirPath)
+    return entries.includes('.git') || entries.includes('node_modules')
+  } catch {
+    // EACCES / ENOENT — caller will skip; treat as "skip this dir".
+    return true
   }
-
-  // 2. Extract
-  const content = await extractContent(abs);
-  console.log(`  📦 ${content.mimeType} · ${content.sizeBytes} bytes · ${content.content?.length ?? 0} chars extracted`);
-
-  // 3. Stage 1: relevance
-  const relevance = await classifyRelevance(filename, content.mimeType, content);
-  console.log(`  🔍 relevance: ${relevance.decision} (${(relevance.confidence * 100).toFixed(0)}%) — ${relevance.reason}`);
-
-  if (relevance.decision === 'ignore') {
-    await sql`
-      INSERT INTO "Item" (id, user_id, content_hash, source, status, filename, mime_type, size_bytes, classification_trace, ingested_at, updated_at)
-      VALUES (gen_random_uuid()::text, ${USER_ID}, ${contentHash}, 'downloads', 'ignored', ${filename}, ${content.mimeType}, ${content.sizeBytes}, ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now())
-      ON CONFLICT (content_hash) DO NOTHING
-    `;
-    console.log('  ❌ ignored');
-    continue;
-  }
-
-  if (relevance.decision === 'uncertain') {
-    await sql`
-      INSERT INTO "Item" (id, user_id, content_hash, source, status, filename, mime_type, size_bytes, classification_trace, ingested_at, updated_at)
-      VALUES (gen_random_uuid()::text, ${USER_ID}, ${contentHash}, 'downloads', 'uncertain', ${filename}, ${content.mimeType}, ${content.sizeBytes}, ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now())
-      ON CONFLICT (content_hash) DO NOTHING
-    `;
-    console.log('  ❓ uncertain — queued for triage');
-    continue;
-  }
-
-  // 4. Keep → insert as processing
-  await sql`
-    INSERT INTO "Item" (id, user_id, content_hash, source, status, filename, mime_type, size_bytes, classification_trace, ingested_at, updated_at)
-    VALUES (gen_random_uuid()::text, ${USER_ID}, ${contentHash}, 'downloads', 'processing', ${filename}, ${content.mimeType}, ${content.sizeBytes}, ${JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance })}::jsonb, now(), now())
-    ON CONFLICT (content_hash) DO NOTHING
-  `;
-
-  // 5. Stage 2: label
-  const taxonomyRows = await sql`SELECT axis, name FROM "TaxonomyLabel" WHERE user_id = ${USER_ID} AND deprecated = false ORDER BY item_count DESC LIMIT 50`;
-  const taxonomy = {
-    types: taxonomyRows.filter((r) => r.axis === 'type').map((r) => r.name as string),
-    froms: taxonomyRows.filter((r) => r.axis === 'from').map((r) => r.name as string),
-    contexts: taxonomyRows.filter((r) => r.axis === 'context').map((r) => r.name as string),
-  };
-
-  const label = await classifyLabel(filename, content.mimeType, content.content, taxonomy);
-  const status = label.allAxesConfident ? 'certain' : 'uncertain';
-
-  console.log(`  🏷 type: ${label.axes.type.value} (${(label.axes.type.confidence * 100).toFixed(0)}%)`);
-  console.log(`  🏷 from: ${label.axes.from.value} (${(label.axes.from.confidence * 100).toFixed(0)}%)`);
-  console.log(`  🏷 context: ${label.axes.context.value} (${(label.axes.context.confidence * 100).toFixed(0)}%)`);
-  console.log(`  📂 path: ${label.proposed_drive_path}`);
-  console.log(`  → ${status === 'certain' ? '✅ auto-archived' : '❓ needs label triage'}`);
-
-  const fullTrace = JSON.stringify({ langfuse_trace_id: traceId, stage1: relevance, stage2: label });
-  await sql`
-    UPDATE "Item"
-    SET status = ${status},
-        classification_trace = ${fullTrace}::jsonb,
-        proposed_drive_path = ${label.proposed_drive_path},
-        axis_type = ${label.axes.type.value},
-        axis_from = ${label.axes.from.value},
-        axis_context = ${label.axes.context.value},
-        axis_type_confidence = ${label.axes.type.confidence},
-        axis_from_confidence = ${label.axes.from.confidence},
-        axis_context_confidence = ${label.axes.context.confidence},
-        updated_at = now()
-    WHERE content_hash = ${contentHash}
-  `;
-
-  // Skip Drive upload in scan mode — no Google OAuth yet
-  console.log('  ⏭ Drive upload skipped (no OAuth token)');
 }
 
-console.log('\n── done ──');
-await langfuse.flushAsync();
-const rows = await sql`SELECT COUNT(*) as count FROM "Item"`;
-console.log(`Total items in Neon: ${rows[0].count}`);
-process.exit(0);
+/**
+ * Recursively yield absolute file paths under `root`, applying skip rules.
+ * Unbounded depth. Symlinks are ignored to avoid cycles (chokidar default).
+ *
+ * The tree-skip rule is applied BEFORE descending into children: if `root`
+ * contains `.git` or `node_modules` as a direct child, the whole subtree is
+ * skipped. Read errors (EACCES/ENOENT) on a subdir are logged and the walker
+ * moves on — never throws into the caller.
+ */
+export async function* walkDirectory(root: string): AsyncGenerator<string> {
+  let entries: import('fs').Dirent[]
+  try {
+    entries = await readdir(root, { withFileTypes: true })
+  } catch (err) {
+    // ENOENT / EACCES — log and stop walking this branch.
+    console.error(`[scan] walkDirectory: cannot read ${root}: ${(err as Error).message}`)
+    return
+  }
+
+  // Apply tree-skip rule at THIS level: if root itself contains .git or
+  // node_modules, abort the subtree.
+  if (entries.some((e) => e.name === '.git' || e.name === 'node_modules')) {
+    return
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(root, entry.name)
+    if (entry.isDirectory()) {
+      // Recurse — child directory will be tested again by its own walkDirectory call.
+      yield* walkDirectory(fullPath)
+    } else if (entry.isFile()) {
+      if (shouldSkipFile(entry.name)) continue
+      yield fullPath
+    }
+    // Symlinks: ignored. Avoids cycles.
+  }
+}
