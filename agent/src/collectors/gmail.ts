@@ -91,7 +91,7 @@ async function fullSyncFallback(
   });
 
   // List messages since the fallback timestamp (or last 7 days if no cursor)
-  const afterDate = since ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const afterDate = since ?? new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
   const afterEpochSeconds = Math.floor(afterDate.getTime() / 1000);
 
   let pageToken: string | undefined;
