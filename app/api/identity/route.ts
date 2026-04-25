@@ -8,6 +8,7 @@ export async function GET() {
   try {
     const profiles = await prisma.identityProfile.findMany({
       where: { user_id: userId },
+      select: { id: true, name: true, type: true, email: true },
       orderBy: { created_at: 'asc' },
     })
     return Response.json(profiles)
@@ -27,24 +28,22 @@ export async function POST(request: Request) {
     return new Response('Bad Request', { status: 400 })
   }
 
-  const { role, name, email, company, relationship } = body as Record<string, string | undefined>
+  const { name, type, email } = body as Record<string, string | undefined>
 
-  if (!role || !['owner', 'known_person'].includes(role)) {
-    return new Response('Bad Request: role must be owner or known_person', { status: 400 })
-  }
   if (!name || name.trim() === '') {
     return new Response('Bad Request: name is required', { status: 400 })
+  }
+  if (!type || type.trim() === '') {
+    return new Response('Bad Request: type is required', { status: 400 })
   }
 
   try {
     const profile = await prisma.identityProfile.create({
       data: {
         user_id: userId,
-        role,
         name: name.trim(),
+        type: type.trim(),
         email: email ?? null,
-        company: company ?? null,
-        relationship: relationship ?? null,
       },
     })
     return Response.json(profile, { status: 201 })
@@ -64,7 +63,7 @@ export async function PUT(request: Request) {
     return new Response('Bad Request', { status: 400 })
   }
 
-  const { id, role, name, email, company, relationship } = body as Record<string, string | undefined>
+  const { id, name, type, email } = body as Record<string, string | undefined>
 
   if (!id) return new Response('Bad Request: id is required', { status: 400 })
 
@@ -72,11 +71,9 @@ export async function PUT(request: Request) {
     const profile = await prisma.identityProfile.update({
       where: { id, user_id: userId },
       data: {
-        ...(role !== undefined && { role }),
         ...(name !== undefined && { name: name.trim() }),
-        ...(email !== undefined && { email }),
-        ...(company !== undefined && { company }),
-        ...(relationship !== undefined && { relationship }),
+        ...(type !== undefined && { type: type.trim() }),
+        ...(email !== undefined && { email: email || null }),
       },
     })
     return Response.json(profile)

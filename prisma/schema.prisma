@@ -137,16 +137,14 @@ model RuleConsolidationProposal {
 }
 
 model IdentityProfile {
-  id           String   @id @default(cuid())
-  user_id      String
-  role         String   // 'owner' | 'known_person'
-  name         String
-  email        String?
-  company      String?  // owner only
-  relationship String?  // for known_person: 'partner' | 'child' | 'parent' | 'sibling' | 'colleague' | etc.
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  user_id    String
+  name       String
+  type       String   // free-text e.g. "owner", "company", "partner"
+  email      String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@unique([user_id, name])
-  @@index([user_id, role])
+  @@index([user_id, type])
 }
