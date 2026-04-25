@@ -19,11 +19,13 @@ export function startDownloadsCollector(
   const watcher = watch(WATCH_PATHS, {
     persistent: true,
     ignoreInitial: false,
-    depth: 1,
-    ignored: [
-      '**/node_modules/**', '**/.git/**', '**/venv/**', '**/__pycache__/**',
-      '**/src/**', '**/dist/**', '**/build/**', '**/.next/**',
-    ],
+    ignored: (filePath: string) => {
+      const parts = filePath.split('/');
+      return parts.some(p =>
+        p === '.git' || p === 'node_modules' || p === '__pycache__' ||
+        p === 'venv' || p === '.venv' || p === '.next' || p === '.cache'
+      );
+    },
     awaitWriteFinish: { stabilityThreshold: DEBOUNCE_MS, pollInterval: 100 },
   });
 
