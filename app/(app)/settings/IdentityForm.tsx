@@ -1,151 +1,135 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
-interface IdentityProfile {
-  id: string
-  role: string
-  name: string
-  email: string | null
-  company: string | null
-  relationship: string | null
-}
+interface Identity { id: string; name: string; type: string; email: string | null }
+type EditState = { id: string; name: string; type: string; email: string } | null
+type AddState = { name: string; type: string; email: string } | null
 
 export function IdentityForm() {
   const queryClient = useQueryClient()
-
-  const { data: profiles = [], isLoading } = useQuery<IdentityProfile[]>({
+  const { data: identities = [] } = useQuery<Identity[]>({
     queryKey: ['identity'],
-    queryFn: () => fetch('/api/identity').then((r) => r.json()),
+    queryFn: () => fetch('/api/identity').then(r => r.json()),
   })
 
-  const [form, setForm] = useState({
-    name: '',
-    role: 'owner' as 'owner' | 'known_person',
-    relationship: '',
-    email: '',
-    company: '',
-  })
+  const [editState, setEditState] = useState<EditState>(null)
+  const [addOpen, setAddOpen] = useState<AddState>(null)
+  const [busy, setBusy] = useState(false)
 
-  const createMutation = useMutation({
-    mutationFn: (data: typeof form) =>
-      fetch('/api/identity', {
+  const baseTypes = ['owner', 'company']
+  const existingTypes = [...new Set([...baseTypes, ...identities.map(i => i.type).filter(Boolean)])]
+
+  async function handleAdd() {
+    if (!addOpen || !addOpen.name.trim() || !addOpen.type.trim()) return
+    setBusy(true)
+    try {
+      await fetch('/api/identity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['identity'] })
-      setForm({ name: '', role: 'owner', relationship: '', email: '', company: '' })
-    },
-  })
+        body: JSON.stringify({ name: addOpen.name.trim(), type: addOpen.type.trim(), email: addOpen.email.trim() || null }),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['identity'] })
+      setAddOpen(null)
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => fetch(`/api/identity?id=${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['identity'] }),
-  })
+  async function handleEdit() {
+    if (!editState || !editState.name.trim() || !editState.type.trim()) return
+    setBusy(true)
+    try {
+      await fetch('/api/identity', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editState.id, name: editState.name.trim(), type: editState.type.trim(), email: editState.email.trim() || null }),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['identity'] })
+      setEditState(null)
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.name.trim()) return
-    createMutation.mutate(form)
+  async function handleDelete(id: string) {
+    setBusy(true)
+    try {
+      await fetch(`/api/identity?id=${id}`, { method: 'DELETE' })
+      await queryClient.invalidateQueries({ queryKey: ['identity'] })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <div className="max-w-xl space-y-6">
-      {isLoading ? (
-        <p className="text-sm opacity-50">Loading...</p>
-      ) : profiles.length === 0 ? (
-        <p className="text-sm opacity-50">No identity profiles yet.</p>
-      ) : (
-        <ul className="space-y-3">
-          {profiles.map((p) => (
-            <li key={p.id} className="border rounded p-3 flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{p.name}</span>
-                  <span className="text-xs border rounded px-1.5 py-0.5 opacity-60">
-                    {p.role === 'owner' ? 'owner' : 'known person'}
-                  </span>
-                  {p.relationship && (
-                    <span className="text-xs opacity-50">{p.relationship}</span>
-                  )}
-                </div>
-                {(p.email || p.company) && (
-                  <div className="text-xs opacity-50">
-                    {[p.company, p.email].filter(Boolean).join(' · ')}
-                  </div>
-                )}
-              </div>
-              <button
-                className="text-xs opacity-40 hover:opacity-80 shrink-0"
-                onClick={() => deleteMutation.mutate(p.id)}
-                disabled={deleteMutation.isPending}
-              >
-                delete
-              </button>
-            </li>
+    <>
+      <style>{`
+        .cx-id-addrow td { background: var(--cx-panel-2); }
+        .cx-input { border:1px solid var(--cx-rule); border-radius:6px; padding:6px 10px;
+          font:inherit; font-size:13.5px; background:var(--cx-bg); color:var(--cx-ink);
+          outline:none; width:100%; box-sizing:border-box; }
+      `}</style>
+
+      <datalist id="cx-id-types">
+        {existingTypes.map(t => <option key={t} value={t} />)}
+      </datalist>
+
+      <table className="cx-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Email</th>
+            <th className="cx-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {identities.map(row => (
+            <tr key={row.id}>
+              {editState?.id === row.id ? (
+                <>
+                  <td><input className="cx-input" value={editState.name} onChange={e => setEditState(s => s ? { ...s, name: e.target.value } : s)} /></td>
+                  <td><input className="cx-input" list="cx-id-types" value={editState.type} onChange={e => setEditState(s => s ? { ...s, type: e.target.value } : s)} /></td>
+                  <td><input className="cx-input" type="email" value={editState.email} onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)} /></td>
+                  <td className="cx-right">
+                    <button className="cx-linkbtn" onClick={handleEdit} disabled={busy}>save</button>
+                    <button className="cx-linkbtn cx-muted" onClick={() => setEditState(null)}>cancel</button>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="cx-table-name">{row.name}</td>
+                  <td className="cx-mono cx-muted">{row.type}</td>
+                  <td className="cx-mono cx-muted">{row.email ?? '—'}</td>
+                  <td className="cx-right">
+                    <button className="cx-linkbtn" onClick={() => setEditState({ id: row.id, name: row.name, type: row.type, email: row.email ?? '' })}>edit</button>
+                    <button className="cx-linkbtn cx-muted" onClick={() => handleDelete(row.id)} disabled={busy}>delete</button>
+                  </td>
+                </>
+              )}
+            </tr>
           ))}
-        </ul>
+          {addOpen && (
+            <tr className="cx-id-addrow">
+              <td><input className="cx-input" placeholder="Name" value={addOpen.name} onChange={e => setAddOpen(s => s ? { ...s, name: e.target.value } : s)} /></td>
+              <td>
+                <input className="cx-input" placeholder="Type" list="cx-id-types" value={addOpen.type} onChange={e => setAddOpen(s => s ? { ...s, type: e.target.value } : s)} />
+              </td>
+              <td><input className="cx-input" type="email" placeholder="Email (optional)" value={addOpen.email} onChange={e => setAddOpen(s => s ? { ...s, email: e.target.value } : s)} /></td>
+              <td className="cx-right">
+                <button className="cx-linkbtn" onClick={handleAdd} disabled={busy || !addOpen.name.trim() || !addOpen.type.trim()}>save</button>
+                <button className="cx-linkbtn cx-muted" onClick={() => setAddOpen(null)}>cancel</button>
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      {!addOpen && (
+        <button className="cx-linkbtn" style={{ marginTop: 12 }} onClick={() => setAddOpen({ name: '', type: '', email: '' })}>+ add identity</button>
       )}
-
-      <form onSubmit={handleSubmit} className="border rounded p-4 space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide opacity-50">Add profile</p>
-
-        <div className="space-y-2">
-          <input
-            className="w-full border rounded px-2 py-1.5 text-sm"
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-          />
-
-          <select
-            className="w-full border rounded px-2 py-1.5 text-sm"
-            value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as 'owner' | 'known_person' }))}
-          >
-            <option value="owner">Owner</option>
-            <option value="known_person">Known person</option>
-          </select>
-
-          {form.role === 'known_person' && (
-            <input
-              className="w-full border rounded px-2 py-1.5 text-sm"
-              placeholder="Relationship (e.g. partner, parent, colleague)"
-              value={form.relationship}
-              onChange={(e) => setForm((f) => ({ ...f, relationship: e.target.value }))}
-            />
-          )}
-
-          <input
-            className="w-full border rounded px-2 py-1.5 text-sm"
-            placeholder="Email (optional)"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-
-          {form.role === 'owner' && (
-            <input
-              className="w-full border rounded px-2 py-1.5 text-sm"
-              placeholder="Company (optional)"
-              value={form.company}
-              onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-            />
-          )}
-        </div>
-
-        <button
-          type="submit"
-          className="text-sm border rounded px-3 py-1.5 hover:opacity-70 disabled:opacity-30"
-          disabled={createMutation.isPending}
-        >
-          {createMutation.isPending ? 'Saving...' : 'Add'}
-        </button>
-      </form>
-    </div>
+    </>
   )
 }

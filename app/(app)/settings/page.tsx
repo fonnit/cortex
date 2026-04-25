@@ -2,15 +2,17 @@ import { IdentityForm } from './IdentityForm'
 
 export default function SettingsPage() {
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">Settings</h1>
-        <h2 className="text-sm opacity-60 mt-0.5">Identity profiles</h2>
-        <p className="text-sm opacity-50 mt-1">
-          Names and relationships used to personalise document classification.
-        </p>
+    <div className="cx-tax">
+      <div className="cx-tax-main">
+        <div className="cx-topbar" style={{ gridColumn: 'unset', border: 0, padding: '0 0 18px' }}>
+          <div>
+            <div className="cx-topbar-eyebrow">Settings</div>
+            <h1 className="cx-topbar-h1">Identities</h1>
+            <div className="cx-topbar-sub">Names injected into classification prompts.</div>
+          </div>
+        </div>
+        <IdentityForm />
       </div>
-      <IdentityForm />
     </div>
   )
 }
