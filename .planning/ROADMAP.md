@@ -147,7 +147,11 @@ Plans:
   3. For a Gmail item, the consumer builds a text prompt from subject / from / snippet / headers (no file path); Stage 2 receives the existing taxonomy as additional context so it can propose 3-axis labels and a Drive path
   4. Gmail "keep" items reliably advance from Stage 1 (`pending_stage1` → `processing_stage1` → `pending_stage2`) into Stage 2 (`processing_stage2` → `certain`/`uncertain`) without manual intervention — the v1.0 bug where keeps remained at `processing` forever no longer reproduces
   5. Every classification emits a Langfuse trace covering its end-to-end work, and POSTs to `/api/classify` carry decision, confidence, axes/labels, and proposed Drive path where applicable
-**Plans**: 2 plans (estimated)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — claude execFile wrapper, semaphore, prompt builders, HTTP client extensions (getQueue/postClassify/getTaxonomyInternal), and new requireApiKey-guarded /api/taxonomy/internal route
+- [ ] 07-02-PLAN.md — Stage 1 worker (limit=10/sema=10) + Stage 2 worker (limit=2/sema=2, fresh taxonomy/batch) + consumer index.ts bootstrap + agent/launchd/com.cortex.consumer.plist
 
 ### Phase 8: Operational Acceptance
 **Goal**: The rearchitected pipeline runs unattended for the published soak periods with zero errors, every operational invariant from the brief is independently auditable, and end-to-end traceability from daemon discovery to consumer classify is reconstructable in Langfuse — v1.1 is shippable
