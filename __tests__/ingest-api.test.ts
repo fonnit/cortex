@@ -19,16 +19,19 @@ jest.mock('../lib/prisma', () => ({
   },
 }))
 
-// Mock Langfuse — return a stable trace.id so we can assert the X-Trace-Id header
+// Mock Langfuse — return a stable trace.id so we can assert the X-Trace-Id header.
+// Span and trace mocks are exposed via globalThis so individual tests can assert
+// against them (e.g. "heartbeat path never opens a span").
+const __langfuseSpanMock = { end: jest.fn() }
+const __langfuseTraceMock = { id: 'trace_test_ingest', span: jest.fn(() => __langfuseSpanMock) }
+const __langfuseFlushMock = jest.fn().mockResolvedValue(undefined)
+const __langfuseTraceFactory = jest.fn(() => __langfuseTraceMock)
 jest.mock('langfuse', () => {
-  const span = { end: jest.fn() }
-  const trace = { id: 'trace_test_ingest', span: jest.fn(() => span) }
-  const flushAsync = jest.fn().mockResolvedValue(undefined)
   return {
     __esModule: true,
     default: jest.fn().mockImplementation(() => ({
-      trace: jest.fn(() => trace),
-      flushAsync,
+      trace: __langfuseTraceFactory,
+      flushAsync: __langfuseFlushMock,
     })),
   }
 })
@@ -177,5 +180,41 @@ describe('POST /api/ingest', () => {
     expect(res.headers.get('X-Trace-Id')).toBeTruthy()
 
     consoleSpy.mockRestore()
+  })
+
+  // ---- Heartbeat short-circuit (Phase 6 Plan 01, Task 1) ----
+  // Per CONTEXT D-heartbeat: POST /api/ingest with body { heartbeat: true } returns
+  // 204 No Content, performs no Item write, and emits no Langfuse trace work.
+  // Auth still gates the heartbeat path (Test C).
+
+  it('Test 10: heartbeat returns 204 with empty body and never touches Item table', async () => {
+    const req = makeRequest({ body: { heartbeat: true } })
+    const res = await POST(req)
+    expect(res.status).toBe(204)
+    // 204 has no body
+    expect(await res.text()).toBe('')
+    // Critical: no DB I/O on the heartbeat path
+    expect(mockFindUnique).not.toHaveBeenCalled()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('Test 11: heartbeat path emits no Langfuse span work (no dedup-check, no item-create span)', async () => {
+    const req = makeRequest({ body: { heartbeat: true } })
+    const res = await POST(req)
+    expect(res.status).toBe(204)
+    // The heartbeat short-circuit must NOT open any span — every 60s ping would
+    // otherwise flood Langfuse. Only the daemon-side 5-min heartbeat trace exists.
+    expect(__langfuseTraceMock.span).not.toHaveBeenCalled()
+  })
+
+  it('Test 12: heartbeat without Authorization still returns 401 (auth precedes short-circuit)', async () => {
+    const req = makeRequest({ auth: null, body: { heartbeat: true } })
+    const res = await POST(req)
+    expect(res.status).toBe(401)
+    expect(await res.text()).toBe('')
+    expect(mockFindUnique).not.toHaveBeenCalled()
+    expect(mockCreate).not.toHaveBeenCalled()
+    // No span work on the unauthorised heartbeat path either
+    expect(__langfuseTraceMock.span).not.toHaveBeenCalled()
   })
 })
