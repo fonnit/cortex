@@ -2,16 +2,20 @@
 
 ## Overview
 
-Schema and daemon first — no data, no product. Phase 1 stands up the Neon schema, Mac agent ingest loop, and two-stage classification pipeline with Langfuse instrumentation. Phase 2 brings the web app to life: Clerk auth, the archival design system, and the keyboard-first triage queue with Drive resolve cron. Phase 3 adds the compounding layers — taxonomy operations, rule system, and the /admin metrics surface that validates the core hypothesis. Phase 4 closes the loop with embeddings and natural-language retrieval.
+Cortex evolves across milestones. **v1.0** stood up the full vertical: ingest → classify → triage → taxonomy → rules → retrieval, end-to-end (Phases 1–4, all complete). **v1.1** is a brownfield rewire of the ingest backbone — daemon becomes a thin metadata client, Neon access funnels through the Vercel API guarded by `CORTEX_API_KEY`, classification moves to queue-driven consumers that pass file paths (not content) to `claude -p`. v1.1 is invisible to the user-facing surfaces; it makes the pipeline reliable enough to run unattended.
 
-## Phases
+---
+
+## Milestone v1.0 — Initial Build (Shipped 2026-04-24)
+
+### Phases (v1.0)
 
 - [x] **Phase 1: Foundation** - Neon schema, Mac daemon, two-stage classification pipeline, Drive _Inbox upload, Langfuse instrumentation (completed 2026-04-24)
 - [x] **Phase 2: Triage & Web App** - Clerk auth, archival design system, keyboard-first triage queue, Drive resolve cron (completed 2026-04-24)
 - [x] **Phase 3: Taxonomy, Rules & Admin** - Taxonomy ops (rename/merge/split/deprecate), rule system, /admin metrics (completed 2026-04-24)
 - [x] **Phase 4: Retrieval** - Embedding cron, pgvector HNSW index, /api/ask with Claude Haiku synthesis and inline citations (completed 2026-04-24)
 
-## Phase Details
+### Phase Details (v1.0)
 
 ### Phase 1: Foundation
 **Goal**: Items flow from Downloads and Gmail through a two-stage classification pipeline into Neon and Drive _Inbox, with full traces and triage metrics instrumented from day one
@@ -86,6 +90,68 @@ Plans:
 - [x] 04-02-PLAN.md — POST /api/ask (embed query → ANN → Haiku synthesis → AskResponse)
 - [x] 04-03-PLAN.md — AskPage (/ask) pixel-faithful to design prototype + citedAnswers in /api/metrics + human checkpoint
 
+---
+
+## Milestone v1.1 — Ingest Pipeline Rearchitecture (Active)
+
+Restore backend isolation and make the ingest pipeline reliable. Daemon stops touching Neon, classification moves to queue-driven consumers, and `claude -p` switches from argv content to file paths. v1.1 is a backend-only milestone — no UI, triage, taxonomy, rules, admin, ask, or Drive-upload changes.
+
+### Phases (v1.1)
+
+- [ ] **Phase 5: Queue & API Surface** - Additive `Item.status` enum + ingest/queue/classify routes + `CORTEX_API_KEY` middleware + atomic claim semantics + retry/stale-claim handling
+- [ ] **Phase 6: Daemon Thin Client** - Daemon refactor: drops `DATABASE_URL`, POSTs to `/api/ingest`, applies new scan rules (skip `.git`/`node_modules` trees, skip hidden files), no classification or Drive uploads
+- [ ] **Phase 7: Stage 1 & Stage 2 Consumers** - Two separate local processes polling `/api/queue`, invoking `claude -p` with file paths (Downloads) or text prompts (Gmail), POSTing results to `/api/classify` with Langfuse traces
+- [ ] **Phase 8: Operational Acceptance** - End-to-end validation: 1h zero-error daemon run on Downloads+Documents, Gmail 6-month backfill completes, runtime audits confirm no `DATABASE_URL` in daemon env and no file content in consumer argv
+
+### Phase Details (v1.1)
+
+### Phase 5: Queue & API Surface
+**Goal**: The Vercel API exposes a complete, authenticated ingest/queue/classify contract with an extended `Item.status` state machine that supports atomic claim, retry-on-failure, and stale-claim reclamation — all existing routes continue to work unchanged
+**Depends on**: Phase 4 (v1.0 retrieval shipped)
+**Requirements**: API-01, API-02, API-03, API-04, API-05, API-06, QUE-01, QUE-02, QUE-03, QUE-04, QUE-05, QUE-06
+**Success Criteria** (what must be TRUE):
+  1. POSTing file or email metadata to `/api/ingest` with a valid `CORTEX_API_KEY` either creates a new Item with `status = pending_stage1` or returns the existing item id on SHA-256 dedup hit; without the key the request returns 401 and no Item data leaks
+  2. `GET /api/queue?stage=1&limit=N` and `GET /api/queue?stage=2&limit=N` each return up to N pending items and atomically transition them to the matching `processing_*` status — two parallel callers never receive the same item id
+  3. `POST /api/classify` with a Stage 1 result advances the Item to `pending_stage2` (keep), `ignored` (ignore), or `uncertain`; with a Stage 2 result advances to `certain` or `uncertain`; an item that fails retries up to a hard cap and then lands in a terminal error state, never bouncing back to pending forever
+  4. An item left in `processing_stage1` or `processing_stage2` past the stale-claim timeout is reclaimed to its `pending_*` state on the next queue poll, and the queue invariant holds: no item that entered `/api/ingest` ends a run stuck in `processing_*`
+  5. Existing routes (`/api/triage`, `/api/taxonomy`, `/api/rules`, `/api/ask`, `/api/admin/*`, `/api/cron/*`) and the Drive resolve cron return the same responses they did at v1.0 close — no regressions in the v1.0 surfaces
+**Plans**: 3 plans (estimated)
+
+### Phase 6: Daemon Thin Client
+**Goal**: The Mac daemon is a thin metadata producer with no Neon access, no classification responsibility, and no Drive uploads — it discovers files via chokidar + recursive scan, polls Gmail incrementally, applies the new directory scan rules, and POSTs every discovery to `/api/ingest` over `CORTEX_API_KEY`
+**Depends on**: Phase 5
+**Requirements**: DAEMON-01, DAEMON-02, DAEMON-03, DAEMON-04, DAEMON-05, DAEMON-06, SCAN-01, SCAN-02, SCAN-03
+**Success Criteria** (what must be TRUE):
+  1. The daemon process environment contains `CORTEX_API_URL`, `CORTEX_API_KEY`, `WATCH_PATHS`, Google OAuth credentials, and Langfuse keys — and nothing else; specifically `DATABASE_URL` is absent and the daemon process exposes no Prisma client
+  2. A new file landing under any path in `WATCH_PATHS` (or surfaced by the startup recursive scan) results in a `POST /api/ingest` call within seconds, authenticated with `CORTEX_API_KEY`; a new Gmail message surfaced via incremental historyId polling produces an analogous POST with subject, from, snippet, and headers
+  3. A directory tree containing a `.git` or `node_modules` entry at any level is skipped entirely — no file inside a repo or `node_modules` is ever enqueued; hidden files (`.DS_Store`, dotfiles) are likewise never enqueued; subdirectory recursion is unbounded otherwise
+  4. The daemon performs no classification calls and no Drive API uploads — Stage 1, Stage 2, and the Drive resolve cron remain the sole owners of those responsibilities; daemon code paths to `claude -p` and to Drive uploads no longer exist
+**Plans**: 2 plans (estimated)
+
+### Phase 7: Stage 1 & Stage 2 Consumers
+**Goal**: Two separate local consumer processes drain the queue end-to-end — Stage 1 polls relevance with up to 10 concurrent classifications, Stage 2 polls labelling with up to 2 concurrent classifications, both invoke `claude -p` with file paths (or text prompts for Gmail) and POST results back, with Langfuse traces spanning the full daemon → API → consumer → API loop for every item
+**Depends on**: Phase 6
+**Requirements**: CONS-01, CONS-02, CONS-03, CONS-04, CONS-05, CONS-06
+**Success Criteria** (what must be TRUE):
+  1. The Stage 1 consumer is a separate process that polls `GET /api/queue?stage=1&limit=10`, runs up to 10 concurrent `claude -p` invocations, and POSTs each result to `/api/classify`; the Stage 2 consumer is its own process polling `?stage=2&limit=2` with up to 2 concurrent invocations
+  2. For a file item (binary or text), the consumer's `claude -p` invocation contains the absolute file path in the prompt and instructs Claude to read it — the file's bytes are never present in argv; binary files, files with null bytes, and large files (PDFs, images, installers within size bands) classify without EBADF, EMFILE, or argv-size errors
+  3. For a Gmail item, the consumer builds a text prompt from subject / from / snippet / headers (no file path); Stage 2 receives the existing taxonomy as additional context so it can propose 3-axis labels and a Drive path
+  4. Gmail "keep" items reliably advance from Stage 1 (`pending_stage1` → `processing_stage1` → `pending_stage2`) into Stage 2 (`processing_stage2` → `certain`/`uncertain`) without manual intervention — the v1.0 bug where keeps remained at `processing` forever no longer reproduces
+  5. Every classification emits a Langfuse trace covering its end-to-end work, and POSTs to `/api/classify` carry decision, confidence, axes/labels, and proposed Drive path where applicable
+**Plans**: 2 plans (estimated)
+
+### Phase 8: Operational Acceptance
+**Goal**: The rearchitected pipeline runs unattended for the published soak periods with zero errors, every operational invariant from the brief is independently auditable, and end-to-end traceability from daemon discovery to consumer classify is reconstructable in Langfuse — v1.1 is shippable
+**Depends on**: Phase 7
+**Requirements**: ACC-01, ACC-02, ACC-03, ACC-04, ACC-05
+**Success Criteria** (what must be TRUE):
+  1. The daemon scans `~/Downloads` + `~/Documents` continuously for one wall-clock hour with zero errors logged to its stderr or to Langfuse — the run log is captured and reviewable
+  2. A Gmail 6-month backfill completes without hanging — every message in the window either ingests successfully (Item row exists with `status` in `{pending_stage1, processing_*, pending_stage2, certain, uncertain, ignored}`) or has an explicit rejection record; no message is left in an indeterminate state
+  3. Items dropped via the Downloads or Gmail collectors during the soak period flow through Stage 1 and Stage 2 and surface in the existing v1.0 triage UI for any operator review needed — no manual queue intervention is required at any step
+  4. A runtime audit (`launchctl print` or equivalent) of the daemon process confirms `DATABASE_URL` is not in its environment; a runtime audit of consumer subprocess argv (captured via `ps -ww` or equivalent during a live Stage 1/2 run) confirms file content is never present in any `claude -p` argument
+  5. A single ingested item can be reconstructed end-to-end in the Langfuse dashboard from daemon ingest POST → API row write → consumer queue claim → `claude -p` invocation → API classify POST, with linked spans across the daemon, API, and consumer processes
+**Plans**: 1 plan (estimated)
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -94,3 +160,7 @@ Plans:
 | 2. Triage & Web App | 5/5 | Complete    | 2026-04-24 |
 | 3. Taxonomy, Rules & Admin | 6/6 | Complete    | 2026-04-24 |
 | 4. Retrieval | 3/3 | Complete    | 2026-04-24 |
+| 5. Queue & API Surface | 0/3 | Not started | - |
+| 6. Daemon Thin Client | 0/2 | Not started | - |
+| 7. Stage 1 & Stage 2 Consumers | 0/2 | Not started | - |
+| 8. Operational Acceptance | 0/1 | Not started | - |

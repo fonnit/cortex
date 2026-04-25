@@ -198,43 +198,43 @@ Implementation existed at v1.0 milestone close (2026-04-24, all 4 phases complet
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DAEMON-01 | TBD | Pending |
-| DAEMON-02 | TBD | Pending |
-| DAEMON-03 | TBD | Pending |
-| DAEMON-04 | TBD | Pending |
-| DAEMON-05 | TBD | Pending |
-| DAEMON-06 | TBD | Pending |
-| API-01 | TBD | Pending |
-| API-02 | TBD | Pending |
-| API-03 | TBD | Pending |
-| API-04 | TBD | Pending |
-| API-05 | TBD | Pending |
-| API-06 | TBD | Pending |
-| QUE-01 | TBD | Pending |
-| QUE-02 | TBD | Pending |
-| QUE-03 | TBD | Pending |
-| QUE-04 | TBD | Pending |
-| QUE-05 | TBD | Pending |
-| QUE-06 | TBD | Pending |
-| CONS-01 | TBD | Pending |
-| CONS-02 | TBD | Pending |
-| CONS-03 | TBD | Pending |
-| CONS-04 | TBD | Pending |
-| CONS-05 | TBD | Pending |
-| CONS-06 | TBD | Pending |
-| SCAN-01 | TBD | Pending |
-| SCAN-02 | TBD | Pending |
-| SCAN-03 | TBD | Pending |
-| ACC-01 | TBD | Pending |
-| ACC-02 | TBD | Pending |
-| ACC-03 | TBD | Pending |
-| ACC-04 | TBD | Pending |
-| ACC-05 | TBD | Pending |
+| DAEMON-01 | Phase 6 | Pending |
+| DAEMON-02 | Phase 6 | Pending |
+| DAEMON-03 | Phase 6 | Pending |
+| DAEMON-04 | Phase 6 | Pending |
+| DAEMON-05 | Phase 6 | Pending |
+| DAEMON-06 | Phase 6 | Pending |
+| API-01 | Phase 5 | Pending |
+| API-02 | Phase 5 | Pending |
+| API-03 | Phase 5 | Pending |
+| API-04 | Phase 5 | Pending |
+| API-05 | Phase 5 | Pending |
+| API-06 | Phase 5 | Pending |
+| QUE-01 | Phase 5 | Pending |
+| QUE-02 | Phase 5 | Pending |
+| QUE-03 | Phase 5 | Pending |
+| QUE-04 | Phase 5 | Pending |
+| QUE-05 | Phase 5 | Pending |
+| QUE-06 | Phase 5 | Pending |
+| CONS-01 | Phase 7 | Pending |
+| CONS-02 | Phase 7 | Pending |
+| CONS-03 | Phase 7 | Pending |
+| CONS-04 | Phase 7 | Pending |
+| CONS-05 | Phase 7 | Pending |
+| CONS-06 | Phase 7 | Pending |
+| SCAN-01 | Phase 6 | Pending |
+| SCAN-02 | Phase 6 | Pending |
+| SCAN-03 | Phase 6 | Pending |
+| ACC-01 | Phase 8 | Pending |
+| ACC-02 | Phase 8 | Pending |
+| ACC-03 | Phase 8 | Pending |
+| ACC-04 | Phase 8 | Pending |
+| ACC-05 | Phase 8 | Pending |
 
 **v1.1 Coverage:**
 - v1.1 requirements: 32 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 32 (will resolve at roadmap step)
+- Mapped to phases: 32 (Phase 5: 12, Phase 6: 9, Phase 7: 6, Phase 8: 5)
+- Unmapped: 0
 
 ### v1.0 (Shipped — historical reference)
 
@@ -304,4 +304,4 @@ Implementation existed at v1.0 milestone close (2026-04-24, all 4 phases complet
 
 ---
 *Requirements defined: 2026-04-24*
-*Last updated: 2026-04-25 — milestone v1.1 (Ingest Pipeline Rearchitecture) requirements added*
+*Last updated: 2026-04-25 — milestone v1.1 (Ingest Pipeline Rearchitecture) traceability mapped to Phases 5–8*
