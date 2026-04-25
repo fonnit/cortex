@@ -11,6 +11,9 @@ const WATCH_PATHS = (process.env.WATCH_PATHS ?? process.env.DOWNLOADS_PATH ?? `$
 const POLL_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes — polling fallback
 const DEBOUNCE_MS = 2000;
 
+const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', 'venv', '.venv', '.next', '.cache']);
+const SKIP_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini', '.localized']);
+
 export function startDownloadsCollector(
   langfuse: Langfuse,
   onFile: (filePath: string) => Promise<void>,
@@ -30,6 +33,8 @@ export function startDownloadsCollector(
   });
 
   watcher.on('add', (filePath) => {
+    const name = path.basename(filePath);
+    if (name.startsWith('.') || SKIP_FILES.has(name)) return;
     onFile(filePath).catch((err: Error) => {
       langfuse.trace({
         name: 'downloads_ingest_error',
@@ -45,8 +50,6 @@ export function startDownloadsCollector(
     });
   });
 
-  const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', 'venv', '.venv', '.next', '.cache']);
-
   async function scanDir(dir: string): Promise<void> {
     try {
       const entries = await readdir(dir, { withFileTypes: true });
@@ -54,13 +57,10 @@ export function startDownloadsCollector(
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (!SKIP_DIRS.has(entry.name)) await scanDir(fullPath);
-        } else if (entry.isFile()) {
-          const s = await stat(fullPath);
-          if (s.mtimeMs > lastProcessedAt.getTime()) {
-            await onFile(fullPath).catch((err: Error) => {
-              langfuse.trace({ name: 'startup_scan_error', metadata: { filePath: fullPath, error: err.message } });
-            });
-          }
+        } else if (entry.isFile() && !SKIP_FILES.has(entry.name) && !entry.name.startsWith('.')) {
+          await onFile(fullPath).catch((err: Error) => {
+            langfuse.trace({ name: 'startup_scan_error', metadata: { filePath: fullPath, error: err.message } });
+          });
         }
       }
     } catch (err) {
