@@ -19,6 +19,11 @@ export function startDownloadsCollector(
   const watcher = watch(WATCH_PATHS, {
     persistent: true,
     ignoreInitial: false,
+    depth: 1,
+    ignored: [
+      '**/node_modules/**', '**/.git/**', '**/venv/**', '**/__pycache__/**',
+      '**/src/**', '**/dist/**', '**/build/**', '**/.next/**',
+    ],
     awaitWriteFinish: { stabilityThreshold: DEBOUNCE_MS, pollInterval: 100 },
   });
 
