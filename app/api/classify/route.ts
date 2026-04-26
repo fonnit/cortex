@@ -47,24 +47,52 @@ const AxisSchema = z
  * omitted axes to be silently overwritten with 0, drifting them out of sync
  * with the (still-present) value columns. The contract is "all three axes
  * or none" — runtime validators with sparse axes should fail at this seam.
+ *
+ * Per quick task 260426-u47:
+ *   - Stage 1 success: `decision` enum is {keep, ignore, uncertain} (relevance
+ *     gate). Required by the inline check below (line ~166).
+ *   - Stage 2 success: `decision` enum is {auto_file, ignore, uncertain}
+ *     (terminal action). Required at the schema level via .refine(). The two
+ *     enums are deliberately disjoint — Stage 1 cannot return 'auto_file'
+ *     (it has no axes to file with), Stage 2 cannot return 'keep' (the
+ *     keep-vs-skip decision was already made at Stage 1).
+ *   - Optional top-level `confidence: number (0..1)` on the Stage 2 success
+ *     branch is used by the auto-ignore path (see Step 4 below).
  */
 const ClassifyBodySchema = z.discriminatedUnion('outcome', [
-  z.object({
-    item_id: z.string().min(1),
-    stage: z.union([z.literal(1), z.literal(2)]),
-    outcome: z.literal('success'),
-    decision: z.enum(['keep', 'ignore', 'uncertain']).optional(),
-    axes: z
-      .object({
-        type: AxisSchema,
-        from: AxisSchema,
-        context: AxisSchema,
-      })
-      .optional(),
-    confidence: z.number().min(0).max(1).optional(),
-    reason: z.string().optional(),
-    proposed_drive_path: z.string().optional(),
-  }),
+  z
+    .object({
+      item_id: z.string().min(1),
+      stage: z.union([z.literal(1), z.literal(2)]),
+      outcome: z.literal('success'),
+      // Wider enum at parse time — refined per stage below. Stage 1 cannot
+      // emit 'auto_file' and Stage 2 cannot emit 'keep'.
+      decision: z.enum(['keep', 'ignore', 'uncertain', 'auto_file']).optional(),
+      axes: z
+        .object({
+          type: AxisSchema,
+          from: AxisSchema,
+          context: AxisSchema,
+        })
+        .optional(),
+      confidence: z.number().min(0).max(1).optional(),
+      reason: z.string().optional(),
+      proposed_drive_path: z.string().optional(),
+    })
+    // Stage 2 success: `decision` is REQUIRED and limited to the Stage 2 enum.
+    .refine(
+      (b) => b.stage !== 2 || (b.decision !== undefined && b.decision !== 'keep'),
+      {
+        message: "stage 2 success requires decision in {'auto_file','ignore','uncertain'}",
+        path: ['decision'],
+      },
+    )
+    // Stage 1 success: `decision`, when provided, must NOT be 'auto_file'
+    // (the route's inline check enforces required-ness too — see line ~166).
+    .refine((b) => b.stage !== 1 || b.decision !== 'auto_file', {
+      message: "stage 1 success cannot use decision='auto_file' (Stage 2 enum)",
+      path: ['decision'],
+    }),
   z.object({
     item_id: z.string().min(1),
     stage: z.union([z.literal(1), z.literal(2)]),
@@ -72,6 +100,21 @@ const ClassifyBodySchema = z.discriminatedUnion('outcome', [
     error_message: z.string().min(1),
   }),
 ])
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Auto-action thresholds — quick task 260426-u47.
+ *
+ * AUTO_FILE_THRESHOLD: minimum confidence on EVERY axis before Stage 2 may
+ *   transition status='filed'. Matches the existing STAGE2_CONFIDENT_MATCH
+ *   constant in the prompt (0.85).
+ *
+ * AUTO_IGNORE_THRESHOLD: minimum confidence on the ignore signal (either
+ *   the explicit top-level `confidence` field or, when absent, the max of
+ *   the 3 axis confidences) before status='ignored'.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+const AUTO_FILE_THRESHOLD = 0.85
+const AUTO_IGNORE_THRESHOLD = 0.85
 
 /** Existing classification_trace shape — additive `queue` sibling alongside v1.0 stage1/stage2. */
 type ExistingTrace = {
@@ -206,7 +249,108 @@ export async function POST(request: NextRequest) {
           tConf >= CONFIDENCE_THRESHOLD &&
           fConf >= CONFIDENCE_THRESHOLD &&
           cConf >= CONFIDENCE_THRESHOLD
-        newStatus = allConfident ? QUEUE_STATUSES.CERTAIN : QUEUE_STATUSES.UNCERTAIN
+
+        // ─── COLD-START GUARD LOAD (quick task 260426-u47, D-cold-start) ──
+        // Read TaxonomyLabel rows once for this user. The guard prevents
+        // auto-file from acting on labels that don't exist in the closed
+        // vocabulary (currently trivially satisfied — the prompt forbids
+        // invented labels — but future-proofs against the sibling Task #2
+        // which lets Claude propose new labels).
+        //
+        // The lookup is read-only and runs at the route — the boundary that
+        // already validates Stage 2 payloads. Per CONTEXT, auto-IGNORE skips
+        // this guard (no labels are committed; vocabulary doesn't matter).
+        //
+        // TOCTOU safety: a stale read here is harmless because updateMany's
+        // compound-where (id + expectedStatus) catches concurrent races.
+        const coldStartSpan = trace.span({
+          name: 'cold-start-guard-load',
+          input: { user_id: item.user_id },
+        })
+        const labels = await prisma.taxonomyLabel.findMany({
+          where: { user_id: item.user_id, deprecated: false },
+          select: { axis: true, name: true },
+        })
+        coldStartSpan.end({ output: { label_count: labels.length } })
+        const labelSet = new Set(
+          labels.map((l: { axis: string; name: string }) => `${l.axis}:${l.name}`),
+        )
+        const isExistingLabel = (axis: 'type' | 'from' | 'context', value: string | null) =>
+          value !== null && labelSet.has(`${axis}:${value}`)
+
+        // ─── AUTO-FILE BRANCH (quick task 260426-u47, D-auto-file) ────────
+        // Preconditions (ALL must hold):
+        //   - decision === 'auto_file'
+        //   - All 3 axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
+        //   - All 3 axis values are non-null
+        //   - All 3 axis values exist in TaxonomyLabel for that axis (cold-start)
+        // When fired: status='filed' (terminal). axis_* + proposed_drive_path
+        // STILL written (reversibility — triage UI can override). Plus
+        // confirmed_drive_path = proposed_drive_path so the file's drive
+        // location is committed without human review.
+        const allHighConf =
+          tConf >= AUTO_FILE_THRESHOLD &&
+          fConf >= AUTO_FILE_THRESHOLD &&
+          cConf >= AUTO_FILE_THRESHOLD
+        const allValuesPresent =
+          tAxis.value !== null && fAxis.value !== null && cAxis.value !== null
+        const allLabelsExist =
+          isExistingLabel('type', tAxis.value) &&
+          isExistingLabel('from', fAxis.value) &&
+          isExistingLabel('context', cAxis.value)
+        const canAutoFile =
+          data.decision === 'auto_file' &&
+          allHighConf &&
+          allValuesPresent &&
+          allLabelsExist
+
+        // ─── AUTO-IGNORE BRANCH (quick task 260426-u47, D-auto-ignore) ─────
+        // Read confidence from the explicit top-level field if Claude
+        // provided it (the Stage 2 prompt allows this for ignore); else
+        // fall back to max(axis confidences). When ≥ AUTO_IGNORE_THRESHOLD
+        // and decision==='ignore', status='ignored' (terminal) — cold-start
+        // guard does NOT apply because no labels are committed.
+        const ignoreConfidence =
+          data.confidence ?? Math.max(tConf, fConf, cConf)
+        const canAutoIgnore =
+          data.decision === 'ignore' && ignoreConfidence >= AUTO_IGNORE_THRESHOLD
+
+        // ─── DECIDE newStatus — auto-file → auto-ignore → existing logic ──
+        // Order matters: auto-file is the most specific, then auto-ignore,
+        // then the existing CERTAIN/UNCERTAIN fallback. Document the
+        // blocked-by reason via Langfuse for observability.
+        let autoFileBlockedReason: string | null = null
+        if (data.decision === 'auto_file' && !canAutoFile) {
+          if (!allHighConf) autoFileBlockedReason = 'low_conf'
+          else if (!allValuesPresent) autoFileBlockedReason = 'null_axis'
+          else if (!allLabelsExist) autoFileBlockedReason = 'unknown_label'
+        } else if (data.decision !== 'auto_file') {
+          autoFileBlockedReason = 'wrong_decision'
+        }
+        const autoFileSpan = trace.span({
+          name: 'auto-file',
+          input: { item_id: item.id, decision: data.decision },
+        })
+        autoFileSpan.end({
+          output: { fired: canAutoFile, blocked_by: autoFileBlockedReason },
+        })
+
+        const autoIgnoreSpan = trace.span({
+          name: 'auto-ignore',
+          input: { item_id: item.id, decision: data.decision },
+        })
+        autoIgnoreSpan.end({
+          output: { fired: canAutoIgnore, confidence: ignoreConfidence },
+        })
+
+        if (canAutoFile) {
+          newStatus = QUEUE_STATUSES.FILED
+        } else if (canAutoIgnore) {
+          newStatus = QUEUE_STATUSES.IGNORED
+        } else {
+          newStatus = allConfident ? QUEUE_STATUSES.CERTAIN : QUEUE_STATUSES.UNCERTAIN
+        }
+
         const stage2Patch: Record<string, unknown> = {
           ...(existingTrace.stage2 ?? {}),
           axes: data.axes,
@@ -214,14 +358,31 @@ export async function POST(request: NextRequest) {
         if (data.proposed_drive_path !== undefined) {
           stage2Patch.proposed_drive_path = data.proposed_drive_path
         }
+        // Persist the decision (and overall confidence when present) so a
+        // post-hoc audit can reconstruct WHY an item was auto-filed/ignored.
+        if (data.decision !== undefined) stage2Patch.decision = data.decision
+        if (data.confidence !== undefined) stage2Patch.confidence = data.confidence
         newTrace.stage2 = stage2Patch
-        if (tAxis.value) updateData.axis_type = tAxis.value
-        if (fAxis.value) updateData.axis_from = fAxis.value
-        if (cAxis.value) updateData.axis_context = cAxis.value
-        updateData.axis_type_confidence = tConf
-        updateData.axis_from_confidence = fConf
-        updateData.axis_context_confidence = cConf
-        if (data.proposed_drive_path) updateData.proposed_drive_path = data.proposed_drive_path
+
+        // Auto-ignore: skip axis_* writes — they're null + low confidence on
+        // the ignore path and writing them would be misleading.
+        if (canAutoIgnore) {
+          // Intentionally omit axis_*, proposed_drive_path, confirmed_drive_path.
+          // status='ignored' is terminal; no further data is needed.
+        } else {
+          if (tAxis.value) updateData.axis_type = tAxis.value
+          if (fAxis.value) updateData.axis_from = fAxis.value
+          if (cAxis.value) updateData.axis_context = cAxis.value
+          updateData.axis_type_confidence = tConf
+          updateData.axis_from_confidence = fConf
+          updateData.axis_context_confidence = cConf
+          if (data.proposed_drive_path) updateData.proposed_drive_path = data.proposed_drive_path
+          // Auto-file confirms the proposed path — commit it as confirmed
+          // so downstream code (Drive sync, UI badges) treats it as final.
+          if (canAutoFile && data.proposed_drive_path) {
+            updateData.confirmed_drive_path = data.proposed_drive_path
+          }
+        }
       }
 
       // Reset queue retries for this stage on success — item is no longer pending here.

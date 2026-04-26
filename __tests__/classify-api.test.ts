@@ -27,6 +27,12 @@ jest.mock('../lib/prisma', () => ({
       // (review fix [3]). The route no longer calls plain `update`.
       updateMany: jest.fn(),
     },
+    // taxonomyLabel.findMany feeds the cold-start guard added in quick task
+    // 260426-u47. The Stage 2 success path now reads it before deciding
+    // status; tests that exercise that path mock it explicitly.
+    taxonomyLabel: {
+      findMany: jest.fn(),
+    },
   },
 }))
 
@@ -50,6 +56,9 @@ import { prisma } from '../lib/prisma'
 
 const mockFindUnique = prisma.item.findUnique as jest.MockedFunction<typeof prisma.item.findUnique>
 const mockUpdateMany = prisma.item.updateMany as jest.MockedFunction<typeof prisma.item.updateMany>
+const mockTaxonomyFindMany = (
+  prisma as unknown as { taxonomyLabel: { findMany: jest.Mock } }
+).taxonomyLabel.findMany
 
 function makeRequest(opts: { body?: unknown; auth?: string | null } = {}): NextRequest {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
@@ -95,6 +104,10 @@ describe('POST /api/classify — success path', () => {
     jest.clearAllMocks()
     // Default: updateMany matches the row (count: 1) so non-race tests succeed.
     mockUpdateMany.mockResolvedValue({ count: 1 } as never)
+    // Default cold-start guard read returns no labels — Stage 2 tests below
+    // exercise the existing CERTAIN/UNCERTAIN fallback (decision='uncertain'
+    // doesn't trigger auto-file, so vocabulary doesn't matter for them).
+    mockTaxonomyFindMany.mockResolvedValue([] as never)
   })
 
   it('Test 1: returns 401 with empty body when Authorization header is missing', async () => {
@@ -236,6 +249,9 @@ describe('POST /api/classify — success path', () => {
         item_id: 'item_xyz',
         stage: 2,
         outcome: 'success',
+        // u47: Stage 2 success now requires `decision`. 'uncertain' here
+        // exercises the existing CERTAIN/UNCERTAIN fallback (no auto-action).
+        decision: 'uncertain',
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.85 },
@@ -284,6 +300,8 @@ describe('POST /api/classify — success path', () => {
         item_id: 'item_xyz',
         stage: 2,
         outcome: 'success',
+        // u47: Stage 2 success requires `decision`.
+        decision: 'uncertain',
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.85 },
@@ -308,6 +326,7 @@ describe('POST /api/classify — error path', () => {
     process.env.CORTEX_API_KEY = 'test-secret'
     jest.clearAllMocks()
     mockUpdateMany.mockResolvedValue({ count: 1 } as never)
+    mockTaxonomyFindMany.mockResolvedValue([] as never)
   })
 
   it('Test 1: stage=1 outcome=error with no prior retries → retries=1, status=pending_stage1, last_error persisted', async () => {
@@ -482,6 +501,7 @@ describe('POST /api/classify — review fix coverage', () => {
     process.env.CORTEX_API_KEY = 'test-secret'
     jest.clearAllMocks()
     mockUpdateMany.mockResolvedValue({ count: 1 } as never)
+    mockTaxonomyFindMany.mockResolvedValue([] as never)
   })
 
   // ─── Review fix [1] — Stage 2 partial-axes payload is rejected ─────────────
@@ -543,6 +563,11 @@ describe('POST /api/classify — review fix coverage', () => {
         item_id: 'item_xyz',
         stage: 2,
         outcome: 'success',
+        // u47: Stage 2 success requires `decision`. Low-confidence ignore
+        // here would NOT trigger auto-ignore (max axis conf 0.3 < 0.85), so
+        // the existing 'uncertain' fallback still applies. Use 'uncertain'
+        // explicitly to make intent clear.
+        decision: 'uncertain',
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.2 },
@@ -614,6 +639,9 @@ describe('POST /api/classify — review fix coverage', () => {
         item_id: 'item_xyz',
         stage: 2,
         outcome: 'success',
+        // u47: Stage 2 success requires `decision`. Use 'uncertain' so the
+        // schema parses; the route should still 409 on the wrong stage.
+        decision: 'uncertain',
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
