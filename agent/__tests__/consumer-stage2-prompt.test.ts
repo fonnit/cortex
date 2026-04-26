@@ -135,6 +135,50 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
     const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
     expect(p).toContain('0.85')
   })
+
+  // Tests NEW-A through NEW-D: quick task 260426-wgk relaxes the closed-vocab
+  // rule so Claude may PROPOSE a brand-new label name on any axis when no
+  // existing label is a confident match — instead of forcing `null`. Defense
+  // in depth: the prompt instructs sub-0.85 confidence on proposals, AND the
+  // route's cold-start guard independently blocks auto-file when a value is
+  // not in TaxonomyLabel (see __tests__/classify-auto-actions.test.ts).
+  it('Test NEW-A: prompt explicitly permits proposing a NEW label when no existing label fits (wgk)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const lower = p.toLowerCase()
+    const proposes =
+      lower.includes('propose a new') ||
+      lower.includes('propose new') ||
+      lower.includes('propose a label') ||
+      lower.includes('new label')
+    expect(proposes).toBe(true)
+  })
+
+  it('Test NEW-B: prompt instructs that NEW (proposed) labels MUST carry confidence below 0.85 (wgk)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const lower = p.toLowerCase()
+    const subThreshold =
+      lower.includes('below 0.85') ||
+      lower.includes('< 0.85') ||
+      lower.includes('less than 0.85') ||
+      lower.includes('under 0.85')
+    expect(subThreshold).toBe(true)
+  })
+
+  it('Test NEW-C: prompt MUST NOT contain the old hard-prohibition phrase "Never invent labels" (wgk)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    expect(p).not.toContain('Never invent labels')
+  })
+
+  it('Test NEW-D: prompt still allows null as a valid axis value when Claude has no plausible name (wgk)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const lower = p.toLowerCase()
+    const nullAllowed =
+      lower.includes('null is allowed') ||
+      lower.includes('or null') ||
+      lower.includes('may be null') ||
+      lower.includes('can be null')
+    expect(nullAllowed).toBe(true)
+  })
 })
 
 /* ───────────────────────────────── Schema tests ────────────────────────────── */

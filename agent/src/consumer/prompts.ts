@@ -75,10 +75,12 @@ export function buildStage1Prompt(item: QueueItem): string {
 
 export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): string {
   const itemBlock = buildStage2ItemBlock(item)
-  // Per quick task 260426-u47 (D-auto-file, D-auto-ignore): Stage 2 now emits
-  // an explicit `decision` field so it can finalize an item without human
-  // triage. The closed-vocab line ("Never invent labels outside the lists
-  // above") stays — Task #2 of the sibling quick task changes that separately.
+  // Per quick task 260426-u47 (D-auto-file, D-auto-ignore): Stage 2 emits an
+  // explicit `decision` field so it can finalize an item without human triage.
+  // Per quick task 260426-wgk: the closed-vocab rule has been RELAXED — Claude
+  // may now propose a brand-new label name on any axis when no existing label
+  // is a confident match, with confidence < 0.85 so the route's cold-start
+  // guard naturally routes the item to human review (defense in depth).
   return [
     `Classify this item: ${itemBlock}.`,
     '',
@@ -87,7 +89,7 @@ export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): s
     `From axis: ${listOrNoneYet(taxonomy.from)}`,
     `Context axis: ${listOrNoneYet(taxonomy.context)}`,
     '',
-    'Propose 3-axis labels (use an existing label if confident match ≥ 0.85; else null with low confidence). Never invent labels outside the lists above.',
+    'Propose 3-axis labels. If an existing label from the lists above is a confident match (confidence ≥ 0.85), use it. If no existing label fits, you may propose a new label name on that axis — pick a short lowercased name (hyphen- or underscore-separated) following the style of the existing labels — but mark it with confidence below 0.85 so a human can review and approve the new label before it is added to the taxonomy. If you have no plausible label for an axis, value may be null with low confidence.',
     'Compute proposed_drive_path: e.g., "/<type>/<from>/<context>/<filename>" using your best mapping.',
     '',
     'Decide one of:',
