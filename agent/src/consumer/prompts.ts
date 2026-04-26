@@ -75,6 +75,10 @@ export function buildStage1Prompt(item: QueueItem): string {
 
 export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): string {
   const itemBlock = buildStage2ItemBlock(item)
+  // Per quick task 260426-u47 (D-auto-file, D-auto-ignore): Stage 2 now emits
+  // an explicit `decision` field so it can finalize an item without human
+  // triage. The closed-vocab line ("Never invent labels outside the lists
+  // above") stays — Task #2 of the sibling quick task changes that separately.
   return [
     `Classify this item: ${itemBlock}.`,
     '',
@@ -86,7 +90,13 @@ export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): s
     'Propose 3-axis labels (use an existing label if confident match ≥ 0.85; else null with low confidence). Never invent labels outside the lists above.',
     'Compute proposed_drive_path: e.g., "/<type>/<from>/<context>/<filename>" using your best mapping.',
     '',
-    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string}.',
+    'Decide one of:',
+    '- auto_file: you are confident across all 3 axes ≥ 0.85 AND every value is in the lists above (we will file the item without human review).',
+    '- ignore: junk that does not deserve a label — spam, marketing emails, automated security alerts, installer files, etc. (we will mark it ignored without human review).',
+    '- uncertain: anything else (a human will triage).',
+    'If decision="ignore", axes may be null with low confidence — we trust the ignore signal.',
+    '',
+    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string, "decision":"auto_file"|"ignore"|"uncertain"}.',
   ].join('\n')
 }
 

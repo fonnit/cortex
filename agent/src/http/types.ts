@@ -99,13 +99,25 @@ export interface ClassifyAxis {
  * so success-only and error-only fields cannot be mixed at the type level.
  *
  * Mirrors `ClassifyBodySchema` in app/api/classify/route.ts.
+ *
+ * `decision` semantics (per quick task 260426-u47):
+ *   - Stage 1 success: 'keep' | 'ignore' | 'uncertain' (relevance gate; required
+ *     by the route).
+ *   - Stage 2 success: 'auto_file' | 'ignore' | 'uncertain' (terminal action;
+ *     required by the route per D-auto-file / D-auto-ignore). When 'auto_file'
+ *     fires AND all 3 axes are ≥ AUTO_FILE_THRESHOLD AND every value already
+ *     exists in TaxonomyLabel, the route transitions status='filed'. When
+ *     'ignore' fires AND confidence ≥ AUTO_IGNORE_THRESHOLD, status='ignored'.
+ *
+ * `confidence` (optional, top-level): Stage 2 may emit it explicitly for the
+ * ignore path so the route doesn't have to fall back to max(axis confidences).
  */
 export type ClassifyRequest =
   | {
       item_id: string
       stage: 1 | 2
       outcome: 'success'
-      decision?: 'keep' | 'ignore' | 'uncertain'
+      decision?: 'keep' | 'ignore' | 'uncertain' | 'auto_file'
       axes?: {
         type: ClassifyAxis
         from: ClassifyAxis

@@ -57,11 +57,20 @@ const AxisSchema = z.object({
  * Stage 2 result — type/from/context all required (matches the Phase 5
  * /api/classify all-three-axes contract). If invokeClaude returns a payload
  * missing any axis, we treat it as parse_error and POST outcome:'error'.
+ *
+ * Per quick task 260426-u47 (D-auto-file, D-auto-ignore): the schema now
+ * REQUIRES a `decision` field at the top level (sibling to axes +
+ * proposed_drive_path — Claude's-discretion option per CONTEXT, sibling
+ * layout matches how /api/classify ClassifyBodySchema layers `decision` +
+ * `axes`). `confidence` is optional — used for the ignore path so the route
+ * doesn't have to fall back to max(axis confidences).
  */
 const Stage2ResultSchema = z.object({
   // All-3-axes contract enforced inline so a static grep can pin it.
   axes: z.object({ type: AxisSchema, from: AxisSchema, context: AxisSchema }),
   proposed_drive_path: z.string(),
+  decision: z.enum(['auto_file', 'ignore', 'uncertain']),
+  confidence: z.number().min(0).max(1).optional(),
 })
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -153,7 +162,11 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
       if (outcome.kind === 'ok') {
         // Normalise each axis so `value` is exactly string | null (Zod
         // inference can yield string | null | undefined; the API contract
-        // requires string | null).
+        // requires string | null). When decision='ignore', preserve null
+        // axis values exactly as Claude returned them (don't normalize to a
+        // default — the route needs to see null + low confidence to apply
+        // auto-ignore semantics correctly). Per quick task 260426-u47
+        // (D-auto-file, D-auto-ignore).
         const axes = {
           type: {
             value: outcome.value.axes.type.value ?? null,
@@ -174,6 +187,15 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
           outcome: 'success',
           axes,
           proposed_drive_path: outcome.value.proposed_drive_path,
+          // Forward the decision unchanged — the route enforces auto-action
+          // preconditions (cold-start guard, confidence threshold) server-side.
+          decision: outcome.value.decision,
+          // Forward optional top-level confidence when present (used by the
+          // route's auto-ignore path; falls back to max(axis confidences)
+          // when omitted).
+          ...(outcome.value.confidence !== undefined
+            ? { confidence: outcome.value.confidence }
+            : {}),
         }
       } else if (outcome.kind === 'parse_error') {
         payload = {
