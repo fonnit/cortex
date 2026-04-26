@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: ingest-rearchitect
 status: code_complete_pending_acceptance
 stopped_at: v1.1 code-complete (4 phases, 8 plans, 32 requirements). Operator acceptance pending — see .planning/phases/08-operational-acceptance/RUNBOOK.md.
-last_updated: "2026-04-25T15:00:00.000Z"
-last_activity: 2026-04-25 — milestone v1.1 closed (audit + archive)
+last_updated: "2026-04-26T19:50:00.000Z"
+last_activity: 2026-04-26 — Completed quick task 260426-u47: triage routing + Stage 2 auto-actions
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25 — v1.1 marked shipped)
 Phase: All v1.1 phases complete (5–8)
 Plan: —
 Status: Code-complete; live operator acceptance pending
-Last activity: 2026-04-25 — milestone v1.1 audit + archive written
+Last activity: 2026-04-26 — Completed quick task 260426-u47: triage routing + Stage 2 auto-actions
 
 Progress: [██████████] 100% (v1.1 — 8/8 plans)
 
@@ -69,6 +69,12 @@ v1.1 decisions all marked ✓ Shipped:
 ### Blockers/Concerns
 
 (None — milestone code-complete. Live operator acceptance is by design.)
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260426-u47 | Triage routing + Stage 2 auto-file/auto-ignore + cold-start guard | 2026-04-26 | dc997e0 | [260426-u47-triage-only-big-items-default-route-smal](./quick/260426-u47-triage-only-big-items-default-route-smal/) |
 
 ## Session Continuity
 
