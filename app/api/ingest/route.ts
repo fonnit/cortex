@@ -3,7 +3,7 @@ import { z } from 'zod'
 import Langfuse from 'langfuse'
 import { prisma } from '@/lib/prisma'
 import { requireApiKey } from '@/lib/api-key'
-import { QUEUE_STATUSES } from '@/lib/queue-config'
+import { QUEUE_STATUSES, STAGE1_MIN_SIZE_BYTES } from '@/lib/queue-config'
 
 /**
  * Locked single-operator user id. Multi-user is explicitly out of scope for v1.1
@@ -39,6 +39,54 @@ const IngestBodySchema = z
     (b) => b.heartbeat === true || (b.source !== undefined && b.content_hash !== undefined),
     { message: 'source and content_hash are required when heartbeat is not set' },
   )
+
+/**
+ * Routing decision (quick task 260426-u47, D-stage1-routing).
+ *
+ * Decides the initial Item.status at ingest time so that small / metadata-only
+ * items skip Stage 1 (the expensive relevance gate) and go straight to Stage 2.
+ *
+ * Rules:
+ *   - source='downloads': size_bytes > STAGE1_MIN_SIZE_BYTES → PENDING_STAGE_1.
+ *     If size_bytes is undefined (unknown — could be huge), default to
+ *     PENDING_STAGE_1 (safe default that preserves the v1.1 behavior for
+ *     size-less items).
+ *   - source='gmail': inspect source_metadata.attachments. If any attachment
+ *     has a numeric size_bytes > STAGE1_MIN_SIZE_BYTES → PENDING_STAGE_1.
+ *     Otherwise (no attachments / all small / malformed) → PENDING_STAGE_2.
+ *
+ * Defensive (T-u47-01): malformed source_metadata.attachments (non-array,
+ * non-numeric size_bytes, missing keys) MUST NOT throw — treat as "no large
+ * attachment found" and route to PENDING_STAGE_2.
+ */
+function computeInitialStatus(input: {
+  source: 'downloads' | 'gmail'
+  size_bytes?: number
+  source_metadata?: Record<string, unknown>
+}): typeof QUEUE_STATUSES.PENDING_STAGE_1 | typeof QUEUE_STATUSES.PENDING_STAGE_2 {
+  if (input.source === 'downloads') {
+    if (typeof input.size_bytes === 'number' && input.size_bytes > STAGE1_MIN_SIZE_BYTES) {
+      return QUEUE_STATUSES.PENDING_STAGE_1
+    }
+    if (input.size_bytes === undefined) {
+      // Unknown size — treat as "potentially large" and route through Stage 1.
+      return QUEUE_STATUSES.PENDING_STAGE_1
+    }
+    return QUEUE_STATUSES.PENDING_STAGE_2
+  }
+  // gmail
+  const attachments = input.source_metadata?.attachments
+  if (!Array.isArray(attachments)) {
+    // Missing/malformed attachments key → treat as "no attachments" → Stage 2.
+    return QUEUE_STATUSES.PENDING_STAGE_2
+  }
+  const hasLarge = attachments.some((a) => {
+    if (a === null || typeof a !== 'object') return false
+    const sz = (a as Record<string, unknown>).size_bytes
+    return typeof sz === 'number' && sz > STAGE1_MIN_SIZE_BYTES
+  })
+  return hasLarge ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
+}
 
 export async function POST(request: NextRequest) {
   const unauthorized = requireApiKey(request)
@@ -131,6 +179,17 @@ export async function POST(request: NextRequest) {
       ...(file_path ? { file_path } : {}),
     }
 
+    // Routing decision (quick task 260426-u47, D-stage1-routing).
+    // Small / metadata-only items skip Stage 1 (the expensive relevance gate)
+    // and go straight to Stage 2. The decision is observable per-item via the
+    // `route-decision` Langfuse span so we can audit which items took which path.
+    const routeSpan = t.span({
+      name: 'route-decision',
+      input: { source, size_bytes },
+    })
+    const initialStatus = computeInitialStatus({ source, size_bytes, source_metadata })
+    routeSpan.end({ output: { status: initialStatus } })
+
     const createSpan = t.span({ name: 'item-create', input: { source } })
     const hasMetadata = Object.keys(mergedMetadata).length > 0
     const created = await prisma.item.create({
@@ -138,7 +197,7 @@ export async function POST(request: NextRequest) {
         user_id: OWNER_USER_ID,
         content_hash,
         source,
-        status: QUEUE_STATUSES.PENDING_STAGE_1,
+        status: initialStatus,
         filename: filename ?? null,
         mime_type: mime_type ?? null,
         size_bytes: size_bytes ?? null,

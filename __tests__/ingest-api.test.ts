@@ -104,7 +104,11 @@ describe('POST /api/ingest', () => {
     expect(json.error).toBe('validation_failed')
   })
 
-  it('Test 6: returns 200 { id, deduped: false } when content_hash is new — creates Item with status=pending_stage1', async () => {
+  it('Test 6: returns 200 { id, deduped: false } when content_hash is new — creates Item with routed initial status', async () => {
+    // Per quick task 260426-u47 (D-stage1-routing): a 1 KB downloads file is
+    // FAR below STAGE1_MIN_SIZE_BYTES (1 MiB), so it skips the relevance gate
+    // and routes straight to pending_stage2. Pre-u47 this test expected
+    // pending_stage1 (unconditional) — the routing decision now overrides.
     mockFindUnique.mockResolvedValue(null as never)
     mockCreate.mockResolvedValue({ id: 'item_new_1' } as never)
 
@@ -126,7 +130,8 @@ describe('POST /api/ingest', () => {
     expect(mockFindUnique).toHaveBeenCalledWith({ where: { content_hash: 'sha256_new_hash' } })
     expect(mockCreate).toHaveBeenCalledTimes(1)
     const createArg = mockCreate.mock.calls[0][0] as { data: Record<string, unknown> }
-    expect(createArg.data.status).toBe('pending_stage1')
+    // 1 KB < 1 MiB → Stage 1 skipped, item lands in pending_stage2.
+    expect(createArg.data.status).toBe('pending_stage2')
     expect(createArg.data.content_hash).toBe('sha256_new_hash')
     expect(createArg.data.source).toBe('downloads')
     expect(createArg.data.filename).toBe('invoice.pdf')

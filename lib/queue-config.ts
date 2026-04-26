@@ -15,6 +15,16 @@ export const TERMINAL_ERROR_STATUS = 'error' as const
 /** JSON sibling key under classification_trace where queue metadata (retries, last_claim_at, last_error) lives. */
 export const QUEUE_TRACE_KEY = 'queue' as const
 
+/**
+ * Items strictly greater than this go through Stage 1 (relevance gate); items
+ * ≤ this skip straight to Stage 2. See quick task 260426-u47 (D-stage1-routing).
+ *
+ * Exactly 1 MiB (1024 * 1024 = 1_048_576) — NOT 1_000_000. The threshold is
+ * strict-greater-than: `size_bytes > STAGE1_MIN_SIZE_BYTES`, so a file at
+ * exactly 1 MiB skips Stage 1.
+ */
+export const STAGE1_MIN_SIZE_BYTES = 1_048_576
+
 /** Status string values used by the queue state machine. Additive — sit alongside existing v1.0 values. */
 export const QUEUE_STATUSES = {
   PENDING_STAGE_1: 'pending_stage1',
@@ -24,6 +34,14 @@ export const QUEUE_STATUSES = {
   IGNORED: 'ignored',
   UNCERTAIN: 'uncertain',
   CERTAIN: 'certain',
+  /**
+   * Terminal status set when Stage 2 returns decision='auto_file' with all
+   * three axes ≥ AUTO_FILE_THRESHOLD AND every axis value already exists in
+   * TaxonomyLabel (cold-start guard). Per quick task 260426-u47 (D-auto-file).
+   * The 'filed' literal is already documented in prisma/schema.prisma's
+   * Item.status doc-comment — only the constant is new here.
+   */
+  FILED: 'filed',
   ERROR: TERMINAL_ERROR_STATUS,
   /** Legacy v1.0 status — items in this state must be reclaimed to pending_stage1 or pending_stage2 by the stale-reclaim path. */
   LEGACY_PROCESSING: 'processing',
