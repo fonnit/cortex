@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: ingest-rearchitect
 status: code_complete_pending_acceptance
 stopped_at: v1.1 code-complete (4 phases, 8 plans, 32 requirements). Operator acceptance pending — see .planning/phases/08-operational-acceptance/RUNBOOK.md.
-last_updated: "2026-04-27T09:45:00.000Z"
-last_activity: 2026-04-27 — Completed quick task 260427-fpx: CxCombobox replaces datalist (Playwright-verified)
+last_updated: "2026-04-27T15:00:00.000Z"
+last_activity: 2026-04-27 — Completed quick task 260427-h9w: model-defined evolving folder structure (3 commits, replaces fixed type/from/context template)
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25 — v1.1 marked shipped)
 Phase: All v1.1 phases complete (5–8)
 Plan: —
 Status: Code-complete; live operator acceptance pending
-Last activity: 2026-04-27 — Completed quick task 260427-fpx: CxCombobox replaces datalist (Playwright-verified)
+Last activity: 2026-04-27 — Completed quick task 260427-h9w: model-defined evolving folder structure (replaces fixed type/from/context template; auto-file now gates on parent-≥3-siblings + path_confidence)
 
 Progress: [██████████] 100% (v1.1 — 8/8 plans)
 
@@ -77,6 +77,7 @@ v1.1 decisions all marked ✓ Shipped:
 | 260426-u47 | Triage routing + Stage 2 auto-file/auto-ignore + cold-start guard | 2026-04-26 | dc997e0 | [260426-u47-triage-only-big-items-default-route-smal](./quick/260426-u47-triage-only-big-items-default-route-smal/) |
 | 260426-wgk | Stage 2 may propose new taxonomy labels (bootstraps empty taxonomy) | 2026-04-26 | f094216 | [260426-wgk-stage-2-may-propose-new-taxonomy-labels-](./quick/260426-wgk-stage-2-may-propose-new-taxonomy-labels-/) |
 | 260427-fpx | CxCombobox replaces datalist; cx-* styled, custom-value support, Playwright-verified | 2026-04-27 | dd2c64b | [260427-fpx-custom-combobox-input-dropdown-replaces-](./quick/260427-fpx-custom-combobox-input-dropdown-replaces-/) |
+| 260427-h9w | Model-defined evolving folder structure: paths-internal endpoint + Stage 2 path_confidence + parent-≥3-siblings auto-file gate (replaces allLabelsExist) | 2026-04-27 | cf9781a, 2260988, 04ade42 | [260427-h9w-model-defined-evolving-folder-structure-](./quick/260427-h9w-model-defined-evolving-folder-structure-/) |
 
 ## Session Continuity
 
