@@ -34,7 +34,7 @@ export async function getGoogleOAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
     clientId,
     clientSecret,
-    'urn:ietf:wg:oauth:2.0:oob', // desktop/daemon flow
+    'http://localhost:41245/api/auth/google/callback', // desktop/daemon flow
   );
 
   const tokens = await loadTokens();
@@ -59,7 +59,7 @@ export async function getGoogleOAuthClient() {
 
 // One-time initial auth helper — call manually, not from daemon loop
 export async function runInitialAuthFlow(clientId: string, clientSecret: string): Promise<void> {
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, 'urn:ietf:wg:oauth:2.0:oob');
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:41245/api/auth/google/callback');
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: [
