@@ -1,0 +1,3168 @@
+{
+  "generated_at": "2026-04-27T16:28:32.715Z",
+  "axes": {
+    "type": [
+      {
+        "value": "photo",
+        "rationale": "[documents] IMG_*.jpg phone-camera photos with no obvious document semantics — bucket for the residual. | [downloads] 'IMG_0354.HEIC', 'IMG_3093.HEIC', 'IMG_8702.MOV', WhatsApp Image 2025-*.jpeg, IMG_*.jpg - phone-camera photos with informative timestamp; appear in personal context",
+        "example_files": [
+          "IMG_0697.jpg",
+          "IMG_0736.jpg",
+          "IMG_0737.jpg",
+          "IMG_3560.jpg"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 17
+      },
+      {
+        "value": "bank-statement",
+        "rationale": "[documents] BusinessKonto_*, N26_*, BankStatement* recurring; monthly statements bundled for credit/rental applications. | [downloads] '2026_January_statement.pdf', '2026_March_statement.pdf', 'monthly-statement_*', 'statement-2022-07.pdf', '2025-04-fonnit-daniel-fonnegra-garcia-*-statement.pdf', 'Monthlystatement.pdf'",
+        "example_files": [
+          "BusinessKonto_April.pdf",
+          "BusinessKonto_Feb.pdf",
+          "BusinessKonto_Mar.pdf",
+          "BusinessKonto_Mai.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 13
+      },
+      {
+        "value": "invoice",
+        "rationale": "[documents] Dominant pattern: ~210 expense invoice PDFs (Steuererklaerung 2024/Expenses + Steuern + root Rechnung_*.pdf). Vendor invoices for tax filing. | [downloads] Strong recurring 'Invoice-*', 'invoice-*', 'Rechnung_*', 'Invoice_EUINDE25_*', 'Amazon N.pdf', 'Habyt 2024-MM-DD_*invoice.pdf' patterns - dozens of invoices from many vendors",
+        "example_files": [
+          "Rechnung_52.pdf",
+          "Rechnung_63.pdf",
+          "Invoice_Apple_8.pdf",
+          "Invoice_EUINDE24_1380117_AWS.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 12
+      },
+      {
+        "value": "payslip",
+        "rationale": "[documents] Multiple naming conventions converge: Brutto-Netto-Abrechnung_*, Payroll_*, Payslips_2401-2405, PayslipsCastlabs2021. Strong recurring pattern across 3 employers. | [downloads] Brutto-Netto-Abrechnung_* (German payroll), 'Payroll report YYYY MM*', 'NominaDanielFonnegra*', 'Payslips Daniel Alvarado *', 'SalaryNovember2024.pdf' - many monthly payslips",
+        "example_files": [
+          "Brutto-Netto-Abrechnung 2025 08 August.pdf",
+          "Payroll Sep 2025.pdf",
+          "Payslips 2401.pdf",
+          "PayslipsCastlabs2021.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 10
+      },
+      {
+        "value": "passport",
+        "rationale": "[documents] Multiple Passport.* files (jpg/pdf/png/heic) plus 'danny passport*' variants. Core identity doc. | [downloads] 'Passport.jpg', 'Passport_Daniel_Mcmanus.HEIC', 'passport .heic', 'Pasaporte .png', 'Tu pasabordo.pdf'",
+        "example_files": [
+          "Passport.pdf",
+          "Passport.heic",
+          "Passport.jpg",
+          "danny passport.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 9
+      },
+      {
+        "value": "boarding-pass",
+        "rationale": "[documents] Explicit Boarding passes/ folder + boarding-pass*.pdf naming pattern at root. | [downloads] Literal 'boarding-pass*' filenames, also '*_Ticket1.pdf' for German Bahn (DB) tickets, 'BP_*BOG-MAD_*.pdf', '.pkpass' wallet files",
+        "example_files": [
+          "boarding-pass (4) 2.pdf",
+          "boarding-pass (6).pdf",
+          "your-mobile-tickets-9250272.pdf",
+          "boarding-pass.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "screenshot",
+        "rationale": "[documents] Bildschirmfoto * + IMG_6708.png + The Anmeldung.jpeg.png — UI screenshots saved as reference. | [downloads] 'Screenshot 2024-03-25 at 3.22.46 PM.png', 'Screenshot2023-07-19at17.13.53.png', 'Bildschirmfoto 2026-04-22 um 17.35.13.png', 'Screen Recording 2023-07-27 at 5.41.59 PM.mov', 'Bildschirmaufnahme*'",
+        "example_files": [
+          "Bildschirmfoto 2024-04-13 um 09.12.11.jpeg.png",
+          "Bildschirmfoto 2024-04-03 um 21.29.16.jpeg.png",
+          "The Anmeldung - How to register your address in B….jpeg.png",
+          "IMG_6708.png"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "civil-registry",
+        "rationale": "[documents] REGISTRO CIVIL * 7 JUL 2025.pdf for four family members — Colombian birth records cluster. | [downloads] 'REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf', 'REGISTRO CIVIL DANIEL 7 JUL 2025.pdf' x4, 'Acta de grado.pdf', 'ALBA NUBIA FRANCO DE GARCIA, 20MAY 1940 MEDELLIN.pdf', 'MARIA INES VELEZ DE FONNEGRA, ...', 'MARTA ELENA FONNEGRA VELEZ, ...', 'ROBERTO GARCIA GARCIA, ...'",
+        "example_files": [
+          "REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+          "REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+          "REGISTRO CIVIL JENNY 7 JUL 2025.pdf",
+          "REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "power-of-attorney",
+        "rationale": "[documents] Poder Daniel Fonnegra CC/CN.docx.pdf — Spanish-language powers of attorney, duplicated between root and Terradan Colombia. | [downloads] 'POA - Mustafa to Haidar.pdf', 'POA Emirates ID.pdf', '1.3. Poder Daniel Fonnegra CC.docx (1).pdf', 'Vollmacht_STB-Munk.pdf', 'Vollmacht_Beiblatt_STB-Munk.pdf'",
+        "example_files": [
+          "1.1. Poder Daniel Fonnegra CN.docx.pdf",
+          "1.3. Poder Daniel Fonnegra CC.docx.pdf",
+          "POA - Mustafa to Haidar.pdf",
+          "POA Emirates ID.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "title-deed",
+        "rationale": "[documents] SEVEN PALM 149 TITLE DEED.pdf — real-estate ownership deed (Dubai property). | [downloads] 'SEVEN PALM 149 TITLE DEED.pdf', 'SHA724 - TITLE DEED.pdf', 'SevenPalm149_TitleDeed.pdf', 'SevenPalm1220_TitleDeed.pdf', 'SevenPalm724_TitleDeed.pdf'",
+        "example_files": [
+          "SEVEN PALM 149 TITLE DEED.pdf",
+          "SHA724 - TITLE DEED.pdf",
+          "SevenPalm149_TitleDeed.pdf",
+          "SevenPalm1220_TitleDeed.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "rent-receipt",
+        "rationale": "[documents] Rent payment * + Rent January/February/March/May/June + Mietzahlungsnachweis_*.pdf — proof-of-rent payment cluster.",
+        "example_files": [
+          "Rent payment Feb 2025.pdf",
+          "Rent payment Dec 2024.pdf",
+          "Rent payment Jan 2025.pdf",
+          "Rent January.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 9
+      },
+      {
+        "value": "contract",
+        "rationale": "[documents] Multiple 'contract' / 'Contrato' / 'agreement' / 'Mietvertrag' / 'Offer Letter' / 'MSA' files signal binding agreements.",
+        "example_files": [
+          "Daniel Fonnegra - 00061029 + Habyt contract.pdf",
+          "Employment Contract.pdf",
+          "Sublet Agreement.pdf",
+          "Mietvertrag.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "misc",
+        "rationale": "[documents] Catch-all for opaque/unidentifiable filenames (UUID PDFs, raw numeric IDs, junk like Boxing 1/2.pdf, drawio, apk, html, zip).",
+        "example_files": [
+          "6f65ead8-64a4-498c-ae0a-697b1fd3504e.pdf",
+          "1715035700.pdf",
+          "euk29689.pdf",
+          "Boxing 1.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "hotel-booking",
+        "rationale": "[documents] Hotel*.pdf and Airbnb*.pdf bookings in trip and visa folders.",
+        "example_files": [
+          "HotelKualaLumpur.pdf",
+          "Hotel-Florence.pdf",
+          "Hotel-Madrid.pdf",
+          "Hotel-Barcelona.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "residence-permit",
+        "rationale": "[documents] AUFENTHALTSTITEL.pdf + Aufenhaltstitel1/2.jpg/jpeg variants used as supporting docs in Kreditantrag and Wohnungssuche.",
+        "example_files": [
+          "AUFENTHALTSTITEL.pdf",
+          "Aufenhaltstitel1.jpg",
+          "Aufenhaltstitel2.jpg",
+          "Aufenhaltstitel2_Daniel_Fonnegra.jpeg"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "logo-asset",
+        "rationale": "[documents] FonnIT/Logo*.png, BrowserLogo.png, Colors.png, fonnit-cover.png — brand assets for Daniel's company.",
+        "example_files": [
+          "Logo.png",
+          "BlackLogo.png",
+          "BrowserLogo.png",
+          "Logo(320x132px).png"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "flight-booking",
+        "rationale": "[documents] Flight*.pdf naming used heavily inside Malaysia Visa/ and Documents Trip Grandparents/ — distinct from boarding passes (these are reservations/itineraries).",
+        "example_files": [
+          "FlightMadridMedellin.pdf",
+          "FlightBerlinMadrid.pdf",
+          "Flight-Madrid-Rom.pdf",
+          "FlightBogotaMadrid.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "diploma",
+        "rationale": "[documents] Visa UAE folder packs DiplomaPregrado/Posgrado plus Calificaciones (transcripts) and Legalizacion variants — university credentials.",
+        "example_files": [
+          "DiplomaPregrado.pdf",
+          "DiplomaPosgrado.pdf",
+          "CalificacionesPregrado.pdf",
+          "CalificacionesPosgrado.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "trip-itinerary",
+        "rationale": "[documents] Train-* and SGArrivalCard_* and NCM-WEATHER schedule docs — trip-leg information that isn't a flight/hotel booking per se.",
+        "example_files": [
+          "Train-Florence-Venice.pdf",
+          "Train-Rome-Florence.pdf",
+          "Train-Barcelona-Madrid.pdf",
+          "SGArrivalCard_180120250828.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "payment-confirmation",
+        "rationale": "[downloads] 'Transfer Confirmation_*', 'Transfer_Confirmation_EUR_*', 'Comprobante_Transferencia_PSE*', 'MietzahlungApril.pdf', 'Mietzahlungsnachweis Juni.pdf' - rent + remittance receipts",
+        "example_files": [
+          "Transfer_Confirmation_USD-AED_16-Jan.-2025_01.54.42.pdf",
+          "Comprobante_Transferencia_PSE1751636495931.pdf",
+          "MietzahlungApril.pdf",
+          "Mietzahlungsnachweis Juni.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "booking-confirmation",
+        "rationale": "[downloads] 'Hotel_Confirmation*', 'Booking #*.pdf', 'Booking.com_ Confirmation*', '12go_booking_*.pdf', '*hostelworld* Confirmed booking*', 'StarResidenceConfirmation.pdf'",
+        "example_files": [
+          "Hotel_Confirmation.pdf",
+          "Booking #5356276762.pdf",
+          "Booking.com_ Confirmation.pdf",
+          "12go_booking_16734431.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "tax-document",
+        "rationale": "[downloads] 'Einkommensteuerbescheid*', 'Einkommensteuererklaerung2023.pdf', 'AnlageEUR2023.pdf', 'Umsatzsteuererklaerung2023.pdf', 'LSt_Bescheinigung*', 'W8BEN.pdf', 'Airbnb_TaxGuide2025_Colombia_SPANISH.pdf', 'antrag-auf-erteilung-einer-bescheinigung-in-steuersachen-2016.pdf'",
+        "example_files": [
+          "Einkommensteuerbescheid.pdf",
+          "Einkommensteuererklaerung2023.pdf",
+          "AnlageEUR2023.pdf",
+          "LSt_Bescheinigung1_Daniel_Fonnegra.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "id-document",
+        "rationale": "[downloads] 'AUFENTHALTSTITEL*' (German residence permit), 'Aufenhaltstitel*.jpg', 'German ID.pdf', 'Emirates ID.pdf', 'ID 2026 .pdf', 'ID FRONT 2026 .pdf', 'ID BACK 2026 .pdf', 'POA Emirates ID.pdf', 'Cedula Maria Loly Araujo.pdf', 'Bestaetigung Niederlassungserlaubnis.jpg'",
+        "example_files": [
+          "AUFENTHALTSTITEL.pdf",
+          "German ID.pdf",
+          "Emirates ID.pdf",
+          "ID 2026 .pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "rental-contract",
+        "rationale": "[downloads] 'Mietvertrag.pdf', 'Mietvertrag Fonnegra _ McManus DRUCKVERSION.pdf', '2.01.11 Stralauer Platz 35, ... ab 01.07.2025.pdf', 'Daniel Fonnegra - 00061029 + Habyt contract.pdf', 'Contrato 1401-03 - 14-08-2025*.pdf', '331 Seven Hotel & Aprt. The Palm A-TC.pdf', 'Ejari TC and Addendum*'",
+        "example_files": [
+          "Mietvertrag.pdf",
+          "Mietvertrag Fonnegra _ McManus DRUCKVERSION.pdf",
+          "Daniel Fonnegra - 00061029 + Habyt contract.pdf",
+          "331 Seven Hotel & Aprt. The Palm A-TC.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "employment-contract",
+        "rationale": "[downloads] '20220608_S-Ray GmbH_Contractual Terms of Employment_MASTER.pdf', '20220704_S-Ray Germany Offer Letter*', 'Daniel Fonnegra - Employment Confirmation Letter*.pdf', 'Daniel Fonnegra_ESGBook contract_signed.pdf', 'Promotion Confirmation Letter_Daniel Fonnegra*.pdf', '100040770_*_contract_signed.pdf'",
+        "example_files": [
+          "20220608_S-Ray GmbH_Contractual Terms of Employment_MASTER.pdf",
+          "20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf",
+          "Daniel Fonnegra_ESGBook contract_signed.pdf",
+          "Daniel Fonnegra - Employment Confirmation Letter.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "rent-payment",
+        "rationale": "[downloads] 'Rent January.pdf', 'Rent February.pdf', 'Rent March.pdf', 'MietzahlungApril.pdf', 'Mietzahlungsnachweis Juni.pdf', 'Mietzahlungs-Bestätigung.pdf' - dedicated rent receipts",
+        "example_files": [
+          "Rent January.pdf",
+          "Rent February.pdf",
+          "Rent March.pdf",
+          "MietzahlungApril.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "real-estate-permit",
+        "rationale": "[downloads] 'PAL-SEV-6EGNE_UnitPermit.pdf', 'PAL-SEV-GADRF_UnitPermit.pdf', 'PAL-SEV-SON5M_UnitPermit.pdf', 'PAL-SEV-XKW63_UnitPermit 3.pdf', 'SevenPalm149_UnitPermit.pdf', 'SevenPalm724_UnitPermit.pdf', 'PBP Trade License 2026.pdf', 'AW REALESTATE 2024 License .pdf', 'TerradanDubai_License.pdf'",
+        "example_files": [
+          "PAL-SEV-6EGNE_UnitPermit.pdf",
+          "PAL-SEV-GADRF_UnitPermit.pdf",
+          "SevenPalm149_UnitPermit.pdf",
+          "PBP Trade License 2026.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "self-disclosure-form",
+        "rationale": "[downloads] 'Selbstauskunft.pdf', 'Selbstauskunft Zweckentfremdung.pdf', '1.Mieterselbstauskunft_Self-disclosure.pdf', 'Formular_Selbstauskunft.pdf', 'Perfil para búsqueda de piso*.docx' - tenant self-disclosure forms used in apartment search",
+        "example_files": [
+          "Selbstauskunft.pdf",
+          "Selbstauskunft Zweckentfremdung.pdf",
+          "1.Mieterselbstauskunft_Self-disclosure.pdf",
+          "Formular_Selbstauskunft.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "cv-resume",
+        "rationale": "[downloads] 'Daniel Fonnegra CV.pdf', 'Daniel Fonnegra Resume.pdf', 'DanielFonnegraResume*.pdf', 'Daniel1 Fonn CV*.pdf', 'Bewerbermappe_Daniel_Fonnegra.pdf', 'Blue Simple Professional CV Resume*.pdf', 'Daniel_Fonnegra_CV.pdf'",
+        "example_files": [
+          "Daniel Fonnegra CV.pdf",
+          "Daniel Fonnegra Resume.pdf",
+          "DanielFonnegraResume.pdf",
+          "Bewerbermappe_Daniel_Fonnegra.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "certificate",
+        "rationale": "[downloads] 'AWS Certified Solutions Architect - Professional certificate.pdf', '108_3_*_AWS Course Completion Certificate.pdf', 'Certificate of Recognition 2025013718.pdf', 'Telc-Zertifikat.jpg', 'Gmail - Bestätigung Anmeldung telc Deutsch B1.pdf', 'DiplomaPosgrado-Eng-Stamped.pdf', 'DiplomaPregrado-Eng-Stamped.pdf', 'CalificacionesPosgrado-Eng-Stamped.pdf'",
+        "example_files": [
+          "AWS Certified Solutions Architect - Professional certificate.pdf",
+          "108_3_6257541_1726240734_AWS Course Completion Certificate.pdf",
+          "Certificate of Recognition 2025013718.pdf",
+          "Telc-Zertifikat.jpg"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "expense-receipt",
+        "rationale": "[downloads] 'Receipt_1027-360-891.pdf', 'github-dfonnegra-receipt-2025-04-22.pdf' x3, 'github-fonnit-receipt-2023-09-23.pdf', 'kaufbeleg.pdf', 'Trello-Receipt-30668189.pdf' x3, 'Grover Nov.pdf', 'Grover Okt.pdf', 'Grover Purchase.pdf'",
+        "example_files": [
+          "Receipt_1027-360-891.pdf",
+          "github-dfonnegra-receipt-2025-04-22.pdf",
+          "github-fonnit-receipt-2023-09-23.pdf",
+          "Trello-Receipt-30668189.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "installer",
+        "rationale": "[downloads] *.dmg, *.pkg, *.exe installers ('AirDroid_Cast_Desktop_Client_1.2.2.0.dmg', 'Antigravity.dmg', 'Claude.dmg', 'TeamViewer.dmg', 'Notion-6.4.0-arm64.dmg', 'go1.24.4.darwin-amd64.pkg', 'jdk-17_macos-aarch64_bin.dmg', 'Tailscale-1.82.0-macos.pkg')",
+        "example_files": [
+          "Antigravity.dmg",
+          "Claude.dmg",
+          "TeamViewer.dmg",
+          "Notion-6.4.0-arm64.dmg"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "diagram",
+        "rationale": "[downloads] *.drawio files (architecture diagrams) e.g. 'Arch Diagram.drawio', 'BD_Nuvant.drawio', 'BREKOAPIDesign.drawio', 'Dizzbo_architecure_v1.drawio', 'TruckIdArch.drawio.png'",
+        "example_files": [
+          "Arch Diagram.drawio",
+          "BD_Nuvant.drawio",
+          "BREKOAPIDesign.drawio",
+          "Dizzbo_architecure_v1.drawio"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "android-apk",
+        "rationale": "[downloads] Many ecoplan-* APK builds and ECOPLAN-* dated APKs (15+ files) representing Android build artifacts for ecoplan project",
+        "example_files": [
+          "ECOPLAN-2-apr-2024.apk",
+          "ecoplan-dev.apk",
+          "ecoplan-prod.apk",
+          "ecoplan_thiede-01-10-24.apk"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "ticket",
+        "rationale": "[downloads] 'bassliner_ticket_564145.pdf' x3, 'eticket.pdf', 'E-Ticket.pdf', 'Tickets Antalya.pdf', 'Papal_Audience_Tickets_en.doc', 'ReservaAudienciaDanielFonnegra.pdf'",
+        "example_files": [
+          "bassliner_ticket_564145.pdf",
+          "bassliner_ticket_564146.pdf",
+          "E-Ticket.pdf",
+          "Tickets Antalya.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "national-id",
+        "rationale": "[documents] Emirates ID front/back + Cedula Antonia.pdf — government-issued ID cards distinct from passport.",
+        "example_files": [
+          "Emirates ID Back.pdf",
+          "Emirates ID Front.pdf",
+          "Cedula Antonia.pdf",
+          "UNITED ARAB EMIRATES.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "apostille",
+        "rationale": "[documents] Repeated Legalizacion*.pdf prefix — legal apostilles/authentications of diplomas, distinct from the diploma itself.",
+        "example_files": [
+          "LegalizacionDiplomaPregrado.pdf",
+          "LegalizacionDiplomaPosgrado.pdf",
+          "LegalizacionCalificacionesPregrado.pdf",
+          "LegalizacionCalificacionesPosgrado.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "income-proof",
+        "rationale": "[documents] Einkommens-Nachweis.pdf, Employment Confirmation Letter.pdf, Bonitats-auskunft.pdf — letters certifying income/creditworthiness for landlords/banks.",
+        "example_files": [
+          "Einkommens-Nachweis.pdf",
+          "Employment Confirmation Letter.pdf",
+          "Bonitats-auskunft.pdf",
+          "Selbstauskunft.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "business-registration",
+        "rationale": "[documents] Bestaetigung Gewerbeanmeldung.pdf + RUT Daniel Fonnegra.pdf + RUT Terradan.pdf + CertificadoDeExistenciaYRepresentacion.pdf — business/tax registrations across DE and CO.",
+        "example_files": [
+          "Bestaetigung Gewerbeanmeldung.pdf",
+          "RUT Daniel Fonnegra.pdf",
+          "RUT Terradan.pdf",
+          "CertificadoDeExistenciaYRepresentacion.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "ebook",
+        "rationale": "[documents] Trading/Manual order flow.pdf + Trading/Los 20 errores mas comunes del trader.pdf + Steuern/Implementing domain driven design.pdf + Steuern/InfoQ.pdf — long-form reading material.",
+        "example_files": [
+          "Manual order flow.pdf",
+          "Los 20 errores mas comunes del trader.pdf",
+          "Implementing domain driven design.pdf",
+          "InfoQ.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "schufa",
+        "rationale": "[downloads] 'Schufa Bestellbestaetigung.pdf', 'SCHUFA Daniel Mc Manus.jpeg', 'Bonitats-auskunft.pdf' (German credit reports - tightly clustered around real-estate / tenancy)",
+        "example_files": [
+          "Schufa Bestellbestaetigung.pdf",
+          "SCHUFA Daniel Mc Manus.jpeg",
+          "Bonitats-auskunft.pdf",
+          "Bonitats-auskunft (1).pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "transcript",
+        "rationale": "[downloads] 'CalificacionesPosgrado-Eng-Stamped.pdf', 'CalificacionesPosgrado_ES_EN.pdf', 'CalificacionesPregrado-Eng-Stamped.pdf', 'CalificacionesPregrado_ES_EN.pdf' - academic transcripts (4 distinct files)",
+        "example_files": [
+          "CalificacionesPosgrado-Eng-Stamped.pdf",
+          "CalificacionesPregrado-Eng-Stamped.pdf",
+          "CalificacionesPosgrado_ES_EN.pdf",
+          "CalificacionesPregrado_ES_EN.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "ai-generated-image",
+        "rationale": "[downloads] 'ChatGPT Image Apr 1, 2026, 01_20_47 PM.png' (10+ files), 'DALL·E 2023-10-17 00.00.08 - Vector design...png'",
+        "example_files": [
+          "ChatGPT Image Apr 1, 2026, 01_20_47 PM.png",
+          "ChatGPT Image Mar 23, 2026, 11_50_28 PM.png",
+          "ChatGPT Image Mar 24, 2026, 01_09_29 PM.png",
+          "DALL·E 2023-10-17 00.00.08 - Vector design of a mobile app interface for 'TagNShare'.png"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "kyc-document",
+        "rationale": "[downloads] 'KYC - Tenant 331 Seven Hotel & Aprt. The Palm A.pdf' (x2), 'Fatima Zahrae - Broker Card.pdf', 'Viktoriia Milash EID.pdf' x2 - identity verification documents for real-estate counterparties",
+        "example_files": [
+          "KYC - Tenant 331 Seven Hotel & Aprt. The Palm A.pdf",
+          "Fatima Zahrae - Broker Card.pdf",
+          "Viktoriia Milash EID.pdf",
+          "Viktoriia Milash EID (1).pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "outgoing-invoice",
+        "rationale": "[documents] Daniel's own invoices to clients via FonnIT freelance — distinct from incoming vendor invoices because they are revenue, not expense.",
+        "example_files": [
+          "invoice_FONN-10.pdf",
+          "invoice_FONN-27.pdf",
+          "invoice_FONN-54.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "tax-return",
+        "rationale": "[documents] Steuer Erklaerung/Steuer Bescheid/Einkommensteuerbescheid pattern — annual filings + assessments.",
+        "example_files": [
+          "Steuer Erklaerung 2023.pdf",
+          "Steuer Bescheid 2023.pdf",
+          "Einkommensteuerbescheid.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "insurance-policy",
+        "rationale": "[documents] Krankversicherung.pdf, 416382638_Ihr Versicherungsvertrag*.pdf, Unterlagen_Zusatzversicherung.pdf — health and supplemental insurance contracts.",
+        "example_files": [
+          "Krankversicherung.pdf",
+          "416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf",
+          "Unterlagen_Zusatzversicherung.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "proof-of-address",
+        "rationale": "[documents] ProofOfResidenceKualaLumpur.pdf + ChatWithStarResidence.pdf in visa packet, plus Bestaetigung Niederlassungserlaubnis.jpg.",
+        "example_files": [
+          "ProofOfResidenceKualaLumpur.pdf",
+          "ChatWithStarResidence.pdf",
+          "Bestaetigung Niederlassungserlaubnis.jpg"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "config-backup",
+        "rationale": "[documents] NoMachine/*.nxs and *.nxs.recover* — saved RDP/SSH session config files.",
+        "example_files": [
+          "Fastrader Ubuntu.nxs",
+          "Fastrader Windows.nxs",
+          "Fastrader Ubuntu.nxs.recover"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "insurance-document",
+        "rationale": "[downloads] 'Versicherungsbescheinigung_3208987875.pdf', '416382638_Ihr Versicherungsvertrag_2025_01_02_aff8.pdf', 'mdb-f131960-labo_4326_merkblatt_krankenversicherungsschutz_05.13__engl._.pdf'",
+        "example_files": [
+          "Versicherungsbescheinigung_3208987875.pdf",
+          "416382638_Ihr Versicherungsvertrag_2025_01_02_aff8.pdf",
+          "mdb-f131960-labo_4326_merkblatt_krankenversicherungsschutz_05.13__engl._.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "utility-contract",
+        "rationale": "[downloads] 'Du bist dabei! Vertrag bei Ostrom bestätigt.eml', 'Ostrom vertrag bestätigung.pdf', 'Vertragszusammenfassung_Kabel.pdf' - electricity/internet provider confirmations",
+        "example_files": [
+          "Du bist dabei! Vertrag bei Ostrom bestätigt.eml",
+          "Ostrom vertrag bestätigung.pdf",
+          "Vertragszusammenfassung_Kabel.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "shipping-label",
+        "rationale": "[downloads] 'shipping_label_a18def3f4d.pdf', 'Return_Label_1760947017994_610.pdf', 'return_label.png'",
+        "example_files": [
+          "shipping_label_a18def3f4d.pdf",
+          "Return_Label_1760947017994_610.pdf",
+          "return_label.png"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "health-card",
+        "rationale": "[documents] GesundheitsKarte 1/2.HEIC — German health insurance ID cards.",
+        "example_files": [
+          "GesundheitsKarte 1.HEIC",
+          "GesundheitsKarte 2.HEIC"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "demand-letter",
+        "rationale": "[documents] BvFA Mahnung USt 2024 + BMV Kündigung — formal demand/cancellation correspondence.",
+        "example_files": [
+          "64557 - BvFA Mahnung USt 2024.pdf",
+          "BMV Kündigung.png"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "rental-application",
+        "rationale": "[documents] Bewerbermappe_Daniel_Fonnegra.pdf inside Wohnungssuche Unterlagen/ — formal apartment-application packet.",
+        "example_files": [
+          "Bewerbermappe_Daniel_Fonnegra.pdf",
+          "Selbstauskunft Zweckentfremdung.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "cv",
+        "rationale": "[documents] Multiple DanielFonnegraCV.pdf / Daniel Fonnegra CV.pdf copies — resume.",
+        "example_files": [
+          "DanielFonnegraCV.pdf",
+          "Daniel Fonnegra CV.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "passport-photo",
+        "rationale": "[documents] Passbild.jpg appears at root and inside Malaysia Visa/ — biometric photos for visa apps.",
+        "example_files": [
+          "Passbild.jpg",
+          "Malaysia Visa/Passbild.jpg"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "drivers-license",
+        "rationale": "[documents] digital_idp.pdf (international driver permit) + License .pdf inside Terradan Dubai/.",
+        "example_files": [
+          "digital_idp.pdf",
+          "License .pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "credit-application",
+        "rationale": "[documents] Kreditunterlagen.pdf inside the Kreditantrag/ folder; folder name itself = 'credit application'.",
+        "example_files": [
+          "Kreditunterlagen.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "tax-form",
+        "rationale": "[documents] Form W-8.pdf — US tax withholding form. Standalone but distinct enough as a category for any future foreign-employer paperwork.",
+        "example_files": [
+          "Form W-8.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      }
+    ],
+    "from": [
+      {
+        "value": "fonnit",
+        "rationale": "[documents] invoice_FONN-*.pdf — Daniel's own freelance entity issuing client invoices, plus brand assets folder FonnIT/. | [downloads] '2505-FONN-70-FonnIT-Daniel-Fonnegra-Garcia.pdf' (10+ files), 'invoice_FONN-60.pdf', 'invoice_FONN-62.pdf', 'invoice_FONN-63.pdf', 'Fonn.itermkeymap', 'Fonn.json', 'FonnIT Mail - ...', 'FonnIT; (320 x 132 px).png' - Daniel's freelance company FonnIT | [hierarchy] Top-level Documents subdir named after the user's company; recurring across years",
+        "example_files": [
+          "invoice_FONN-10.pdf",
+          "invoice_FONN-27.pdf",
+          "invoice_FONN-54.pdf",
+          "preuve-fonnit-daniel-fonnegra-garcia-5015-1-transfer-6.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 9
+      },
+      {
+        "value": "terradan",
+        "rationale": "[documents] Terradan Colombia/ + Terradan Dubai/ folders — Daniel's other business entity. | [downloads] 'TERRADAN HOLIDAY HOMES CO. L.L.C.pdf', 'TERRADAN Holiday Home pdf 2.pdf', 'TerradanDubai_License.pdf', 'BB-TERRADAN HOLIDAY HOMES.pdf' - Dubai holiday-home operator (likely Daniel's own company) | [hierarchy] Terradan is treated as a multi-jurisdiction business entity",
+        "example_files": [
+          "RUT Terradan.pdf",
+          "Contrato - Daniel Fonnegra.pdf",
+          "CertificadoDeExistenciaYRepresentacion.pdf",
+          "TERRADAN HOLIDAY HOMES CO. L.L.C.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "apple",
+        "rationale": "[documents] Invoice_Apple_*.pdf, Apple May/Jun/March.pdf, AppleJan2024.pdf, BA85380077_Apple.pdf — App Store / iCloud / hardware purchases. | [downloads] 'Gmail - Deine Rechnung von Apple.pdf', 'Gmail - Deine Rechnung von Apple 1.pdf' through 13.pdf, 'Gmail - Deine Rechnung von Apple10.pdf' - many monthly Apple invoices",
+        "example_files": [
+          "Invoice_Apple_8.pdf",
+          "Apple May.pdf",
+          "AppleJan2024.pdf",
+          "BA85380077_Apple.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "grover",
+        "rationale": "[documents] Laptop_Grover_*.pdf — Grover hardware-rental subscription. | [downloads] 'Grover Nov.pdf', 'Grover Okt.pdf', 'Grover Purchase.pdf', 'Grover-2022-08-Daniel Fonnegra.pdf', 'Grover1.pdf', 'Grover2.pdf', 'Grover3.pdf' - electronics rental company",
+        "example_files": [
+          "Laptop_Grover_1.pdf",
+          "Laptop_Grover_8.pdf",
+          "Laptop_Grover_13.pdf",
+          "Grover Nov.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "aws",
+        "rationale": "[documents] Invoice_EUINDE24_*_AWS.pdf — AWS hosting bills. | [downloads] 'AWS Certified Solutions Architect - Professional certificate.pdf', '108_3_6257541_1726240734_AWS Course Completion Certificate.pdf', 'AWS Certified Solutions Architect - Professional.pdf', 'aws_requirements.pdf', '203918884565_CloudTrail_us-east-1_*.json', '515966497694_CloudTrail_us-east-1_*.json'",
+        "example_files": [
+          "Invoice_EUINDE24_1380117_AWS.pdf",
+          "Invoice_EUINDE24_2017282_AWS.pdf",
+          "Invoice_EUINDE25_80852_AWS.pdf",
+          "AWS Certified Solutions Architect - Professional certificate.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "github",
+        "rationale": "[documents] github-dfonnegra-receipt-2024-MM-22.pdf monthly receipts. | [downloads] 'github-dfonnegra-receipt-2025-04-22.pdf', 'github-dfonnegra-receipt-2025-05-22.pdf', 'github-dfonnegra-receipt-2025-06-22.pdf', 'github-fonnit-receipt-2023-09-23.pdf', 'github-recovery-codes.txt'",
+        "example_files": [
+          "github-dfonnegra-receipt-2024-09-22.pdf",
+          "github-dfonnegra-receipt-2024-01-22.pdf",
+          "github-dfonnegra-receipt-2024-11-22.pdf",
+          "github-dfonnegra-receipt-2025-04-22.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "amazon",
+        "rationale": "[documents] Amazon_1..8.pdf — Amazon order invoices. | [downloads] 'Amazon 1.pdf' through 'Amazon 5.pdf', 'Amazon.de - Order 303-3497912-0043507.pdf' - Amazon order receipts/invoices",
+        "example_files": [
+          "Amazon_1.pdf",
+          "Amazon_2.pdf",
+          "Amazon_8.pdf",
+          "Amazon 1.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 7
+      },
+      {
+        "value": "trello",
+        "rationale": "[documents] *_Trello.pdf — Atlassian/Trello subscription. | [downloads] 'Trello-Receipt-30668189.pdf', 'Trello-Receipt-31361326.pdf', 'Trello-Receipt-32030499.pdf'",
+        "example_files": [
+          "CcW2hPlnDNn75PYqGbKqFi_1D05cPvu4_WIV_Trello.pdf",
+          "9BRu0ebJi98nQxkwgUEIsxl-vMJCCy7MF4Tu_Trello.pdf",
+          "tlbRUcDbg5hvJ1yfiGhyUOqCre71pI0Ma_Zi_Trello.pdf",
+          "Trello-Receipt-30668189.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "nuvant",
+        "rationale": "[downloads] 'Nuvant.drawio', 'BD_Nuvant.drawio', 'Especificacion_Software_Carga_DCS_Nuvant-3.docx', 'Propuesta Consultoría Nuvant Fase 1 y 2.pdf', 'Propuesta Consultoría Nuvant.pdf', 'Propuesta Legado DCS Nuvant.docx', 'Mapa de historias de usuario Nuvant 4.0.csv', '1645. Darlin Escalante Nuvant - Acrylic High Wear.xls' | [hierarchy] Nuvant appears as a sub-entity inside FonnIT, suggesting a client or related company",
+        "example_files": [
+          "Nuvant.drawio",
+          "BD_Nuvant.drawio",
+          "Propuesta Consultoría Nuvant Fase 1 y 2.pdf",
+          "Especificacion_Software_Carga_DCS_Nuvant-3.docx"
+        ],
+        "sources": [
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "wio-bank",
+        "rationale": "[documents] Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf — UAE bank. | [downloads] 'Wio_Bank_PJSC_Salary_Transfer_Guide.pdf', 'Wio_Bank_PJSC_Salary_Transfer_Guide (1).pdf', 'Wio_Bank_PJSC_Salary_Transfer_Guide_en (1).pdf' - UAE bank",
+        "example_files": [
+          "Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf",
+          "Wio_Bank_PJSC_Salary_Transfer_Guide.pdf",
+          "Wio_Bank_PJSC_Salary_Transfer_Guide (1).pdf",
+          "Wio_Bank_PJSC_Salary_Transfer_Guide_en (1).pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "s-ray",
+        "rationale": "[documents] 20220704_S-Ray Germany Offer Letter_*.pdf — German employer. | [downloads] '20220608_S-Ray GmbH_Contractual Terms of Employment_MASTER.pdf', '20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf', '20220704_S-Ray Germany Offer Letter_Daniel Fonnegra.pdf' - prior employer",
+        "example_files": [
+          "20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf",
+          "20220608_S-Ray GmbH_Contractual Terms of Employment_MASTER.pdf",
+          "20220704_S-Ray Germany Offer Letter_Daniel Fonnegra.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "habyt",
+        "rationale": "[documents] Filename embeds 'Habyt contract' — Habyt is Daniel's housing/co-living provider. | [downloads] 'Daniel Fonnegra - 00061029 + Habyt contract.pdf', 'Daniel Fonnegra - 00061115 + Habyt contract.pdf' - Habyt is the rental operator (German co-living), connected to Stralauer Platz / Wollankstr addresses",
+        "example_files": [
+          "Daniel Fonnegra - 00061029 + Habyt contract.pdf",
+          "Daniel Fonnegra - 00061115 + Habyt contract.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "revolut",
+        "rationale": "[documents] RevolutJan2024.pdf, invoice_2024-*-21_Revolut.pdf — fintech subscription provider.",
+        "example_files": [
+          "RevolutJan2024.pdf",
+          "RevolutFeb.pdf",
+          "Revolut March.pdf",
+          "invoice_2024-02-21_Revolut.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "esgbook",
+        "rationale": "[downloads] 'Daniel Fonnegra_ESGBook contract_signed.pdf', 'esgbook_logo.png', 'esgbook_logo white.png', 'esgbctl-darwin.zip' x5, 'esgbook-infra-*-plan.tar' x14, 'esgbook-dna-software-engineer-technical-test-2024.tar.xz', whole 'ESGBook/' subdir - employer",
+        "example_files": [
+          "Daniel Fonnegra_ESGBook contract_signed.pdf",
+          "esgbctl-darwin.zip",
+          "esgbook-infra-1db023e-plan.tar",
+          "esgbook-dna-software-engineer-technical-test-2024 (1).tar.xz"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "ecoplan",
+        "rationale": "[downloads] 'ECOPLAN-2-apr-2024.apk', 'ecoplan-dev.apk', 'ecoplan-prod.apk', 'ecoplan-release.apk', 'Proposal Android App - Ecoplan Thiede.pdf', 'ecoplan App Stories 3 Frontend Quote.pdf', 'Screenshot_20240718_202904_com.ecoplan.thiede.ecoplan_thiede.jpg' - Ecoplan Thiede client/project",
+        "example_files": [
+          "ECOPLAN-2-apr-2024.apk",
+          "ecoplan-dev.apk",
+          "ecoplan-prod.apk",
+          "Proposal Android App - Ecoplan Thiede.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "bitrix24",
+        "rationale": "[downloads] 'Bitrix24 Contacts REST API Documentation.pdf', 'Bitrix24.postman_collection.json', 'CAMPOS BITRIX24 validatech.docx', 'ERRORESBITRIX24.docx', 'customapi-bitrix-dev.postman_collection.json', 'Integracion Bitrix24_Callbell.pdf', 'Propuesta Integracion Bitrix24-SAP.pdf', 'bitrix-25-july.zip', 'bitrix-cajamag.zip', 'TUTURIALES PARAMETRIZACIÓN Y OPERACIÓN BÁSICA CRM.docx'",
+        "example_files": [
+          "Bitrix24 Contacts REST API Documentation.pdf",
+          "Bitrix24.postman_collection.json",
+          "CAMPOS BITRIX24 validatech.docx",
+          "Integracion Bitrix24_Callbell.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "seven-palm",
+        "rationale": "[downloads] Dubai Seven Palm property cluster: 'SEVEN PALM 149 TITLE DEED.pdf', 'SHA724 - TITLE DEED.pdf', 'SevenPalm149_*' (Ejari, TitleDeed, UnitPermit), 'SevenPalm1220_*' (TenancyContract, TitleDeed), 'SevenPalm724_*' (TitleDeed, UnitPermit), '331 Seven Hotel & Aprt. The Palm A-TC.pdf', 'Ejari TC and Addendum - 149 - Seven Hotel...'",
+        "example_files": [
+          "SEVEN PALM 149 TITLE DEED.pdf",
+          "SevenPalm149_TitleDeed.pdf",
+          "SevenPalm1220_TenancyContract.pdf",
+          "SevenPalm724_TitleDeed.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "aldi",
+        "rationale": "[documents] AldiMar2024.pdf + DataPlan_Aldi_*.pdf — Aldi grocery + Aldi Talk mobile data plan.",
+        "example_files": [
+          "AldiMar2024.pdf",
+          "AldiJun2024.pdf",
+          "DataPlan_Aldi_1.pdf",
+          "DataPlan_Aldi_8.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "google",
+        "rationale": "[documents] *_Google.pdf and 4946130332.pdf-style numeric IDs — Google Workspace / Cloud invoices.",
+        "example_files": [
+          "5006949298_Google.pdf",
+          "4962804418_Google.pdf",
+          "4985080317_Google.pdf",
+          "5121558150_Google.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "airbnb",
+        "rationale": "[documents] Airbnb-Rome/Venice/Madrid + CARTA AIRBNB OSLO booking confirmations.",
+        "example_files": [
+          "Airbnb-Rome.pdf",
+          "Airbnb-Venice.pdf",
+          "Airbnb-Madrid.pdf",
+          "CARTA AIRBNB OSLO APRO 1812.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "metrofibre",
+        "rationale": "[downloads] 'MET15678_DF_Vertragsdokumente_LA3.pdf' (5 dups), 'MET15678_RF_Vertragsdokumente_LA4.pdf' (8 dups), 'metrofibre_logo.png', 'metrofibre_db_address_templates_MET15678_RF_Vertragsdokumente_LA4.pdf', 'metrofibre_test_notification_emails.zip'",
+        "example_files": [
+          "MET15678_DF_Vertragsdokumente_LA3.pdf",
+          "MET15678_RF_Vertragsdokumente_LA4.pdf",
+          "metrofibre_logo.png",
+          "metrofibre_db_address_templates_MET15678_RF_Vertragsdokumente_LA4.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "ruhrfibre",
+        "rationale": "[downloads] 'ruhrfibre_essen_RV_daniel-fonnegra_228ad9b1.xlsx', 'ruhrfibre_essen_RV_daniel-fonnegra_8b664794.xlsx', 'ruhrfibre_essen_RV_test-tenants_d0d9d796.xlsx', 'rf_rahmenvertag_vorlage.xlsx' (5 versions), 'mf_prod_data_ruhrfibre_gnv_submissions.txt'",
+        "example_files": [
+          "ruhrfibre_essen_RV_daniel-fonnegra_228ad9b1.xlsx",
+          "ruhrfibre_essen_RV_daniel-fonnegra_8b664794.xlsx",
+          "rf_rahmenvertag_vorlage.xlsx",
+          "mf_prod_data_ruhrfibre_gnv_submissions.txt"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "ecoplan-thiede",
+        "rationale": "[downloads] Subdomain of ecoplan client - 'Proposal Android App - Ecoplan Thiede.pdf' x2, 'ecoplan_thiede-01-10-24.apk', 'ecoplan_theide-23-09-24.apk', 'ecoplan_theide_20-09-24_final.apk', 'ecoplan_theide_23-09-24-translations.apk', '2024-11-18_Protokl_Umpflanz_Lauchhammer_eco.docx', '2023-01-16_Fangprotokoll-Zauneidechsen_Wollankstr_ecoplanThiede_LN.docx', 'Vorlage Protokoll ecoplan.docx'",
+        "example_files": [
+          "Proposal Android App - Ecoplan Thiede.pdf",
+          "ecoplan_thiede-01-10-24.apk",
+          "2023-01-16_Fangprotokoll-Zauneidechsen_Wollankstr_ecoplanThiede_LN.docx",
+          "Vorlage Protokoll ecoplan.docx"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "habyt-employer",
+        "rationale": "[downloads] Multiple monthly payslips and payroll docs from Habyt as employer: 'Brutto-Netto-Abrechnung 2025 01 Januar.pdf' through November, 'Payroll report 2024 10 October.pdf' through 2025 11 November - paired with employment confirmation letters",
+        "example_files": [
+          "Brutto-Netto-Abrechnung 2025 01 Januar.pdf",
+          "Brutto-Netto-Abrechnung 2025 06 Juni.pdf",
+          "Payroll report 2025 04 April.pdf",
+          "Daniel Fonnegra - Employment Confirmation Letter.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "edificio-oslo",
+        "rationale": "[downloads] 'Edificio_Oslo_Operational_Audit. OSLO (1).pdf', 'INFORME DE INSPECCIÓN EDIFICIO OSLO.pdf', 'Resumen conjunto de inspección Edi Oslo.pdf', 'ENTREGA DE INFORME CAPACITACIÓN HOUSEKEEPING - EDIFICIO OSLO - 2026_03_20*.txt', 'DANIEL HERNANDEZ RESTREPO - OSLO.pdf' - Bogota residential building involvement",
+        "example_files": [
+          "Edificio_Oslo_Operational_Audit. OSLO (1).pdf",
+          "INFORME DE INSPECCIÓN EDIFICIO OSLO.pdf",
+          "Resumen conjunto de inspección Edi Oslo.pdf",
+          "DANIEL HERNANDEZ RESTREPO - OSLO.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "kuo",
+        "rationale": "[downloads] 'OTROSI SIN REAJUSTE PRECIO FIJO KUO - APTO3001_*.pdf', 'PROMESA COMPRAVENTA KÃ_O - APTO30-A LZC.pdf', 'PROMESA PARQUEADEROS KUO - PARQUEADERO101*.pdf', 'Carta_de_incumplimiento_#2_Kuo_apto_30-A_agosto.pdf', 'apto_30-A.pdf' - Kuo apartment (Bogota real-estate counterparty)",
+        "example_files": [
+          "OTROSI SIN REAJUSTE PRECIO FIJO KUO - APTO3001_1748998477-f-f-f.pdf",
+          "PROMESA COMPRAVENTA KÃ_O - APTO30-A LZC.pdf",
+          "PROMESA PARQUEADEROS KUO - PARQUEADERO101 (1) LZC.pdf",
+          "Carta_de_incumplimiento_#2_Kuo_apto_30-A_agosto.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "whatsapp",
+        "rationale": "[downloads] WhatsApp Image 2025-* and WhatsApp Video 2024-* are the source/sender for many photos/videos shared via WhatsApp",
+        "example_files": [
+          "WhatsApp Image 2025-02-07 at 22.27.11.jpeg",
+          "WhatsApp Image 2025-06-09 at 12.52.28.jpeg",
+          "WhatsApp Video 2024-06-18 at 16.18.10.mp4",
+          "WhatsApp Image 2026-04-20 at 15.26.15.jpeg"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "deutsche-bahn",
+        "rationale": "[downloads] 'GVQFYT_Berlin_Hbf_(tief)_16_Apr_2023_Ticket1.pdf', 'XMDLHT_Hanover_16_Apr_2023_Ticket1.pdf', '751340112596_Praha_hl.n._26_Apr_2024_Ticket1.pdf', 'DETGWN_Pisa_Centrale_04_May_2024_Ticket1.pdf', 'TC4PEC_Berlin_Hbf_06_Dez_2025_Ticket1.pdf', 'ZE1QT9_Frankfurt_(Main)_Sud_03_Dez_2025_Ticket1.pdf' - DB train tickets",
+        "example_files": [
+          "GVQFYT_Berlin_Hbf_(tief)_16_Apr_2023_Ticket1.pdf",
+          "XMDLHT_Hanover_16_Apr_2023_Ticket1.pdf",
+          "TC4PEC_Berlin_Hbf_06_Dez_2025_Ticket1.pdf",
+          "ZE1QT9_Frankfurt_(Main)_Sud_03_Dez_2025_Ticket1.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "n26",
+        "rationale": "[documents] N26_February/March/April.pdf — German neobank statements.",
+        "example_files": [
+          "N26_February.pdf",
+          "N26_March.pdf",
+          "N26_April.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "openai",
+        "rationale": "[documents] Receipt-####-####_OpenAI.pdf — OpenAI API/ChatGPT receipts.",
+        "example_files": [
+          "Receipt-2345-9025_OpenAI.pdf",
+          "Receipt-2622-4456_OpenAI.pdf",
+          "Receipt-2756-9312_OpenAI.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "upwork",
+        "rationale": "[documents] T######_Upwork.pdf bulk pattern in expenses — freelance platform.",
+        "example_files": [
+          "T656986555_Upwork.pdf",
+          "T685723331_Upwork.pdf",
+          "T677219769_Upwork.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "germany-residence-office",
+        "rationale": "[documents] AUFENTHALTSTITEL.pdf, Anfrage an das Referat S 4 - Berlin.de.pdf, Bestaetigung Niederlassungserlaubnis.jpg, Einburgerunstest.jpg — Berlin Ausländerbehörde / immigration office.",
+        "example_files": [
+          "AUFENTHALTSTITEL.pdf",
+          "Anfrage an das Referat S 4 - Berlin.de.pdf",
+          "Bestaetigung Niederlassungserlaubnis.jpg"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "uae-government",
+        "rationale": "[documents] Emirates ID Front/Back, UNITED ARAB EMIRATES.pdf, License .pdf in Terradan Dubai/ — UAE federal authority.",
+        "example_files": [
+          "Emirates ID Front.pdf",
+          "Emirates ID Back.pdf",
+          "UNITED ARAB EMIRATES.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "colombia-government",
+        "rationale": "[documents] REGISTRO CIVIL * (Registraduría) + RUT (DIAN) + Cedula — Colombian state issuers.",
+        "example_files": [
+          "REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+          "RUT Daniel Fonnegra.pdf",
+          "Cedula Antonia.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "habyt-stralauer",
+        "rationale": "[downloads] '2.01.11 Stralauer Platz 35, Fr. Jankkila, Hr. Fonnegra Garcia, ab 01.07.2025.pdf' (x2), '3.01.09 Stralauer Platz 37, Hr. Garcia, ab 01.07.2025.pdf', '2.01.11 Grundriss.pdf' (x2) - Berlin apartment Stralauer Platz address cluster",
+        "example_files": [
+          "2.01.11 Stralauer Platz 35, Fr. Jankkila, Hr. Fonnegra Garcia, ab 01.07.2025.pdf",
+          "3.01.09 Stralauer Platz 37, Hr. Garcia, ab 01.07.2025.pdf",
+          "2.01.11 Grundriss.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "chatgpt",
+        "rationale": "[downloads] 'ChatGPT Image Apr 1, 2026, 01_20_47 PM.png' (10+ generated assets)",
+        "example_files": [
+          "ChatGPT Image Apr 1, 2026, 01_20_47 PM.png",
+          "ChatGPT Image Mar 18, 2026, 10_12_57 PM.png",
+          "ChatGPT Image Mar 23, 2026, 11_50_28 PM.png"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "booking-com",
+        "rationale": "[downloads] 'Booking.com_ Confirmation.pdf' (x2), 'Booking #5356276762.pdf' (x2)",
+        "example_files": [
+          "Booking.com_ Confirmation.pdf",
+          "Booking.com_ Confirmation (1).pdf",
+          "Booking #5356276762.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "hostelworld",
+        "rationale": "[downloads] 'Confirmed booking from hostelworld.com - Alessandro Palace & Bar, Rome.eml', 'Gmail - Confirmed booking from hostelworld.com - Alessandro Palace & Bar, Rome.pdf', 'Gmail - Confirmed booking from hostelworld.com - Anda Venice, Venice.pdf', 'Gmail - Confirmed booking from hostelworld.com - Hostel Orange, Prague.pdf'",
+        "example_files": [
+          "Confirmed booking from hostelworld.com - Alessandro Palace & Bar, Rome.eml",
+          "Gmail - Confirmed booking from hostelworld.com - Alessandro Palace & Bar, Rome.pdf",
+          "Gmail - Confirmed booking from hostelworld.com - Anda Venice, Venice.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "elster",
+        "rationale": "[downloads] 'dfonnegr_elster_03.10.2023_13.57.pfx' x3 - German tax filing certificate exports",
+        "example_files": [
+          "dfonnegr_elster_03.10.2023_13.57.pfx",
+          "dfonnegr_elster_03.10.2023_13.57 (1).pfx",
+          "dfonnegr_elster_03.10.2023_13.57 (2).pfx"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "alditalk",
+        "rationale": "[downloads] 'blob_https___www.alditalk-kundenportal.de_2caba22c-bc2b-449f-a5b5-b6dd2120ddab.pdf' x3 - Aldi Talk (German prepaid phone) invoices",
+        "example_files": [
+          "blob_https___www.alditalk-kundenportal.de_2caba22c-bc2b-449f-a5b5-b6dd2120ddab.pdf",
+          "blob_https___www.alditalk-kundenportal.de_bca5be9e-a4d6-49d4-a969-720df27bf691.pdf",
+          "blob_https___www.alditalk-kundenportal.de_d845bf6d-5b4d-40f2-ad6d-690270a92634.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "dubai-det",
+        "rationale": "[downloads] 'ES-289307 Request to Reset Login Credentials for hh.det.gov.ae.pdf' x3 - Dubai Department of Economic Tourism (DET) holiday-home licensing portal",
+        "example_files": [
+          "ES-289307 Request to Reset Login Credentials for hh.det.gov.ae.pdf",
+          "ES-289307 Request to Reset Login Credentials for hh.det.gov.ae (1).pdf",
+          "ES-289307 Request to Reset Login Credentials for hh.det.gov.ae (2).pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "stb-munk",
+        "rationale": "[downloads] 'Vollmacht_STB-Munk.pdf', 'Vollmacht_Beiblatt_STB-Munk.pdf' (x2 each) - German Steuerberater (tax advisor) firm",
+        "example_files": [
+          "Vollmacht_STB-Munk.pdf",
+          "Vollmacht_STB-Munk (1).pdf",
+          "Vollmacht_Beiblatt_STB-Munk.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "ejari",
+        "rationale": "[downloads] 'SevenPalm149_Ejari.pdf', 'Ejari TC and Addendum - 149 - Seven Hotel - The Palm A - Revision 1.2 2.pdf' (x2), 'New - Ejari TC and Addendum - 149 - Seven Hotel - The Palm A - Draft- 2.pdf' - Dubai's Ejari rental registry",
+        "example_files": [
+          "SevenPalm149_Ejari.pdf",
+          "Ejari TC and Addendum - 149 - Seven Hotel - The Palm A - Revision 1.2 2.pdf",
+          "New - Ejari TC and Addendum - 149 - Seven Hotel - The Palm A - Draft- 2.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 3
+      },
+      {
+        "value": "accountable",
+        "rationale": "[documents] STRIPE-in_*_Accountable.pdf — German tax-filing SaaS.",
+        "example_files": [
+          "STRIPE-in_1PBtYkD9hfeKN8ylk9Ihnn92_Accountable.pdf",
+          "STRIPE-in_1PjFQRD9hfeKN8ylkSk3Ahpo_Accountable.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "ostrom",
+        "rationale": "[downloads] 'Du bist dabei! Vertrag bei Ostrom bestätigt.eml', 'Ostrom vertrag bestätigung.pdf' - electricity provider",
+        "example_files": [
+          "Du bist dabei! Vertrag bei Ostrom bestätigt.eml",
+          "Ostrom vertrag bestätigung.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "duesselfibre",
+        "rationale": "[downloads] 'duesselfibre_duesseldorf_RV_d-f_19fd42f1.xlsx' (x2)",
+        "example_files": [
+          "duesselfibre_duesseldorf_RV_d-f_19fd42f1.xlsx",
+          "duesselfibre_duesseldorf_RV_d-f_19fd42f1 (1).xlsx"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "telc",
+        "rationale": "[downloads] 'Telc-Zertifikat.jpg', 'Gmail - Bestätigung Anmeldung telc Deutsch B1.pdf' - German language test provider",
+        "example_files": [
+          "Telc-Zertifikat.jpg",
+          "Gmail - Bestätigung Anmeldung telc Deutsch B1.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 2
+      },
+      {
+        "value": "castlabs",
+        "rationale": "[documents] PayslipsCastlabs2021.pdf — past employer.",
+        "example_files": [
+          "PayslipsCastlabs2021.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "bvfa",
+        "rationale": "[documents] BvFA Mahnung USt 2024 — German tax debt collection agency.",
+        "example_files": [
+          "64557 - BvFA Mahnung USt 2024.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "redsys",
+        "rationale": "[documents] Ticket de pago Redsys.pdf — Spanish payment processor.",
+        "example_files": [
+          "Ticket de pago Redsys.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "anthropic",
+        "rationale": "[documents] Invoice-BCA533B1-0001_Arthropic.pdf (typo for Anthropic) — Claude API receipts.",
+        "example_files": [
+          "Invoice-BCA533B1-0001_Arthropic.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "fiverr",
+        "rationale": "[documents] FI18767918241_Fiverr.pdf — freelance platform.",
+        "example_files": [
+          "FI18767918241_Fiverr.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "1password",
+        "rationale": "[documents] 1Password-invoice-2024-10-31.pdf — password manager.",
+        "example_files": [
+          "1Password-invoice-2024-10-31.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "easyjet",
+        "rationale": "[documents] httpswww.easyjet.com…BoardingPasses…png — EasyJet boarding pass screenshot.",
+        "example_files": [
+          "httpswww.easyjet.comENBoardingPassGetBoardingPassesK76CNZS5RF_2fgpM8pv0rODJK82NlG8NN75t_2b7rls.jpeg.png"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "tutorials-dojo",
+        "rationale": "[downloads] 'FonnIT Mail - Your Tutorials Dojo order is now complete.pdf' - paired with AWS exam prep purchases",
+        "example_files": [
+          "FonnIT Mail - Your Tutorials Dojo order is now complete.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "kaufland",
+        "rationale": "[downloads] 'kaufland_de_rechnung_R0725-22346328.pdf' - German retailer invoice",
+        "example_files": [
+          "kaufland_de_rechnung_R0725-22346328.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 1
+      },
+      {
+        "value": "esg-book",
+        "rationale": "[hierarchy] Multiple variants of ESGBook directories indicate it's an external entity (likely a hiring/tech-test company) the user interacts with",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "fastrader",
+        "rationale": "[hierarchy] Standalone repo directory implies a project name worth tracking as a from value",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "apikit",
+        "rationale": "[hierarchy] Standalone repo directory; recurring project name",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "zoom",
+        "rationale": "[hierarchy] Zoom recordings exported by source app; from-axis app/source value",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "retroarch",
+        "rationale": "[hierarchy] App-generated content directory; from-axis app/source value",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "airdroid",
+        "rationale": "[hierarchy] App-generated cache; from-axis app/source value",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "nomachine",
+        "rationale": "[hierarchy] App-generated config folder; from-axis app/source value",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "german-tax-authority",
+        "rationale": "[hierarchy] Recurring Steuer* naming indicates the German Finanzamt as a from-axis correspondent",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      }
+    ],
+    "context": [
+      {
+        "value": "travel",
+        "rationale": "[documents] Boarding passes/, Documents Trip Grandparents/, hotels, flights, trains. Distinguishable from immigration: travel = the trip itself, immigration = visa app. | [downloads] Boarding passes, train tickets, hotel/hostel confirmations, itineraries - 'boarding-pass*.pdf', '*_Ticket1.pdf', 'Hotel_Confirmation*', 'BoardingPass.pdf', 'HCMC-Helsinki.pdf', 'Itinerary.pdf', '12go_booking_*.pdf' | [hierarchy] Multiple travel-specific folders co-existing strongly indicates a travel context",
+        "example_files": [
+          "boarding-pass (4) 2.pdf",
+          "Hotel-Madrid.pdf",
+          "Train-Florence-Venice.pdf",
+          "Airbnb-Rome.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 11
+      },
+      {
+        "value": "real-estate",
+        "rationale": "[documents] Wohnungssuche Unterlagen/ (apartment-search), Mietvertrag, rent payments, sublet agreements, title deed. | [downloads] Property deeds, leases, real-estate licenses, holiday-home unit permits - 'SEVEN PALM 149 TITLE DEED.pdf', 'SevenPalm*_TitleDeed.pdf', '*_UnitPermit.pdf', 'PBP Trade License 2026.pdf', 'AW REALESTATE 2024 License .pdf', 'TerradanDubai_License.pdf', 'KYC - Tenant 331 Seven Hotel*' | [hierarchy] Seven Palm 331 (likely a property), permits, capital injection cluster as real-estate-investment context",
+        "example_files": [
+          "Mietvertrag.pdf",
+          "Bewerbermappe_Daniel_Fonnegra.pdf",
+          "Rent payment Feb 2025.pdf",
+          "Sublet Agreement.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 10
+      },
+      {
+        "value": "taxes",
+        "rationale": "[documents] Steuererklaerung 2024/, Steuern/, Steuer Erklaerung/Bescheid, expense PDFs collected for tax filing — annual tax workflow is its own life-domain. | [downloads] Tax documents - 'Einkommensteuerbescheid.pdf', 'Einkommensteuererklaerung2023.pdf', 'AnlageEUR2023.pdf', 'Umsatzsteuererklaerung2023.pdf', 'LSt_Bescheinigung*', 'W8BEN.pdf', 'antrag-auf-erteilung-einer-bescheinigung-in-steuersachen-2016.pdf', 'dfonnegr_elster_*.pfx', 'Vollmacht_STB-Munk.pdf', 'Gewinnermittlung 2024.pdf', '63162 - Gewinnermittlung 2024_komplett.pdf' | [hierarchy] Tax-related directories with Income/Expenses/Q-quarter substructure span both personal and FonnIT scopes",
+        "example_files": [
+          "Steuer Erklaerung 2023.pdf",
+          "Steuer Bescheid 2023.pdf",
+          "Einkommensteuerbescheid.pdf",
+          "Form W-8.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 9
+      },
+      {
+        "value": "personal-finance",
+        "rationale": "[documents] Personal banking, insurance, demand letters, credit applications, personal payslips. Excludes business expenses and tax filings (separated below). | [downloads] Bank statements, invoices, payment confirmations, transfers - widespread across thousands of files including '2026_January_statement.pdf', 'Transfer Confirmation_*', 'Comprobante_Transferencia_PSE*', 'Invoice-*'",
+        "example_files": [
+          "Brutto-Netto-Abrechnung 2025 08 August.pdf",
+          "416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf",
+          "64557 - BvFA Mahnung USt 2024.pdf",
+          "BMV Kündigung.png"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 11
+      },
+      {
+        "value": "work-employment",
+        "rationale": "[documents] Employment contracts, offer letters, employment confirmation, CV — work/career documents. | [downloads] Employment contracts, payslips, offer letters, payroll reports - 'Brutto-Netto-Abrechnung*', 'Daniel Fonnegra_ESGBook contract_signed.pdf', '20220608_S-Ray GmbH_Contractual Terms*', 'Daniel Fonnegra - Employment Confirmation Letter.pdf'",
+        "example_files": [
+          "20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf",
+          "Employment Contract.pdf",
+          "Employment Confirmation Letter.pdf",
+          "DanielFonnegraCV.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 10
+      },
+      {
+        "value": "identity",
+        "rationale": "[documents] Passport, Aufenthaltstitel, Emirates ID, Cedula, civil registry, passport photo, drivers license, health card — government-issued identity docs. | [downloads] Passports, IDs, residence permits, visas, civil registries - 'Passport.jpg', 'AUFENTHALTSTITEL.pdf', 'Emirates ID.pdf', 'German ID.pdf', 'REGISTRO CIVIL DANIEL 7 JUL 2025.pdf', 'Bestaetigung Niederlassungserlaubnis.jpg', 'POA Emirates ID.pdf'",
+        "example_files": [
+          "Passport.pdf",
+          "AUFENTHALTSTITEL.pdf",
+          "Emirates ID Front.pdf",
+          "REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 10
+      },
+      {
+        "value": "education",
+        "rationale": "[documents] Diplomas + transcripts + apostilles for university credentials, plus Trading/ ebooks and Steuern/ technical PDFs (DDD, InfoQ). | [downloads] Diplomas, transcripts, certifications, course material - 'DiplomaPosgrado-Eng-Stamped.pdf', 'CalificacionesPosgrado-Eng-Stamped.pdf', 'AWS Certified Solutions Architect - Professional certificate.pdf', 'Telc-Zertifikat.jpg', 'Acta de grado.pdf', 'MastersDissertation.pdf', 'vhs_deutsch_2016-17_45_druck__sprachtest_s45__16.06.2016.pdf'",
+        "example_files": [
+          "DiplomaPregrado.pdf",
+          "DiplomaPosgrado.pdf",
+          "CalificacionesPregrado.pdf",
+          "Implementing domain driven design.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 10
+      },
+      {
+        "value": "family",
+        "rationale": "[documents] Civil-registry records for Daniel + Jenny + Jaime + Alejandro, Cedula Antonia, 'Documents Trip Grandparents/' — extended-family-related items. | [downloads] Family civil-registry / inheritance documents centered on Medellín relatives - 'ALBA NUBIA FRANCO DE GARCIA, 20MAY 1940 MEDELLIN.pdf', 'MARIA INES VELEZ DE FONNEGRA, 20MAY 1940 MEDELLIN.pdf', 'MARTA ELENA FONNEGRA VELEZ, 20MAY 1940 MEDELLIN.pdf', 'ROBERTO GARCIA GARCIA, 20MAY 1940 MEDELLIN.pdf', 'REGISTRO CIVIL JAIME 7 JUL 2025.pdf', 'REGISTRO CIVIL JENNY 7 JUL 2025.pdf', 'FONNEGRA GARCIA ALEJANDRO.pdf'",
+        "example_files": [
+          "REGISTRO CIVIL JENNY 7 JUL 2025.pdf",
+          "REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+          "REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+          "Cedula Antonia.pdf"
+        ],
+        "sources": [
+          "documents",
+          "downloads"
+        ],
+        "example_count": 8
+      },
+      {
+        "value": "immigration",
+        "rationale": "[documents] Visa application packets (Malaysia Visa/, Visa UAE/), Einbürgerung/naturalization (Unfebristete Aufenhaltstitel/, Unfebristete Aufenhaltstitel 2/), apostilled diplomas — application workflows distinct from holding the resulting ID. | [hierarchy] Residence permits and visas form a coherent immigration-context cluster",
+        "example_files": [
+          "FlightMadridMedellin.pdf",
+          "ProofOfResidenceKualaLumpur.pdf",
+          "DiplomaPregrado.pdf",
+          "LegalizacionDiplomaPosgrado.pdf"
+        ],
+        "sources": [
+          "documents",
+          "hierarchy"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "work-projects",
+        "rationale": "[downloads] Active engineering project artifacts - ESGBook tooling/data, esgbook-infra plans, dxf maps for ecoplan, drawio architecture diagrams, postman collections, Bitrix24 integration assets | [hierarchy] Standalone code/project directories represent work-project context, distinct from FonnIT business operations",
+        "example_files": [
+          "esgbook-infra-1db023e-plan.tar",
+          "Mapa Histórico (1).dxf",
+          "Bitrix24 Contacts REST API Documentation.pdf",
+          "BD_Nuvant.drawio"
+        ],
+        "sources": [
+          "downloads",
+          "hierarchy"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "business-finance",
+        "rationale": "[documents] FonnIT freelance income invoices, Terradan corporate registrations, business bank statements — Daniel's company-side money flow distinct from personal salary.",
+        "example_files": [
+          "invoice_FONN-10.pdf",
+          "invoice_FONN-54.pdf",
+          "BusinessKonto_April.pdf",
+          "Bestaetigung Gewerbeanmeldung.pdf"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "tools-software",
+        "rationale": "[documents] FonnIT/Logo*, NoMachine/*.nxs configs, AirDroid Cast cache, RetroArch playlists, drawio diagrams, ecoplan-dev.apk — software/tool artifacts.",
+        "example_files": [
+          "Logo.png",
+          "fonnit-cover.png",
+          "Fastrader Ubuntu.nxs",
+          "ecoplan-dev.apk"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 6
+      },
+      {
+        "value": "personal-photos",
+        "rationale": "[documents] IMG_*.jpg phone-camera shots and screenshots — non-document captures.",
+        "example_files": [
+          "IMG_0697.jpg",
+          "IMG_3560.jpg",
+          "IMG_4058.jpg",
+          "IMG_8792.jpg"
+        ],
+        "sources": [
+          "documents"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "work-freelance",
+        "rationale": "[downloads] FonnIT freelance invoicing - '2505-FONN-70-FonnIT-Daniel-Fonnegra-Garcia.pdf' x10+, 'invoice_FONN-60.pdf', 'github-fonnit-receipt-*.pdf', 'Accountable_FonnIT_2024-09-19_*.zip', 'bwa2025danielalvarado.pdf' (BWA = profit/loss for the freelance entity)",
+        "example_files": [
+          "2505-FONN-70-FonnIT-Daniel-Fonnegra-Garcia.pdf",
+          "invoice_FONN-60.pdf",
+          "Accountable_FonnIT_2024-09-19_8et42gjv.zip",
+          "github-fonnit-receipt-2023-09-23.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "housing-rental",
+        "rationale": "[downloads] Berlin/Germany apartment search and tenancy paperwork - 'Mietvertrag.pdf', 'Selbstauskunft.pdf', 'Schufa Bestellbestaetigung.pdf', 'Mietzahlungsnachweis Juni.pdf', '2.01.11 Stralauer Platz 35*.pdf', 'Mietschuldenfreiheitsbescheinigung*.pdf', 'Daniel Fonnegra - 00061029 + Habyt contract.pdf', 'MIETSCHULDENFREIHEITSBESCHEINIGUNG - Daniel Mcmanus.pdf'",
+        "example_files": [
+          "Mietvertrag.pdf",
+          "Selbstauskunft.pdf",
+          "Schufa Bestellbestaetigung.pdf",
+          "Mietzahlungsnachweis Juni.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "shopping",
+        "rationale": "[downloads] Online shopping receipts and shipping labels - 'Amazon 1-5.pdf', 'Amazon.de - Order *.pdf', 'shipping_label_a18def3f4d.pdf', 'Return_Label_*.pdf', 'kaufland_de_rechnung_*.pdf', 'Wolt gift card English 1.pdf', 'Grover Purchase.pdf'",
+        "example_files": [
+          "Amazon 1.pdf",
+          "Amazon.de - Order 303-3497912-0043507.pdf",
+          "shipping_label_a18def3f4d.pdf",
+          "Return_Label_1760947017994_610.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 5
+      },
+      {
+        "value": "vehicle-licensing",
+        "rationale": "[downloads] 'Mi licencia .pdf', 'Licence 2026 .pdf', 'NMA3041_25-F-511_403-FON-NMN.pdf', 'NMA3538_25-F-512_412-FON-NMN.pdf' - driver license / vehicle docs",
+        "example_files": [
+          "Mi licencia .pdf",
+          "Licence 2026 .pdf",
+          "NMA3041_25-F-511_403-FON-NMN.pdf",
+          "NMA3538_25-F-512_412-FON-NMN.pdf"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "media-personal",
+        "rationale": "[downloads] WhatsApp images/videos, IMG_* phone photos, Screen Recording, ChatGPT generated images - personal/communication media",
+        "example_files": [
+          "WhatsApp Image 2025-02-07 at 22.27.11.jpeg",
+          "IMG_3093.HEIC",
+          "Screen Recording 2026-03-10 at 00.59.20.mov",
+          "ChatGPT Image Apr 1, 2026, 01_20_47 PM.png"
+        ],
+        "sources": [
+          "downloads"
+        ],
+        "example_count": 4
+      },
+      {
+        "value": "housing",
+        "rationale": "[hierarchy] Apartment-search documents — life-admin housing context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "finance",
+        "rationale": "[hierarchy] Loan, money-legalization, and trading directories indicate a personal-finance context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "company-ops",
+        "rationale": "[hierarchy] Operational subfolders (expenses, salaries, costs, certifications) indicate a company-operations context per entity",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "invoices",
+        "rationale": "[hierarchy] Recurring invoice/billing patterns show invoicing as a tracked context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "gis-mapping",
+        "rationale": "[hierarchy] _shp suffixes (shapefile) indicate a GIS-mapping context — likely tied to a specific work project",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "gaming",
+        "rationale": "[hierarchy] Emulator config/save folders for multiple consoles (PSX, PSP) indicate a gaming context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "meetings",
+        "rationale": "[hierarchy] Zoom recording of a German B2.1 conversation course implies meeting/class recordings as a context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "language-learning",
+        "rationale": "[hierarchy] B2.1 Konversationskurs suggests a language-learning sub-context (German classes)",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "fonts-assets",
+        "rationale": "[hierarchy] Font webfont package — design/dev asset context",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      },
+      {
+        "value": "design-references",
+        "rationale": "[hierarchy] Reference imagery/design folders co-located with project work",
+        "example_files": [],
+        "sources": [
+          "hierarchy"
+        ],
+        "example_count": 0
+      }
+    ]
+  },
+  "stable_folders": [
+    {
+      "path": "/taxes/2024/expenses/",
+      "mapping_count": 6
+    },
+    {
+      "path": "/personal/finance/bank-statements/",
+      "mapping_count": 6
+    },
+    {
+      "path": "/education/diplomas/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/real-estate/rental/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/real-estate/dubai/seven-palm-149/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/personal/finance/payslips/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/personal/finance/credit-applications/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/identity/civil-registry/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/travel/boarding-passes/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/travel/trip-grandparents/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/personal/photos/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/personal/finance/invoices/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/work/freelance/fonnit/invoices/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/work/employment/habyt/payslips/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/business/fonnit/invoices-out/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/finance/insurance/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/finance/correspondence/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/business/fonnit/registrations/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/business/fonnit/branding/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/business/terradan/registrations/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/business/terradan/dubai/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/identity/passport/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/identity/residence-permit/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/immigration/visa-malaysia/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/work/cv/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/education/reading/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/tools/configs/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/misc/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/identity/civil-registry/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/family/medellin-elders/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/housing/berlin-stralauer-platz/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/housing/apartment-search/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/housing/rent-payments/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/real-estate/dubai/terradan/licenses/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/taxes/germany/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/travel/boarding-passes/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/finance/receipts/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/education/diplomas-transcripts/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/job-search/cv-versions/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/work/projects/ecoplan-thiede/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/work/projects/bitrix24/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/legal/power-of-attorney/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/utilities/",
+      "mapping_count": 3
+    }
+  ],
+  "tentative_folders": [
+    {
+      "path": "/work/contracts/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/legal/power-of-attorney/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/screenshots/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/work/employment/esgbook/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/work/employment/habyt/contracts/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/identity/national-ids/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/identity/passport/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/travel/train-tickets/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/travel/hotel-bookings/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/shopping/grover/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/shopping/amazon/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/education/certifications/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/identity/driving-license/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/real-estate/property-deeds/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/taxes/forms/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/work/employment/s-ray/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/personal/identity/residence-permits/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/real-estate/dubai/seven-palm-1220/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/real-estate/dubai/seven-palm-724/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/personal/travel/hostel-bookings/",
+      "mapping_count": 1
+    }
+  ],
+  "anchors": [
+    {
+      "file": "/Users/dfonnegrag/Documents/Rechnung_52.pdf",
+      "type": "invoice",
+      "from": "misc",
+      "context": "taxes",
+      "path": "/taxes/2024/expenses/Rechnung_52.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Rechnung_63.pdf",
+      "type": "invoice",
+      "from": "misc",
+      "context": "taxes",
+      "path": "/taxes/2024/expenses/Rechnung_63.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Expenses/Invoice_Apple_8.pdf",
+      "type": "invoice",
+      "from": "apple",
+      "context": "taxes",
+      "path": "/taxes/2024/expenses/Invoice_Apple_8.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/N26_February.pdf",
+      "type": "bank-statement",
+      "from": "n26",
+      "context": "personal-finance",
+      "path": "/personal/finance/bank-statements/N26_February.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/BusinessKonto_April.pdf",
+      "type": "bank-statement",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/personal/finance/bank-statements/BusinessKonto_April.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/BankStatementNovember.pdf",
+      "type": "bank-statement",
+      "from": "n26",
+      "context": "personal-finance",
+      "path": "/personal/finance/bank-statements/BankStatementNovember.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/DiplomaPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPosgrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/DiplomaPosgrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/CalificacionesPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/CalificacionesPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Daniel Fonnegra - 00061029 + Habyt contract.pdf",
+      "type": "contract",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/Daniel Fonnegra - 00061029 + Habyt contract.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Mietvertrag.pdf",
+      "type": "contract",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Rent payment Feb 2025.pdf",
+      "type": "rent-receipt",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/Rent payment Feb 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/SEVEN PALM 149 TITLE DEED.pdf",
+      "type": "title-deed",
+      "from": "seven-palm",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/seven-palm-149/SEVEN PALM 149 TITLE DEED.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/SevenPalm149_TitleDeed.pdf",
+      "type": "title-deed",
+      "from": "seven-palm",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/seven-palm-149/SevenPalm149_TitleDeed.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/SevenPalm149_UnitPermit.pdf",
+      "type": "real-estate-permit",
+      "from": "seven-palm",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/seven-palm-149/SevenPalm149_UnitPermit.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Brutto-Netto-Abrechnung 2025 08 August.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/Brutto-Netto-Abrechnung 2025 08 August.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Payroll Sep 2025.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/Payroll Sep 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel/Payslips 2401.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/Payslips 2401.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Kreditunterlagen.pdf",
+      "type": "credit-application",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Kreditunterlagen.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Wohnungssuche Unterlagen/Bonitats-auskunft.pdf",
+      "type": "income-proof",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Bonitats-auskunft.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Einkommens-Nachweis.pdf",
+      "type": "income-proof",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Einkommens-Nachweis.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "family",
+      "path": "/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JENNY 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "family",
+      "path": "/identity/civil-registry/REGISTRO CIVIL JENNY 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "family",
+      "path": "/identity/civil-registry/REGISTRO CIVIL JAIME 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/boarding-pass (4) 2.pdf",
+      "type": "boarding-pass",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/boarding-passes/boarding-pass (4) 2.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/boarding-pass (6).pdf",
+      "type": "boarding-pass",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/boarding-passes/boarding-pass (6).pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/your-mobile-tickets-9250272.pdf",
+      "type": "boarding-pass",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/boarding-passes/your-mobile-tickets-9250272.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Documents Trip Grandparents/Flight-Madrid-Rom.pdf",
+      "type": "flight-booking",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/trip-grandparents/Flight-Madrid-Rom.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Documents Trip Grandparents/Hotel-Florence.pdf",
+      "type": "hotel-booking",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/trip-grandparents/Hotel-Florence.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Documents Trip Grandparents/Airbnb-Rome.pdf",
+      "type": "hotel-booking",
+      "from": "airbnb",
+      "context": "travel",
+      "path": "/travel/trip-grandparents/Airbnb-Rome.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_0697.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "personal-photos",
+      "path": "/personal/photos/IMG_0697.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_3560.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "personal-photos",
+      "path": "/personal/photos/IMG_3560.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_4058.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "personal-photos",
+      "path": "/personal/photos/IMG_4058.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Invoice-3195327959.pdf",
+      "type": "invoice",
+      "from": "amazon",
+      "context": "personal-finance",
+      "path": "/personal/finance/invoices/Invoice-3195327959.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Invoice_EUINDE25_1173555.pdf",
+      "type": "invoice",
+      "from": "amazon",
+      "context": "personal-finance",
+      "path": "/personal/finance/invoices/Invoice_EUINDE25_1173555.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Gmail - Deine Rechnung von Apple 1.pdf",
+      "type": "invoice",
+      "from": "apple",
+      "context": "personal-finance",
+      "path": "/personal/finance/invoices/Gmail - Deine Rechnung von Apple 1.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Rechnung_53.pdf",
+      "type": "invoice",
+      "from": "fonnit",
+      "context": "work-freelance",
+      "path": "/work/freelance/fonnit/invoices/Rechnung_53.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/2505-FONN-70-FonnIT-Daniel-Fonnegra-Garcia.pdf",
+      "type": "invoice",
+      "from": "fonnit",
+      "context": "work-freelance",
+      "path": "/work/freelance/fonnit/invoices/2505-FONN-70-FonnIT-Daniel-Fonnegra-Garcia.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/2510-FONN-82-FonnIT-Daniel-Fonnegra-Garcia.pdf",
+      "type": "invoice",
+      "from": "fonnit",
+      "context": "work-freelance",
+      "path": "/work/freelance/fonnit/invoices/2510-FONN-82-FonnIT-Daniel-Fonnegra-Garcia.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Brutto-Netto-Abrechnung 2025 01 Januar.pdf",
+      "type": "payslip",
+      "from": "habyt-employer",
+      "context": "work-employment",
+      "path": "/work/employment/habyt/payslips/Brutto-Netto-Abrechnung 2025 01 Januar.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Brutto-Netto-Abrechnung 2025 06 Juni.pdf",
+      "type": "payslip",
+      "from": "habyt-employer",
+      "context": "work-employment",
+      "path": "/work/employment/habyt/payslips/Brutto-Netto-Abrechnung 2025 06 Juni.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Payroll report 2025 04 April.pdf",
+      "type": "payslip",
+      "from": "habyt-employer",
+      "context": "work-employment",
+      "path": "/work/employment/habyt/payslips/Payroll report 2025 04 April.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-10.pdf",
+      "type": "outgoing-invoice",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/invoice_FONN-10.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-27.pdf",
+      "type": "outgoing-invoice",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/invoice_FONN-27.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-54.pdf",
+      "type": "outgoing-invoice",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/invoice_FONN-54.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Krankversicherung.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/Krankversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Unterlagen_Zusatzversicherung.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/Unterlagen_Zusatzversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/64557 - BvFA Mahnung USt 2024.pdf",
+      "type": "demand-letter",
+      "from": "bvfa",
+      "context": "personal-finance",
+      "path": "/personal/finance/correspondence/64557 - BvFA Mahnung USt 2024.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/BMV Kündigung.png",
+      "type": "demand-letter",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/correspondence/BMV Kündigung.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Anfrage an das Referat S 4 - Berlin.de.pdf",
+      "type": "demand-letter",
+      "from": "germany-residence-office",
+      "context": "personal-finance",
+      "path": "/personal/finance/correspondence/Anfrage an das Referat S 4 - Berlin.de.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Bestaetigung Gewerbeanmeldung.pdf",
+      "type": "business-registration",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/registrations/Bestaetigung Gewerbeanmeldung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Steuer Bescheid 2023.pdf",
+      "type": "tax-return",
+      "from": "fonnit",
+      "context": "taxes",
+      "path": "/business/fonnit/registrations/Steuer Bescheid 2023.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Steuer Erklaerung 2023.pdf",
+      "type": "tax-return",
+      "from": "fonnit",
+      "context": "taxes",
+      "path": "/business/fonnit/registrations/Steuer Erklaerung 2023.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Logo.png",
+      "type": "logo-asset",
+      "from": "fonnit",
+      "context": "tools-software",
+      "path": "/business/fonnit/branding/Logo.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/BlackLogo.png",
+      "type": "logo-asset",
+      "from": "fonnit",
+      "context": "tools-software",
+      "path": "/business/fonnit/branding/BlackLogo.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/fonnit-cover.png",
+      "type": "logo-asset",
+      "from": "fonnit",
+      "context": "tools-software",
+      "path": "/business/fonnit/branding/fonnit-cover.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Colombia/RUT Terradan.pdf",
+      "type": "business-registration",
+      "from": "terradan",
+      "context": "business-finance",
+      "path": "/business/terradan/registrations/RUT Terradan.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Colombia/CertificadoDeExistenciaYRepresentacion.pdf",
+      "type": "business-registration",
+      "from": "terradan",
+      "context": "business-finance",
+      "path": "/business/terradan/registrations/CertificadoDeExistenciaYRepresentacion.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Colombia/Contrato - Daniel Fonnegra.pdf",
+      "type": "contract",
+      "from": "terradan",
+      "context": "business-finance",
+      "path": "/business/terradan/registrations/Contrato - Daniel Fonnegra.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/Emirates ID Front.pdf",
+      "type": "national-id",
+      "from": "uae-government",
+      "context": "identity",
+      "path": "/business/terradan/dubai/Emirates ID Front.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/License .pdf",
+      "type": "drivers-license",
+      "from": "uae-government",
+      "context": "identity",
+      "path": "/business/terradan/dubai/License .pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf",
+      "type": "bank-statement",
+      "from": "wio-bank",
+      "context": "business-finance",
+      "path": "/business/terradan/dubai/Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/Passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.heic",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/Passport.heic"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/danny passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/danny passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/AUFENTHALTSTITEL.pdf",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/AUFENTHALTSTITEL.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Aufenhaltstitel1.jpg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/Aufenhaltstitel1.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Permanent residence letter.jpeg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/Permanent residence letter.jpeg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/FlightMadridMedellin.pdf",
+      "type": "flight-booking",
+      "from": "misc",
+      "context": "immigration",
+      "path": "/immigration/visa-malaysia/FlightMadridMedellin.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/HotelKualaLumpur.pdf",
+      "type": "hotel-booking",
+      "from": "misc",
+      "context": "immigration",
+      "path": "/immigration/visa-malaysia/HotelKualaLumpur.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/ProofOfResidenceKualaLumpur.pdf",
+      "type": "proof-of-address",
+      "from": "misc",
+      "context": "immigration",
+      "path": "/immigration/visa-malaysia/ProofOfResidenceKualaLumpur.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/DanielFonnegraCV.pdf",
+      "type": "cv",
+      "from": "misc",
+      "context": "work-employment",
+      "path": "/work/cv/DanielFonnegraCV.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Daniel Fonnegra CV.pdf",
+      "type": "cv",
+      "from": "fonnit",
+      "context": "work-employment",
+      "path": "/work/cv/Daniel Fonnegra CV.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Wohnungssuche Unterlagen/Bewerbermappe_Daniel_Fonnegra.pdf",
+      "type": "rental-application",
+      "from": "misc",
+      "context": "real-estate",
+      "path": "/work/cv/Bewerbermappe_Daniel_Fonnegra.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Trading/Manual order flow.pdf",
+      "type": "ebook",
+      "from": "misc",
+      "context": "education",
+      "path": "/education/reading/Manual order flow.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Trading/Los 20 errores mas comunes del trader.pdf",
+      "type": "ebook",
+      "from": "misc",
+      "context": "education",
+      "path": "/education/reading/Los 20 errores mas comunes del trader.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuern/Implementing domain driven design.pdf",
+      "type": "ebook",
+      "from": "misc",
+      "context": "education",
+      "path": "/education/reading/Implementing domain driven design.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/NoMachine/Fastrader Ubuntu.nxs",
+      "type": "config-backup",
+      "from": "misc",
+      "context": "tools-software",
+      "path": "/tools/configs/Fastrader Ubuntu.nxs"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/NoMachine/Fastrader Windows.nxs",
+      "type": "config-backup",
+      "from": "misc",
+      "context": "tools-software",
+      "path": "/tools/configs/Fastrader Windows.nxs"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/TruckIdArch.drawio",
+      "type": "config-backup",
+      "from": "misc",
+      "context": "tools-software",
+      "path": "/tools/configs/TruckIdArch.drawio"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/6f65ead8-64a4-498c-ae0a-697b1fd3504e.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/6f65ead8-64a4-498c-ae0a-697b1fd3504e.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/1715035700.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/1715035700.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Boxing 1.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/Boxing 1.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "identity",
+      "path": "/personal/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "identity",
+      "path": "/personal/identity/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "identity",
+      "path": "/personal/identity/civil-registry/REGISTRO CIVIL JAIME 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/ALBA NUBIA FRANCO DE GARCIA, 20MAY 1940 MEDELLIN.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "family",
+      "path": "/personal/family/medellin-elders/ALBA NUBIA FRANCO DE GARCIA, 20MAY 1940 MEDELLIN.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/MARIA INES VELEZ DE FONNEGRA, 20MAY 1940 MEDELLIN.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "family",
+      "path": "/personal/family/medellin-elders/MARIA INES VELEZ DE FONNEGRA, 20MAY 1940 MEDELLIN.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/MARTA ELENA FONNEGRA VELEZ, 20MAY 1940 MEDELLIN.pdf",
+      "type": "civil-registry",
+      "from": "colombia-registraduria",
+      "context": "family",
+      "path": "/personal/family/medellin-elders/MARTA ELENA FONNEGRA VELEZ, 20MAY 1940 MEDELLIN.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Mietvertrag.pdf",
+      "type": "rental-contract",
+      "from": "habyt",
+      "context": "housing-rental",
+      "path": "/personal/housing/berlin-stralauer-platz/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/2.01.11 Stralauer Platz 35, Fr. Jankkila, Hr. Fonnegra Garcia, ab 01.07.2025.pdf",
+      "type": "rental-contract",
+      "from": "habyt-stralauer",
+      "context": "housing-rental",
+      "path": "/personal/housing/berlin-stralauer-platz/2.01.11 Stralauer Platz 35, Fr. Jankkila, Hr. Fonnegra Garcia, ab 01.07.2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/3.01.09 Stralauer Platz 37, Hr. Garcia, ab 01.07.2025.pdf",
+      "type": "rental-contract",
+      "from": "habyt-stralauer",
+      "context": "housing-rental",
+      "path": "/personal/housing/berlin-stralauer-platz/3.01.09 Stralauer Platz 37, Hr. Garcia, ab 01.07.2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Selbstauskunft.pdf",
+      "type": "self-disclosure-form",
+      "from": "self",
+      "context": "housing-rental",
+      "path": "/personal/housing/apartment-search/Selbstauskunft.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Schufa Bestellbestaetigung.pdf",
+      "type": "schufa",
+      "from": "schufa",
+      "context": "housing-rental",
+      "path": "/personal/housing/apartment-search/Schufa Bestellbestaetigung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/SCHUFA Daniel Mc Manus.jpeg",
+      "type": "schufa",
+      "from": "schufa",
+      "context": "housing-rental",
+      "path": "/personal/housing/apartment-search/SCHUFA Daniel Mc Manus.jpeg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Rent January.pdf",
+      "type": "rent-payment",
+      "from": "self",
+      "context": "housing-rental",
+      "path": "/personal/housing/rent-payments/Rent January.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Mietzahlungsnachweis Juni.pdf",
+      "type": "rent-payment",
+      "from": "self",
+      "context": "housing-rental",
+      "path": "/personal/housing/rent-payments/Mietzahlungsnachweis Juni.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/MietzahlungApril.pdf",
+      "type": "rent-payment",
+      "from": "self",
+      "context": "housing-rental",
+      "path": "/personal/housing/rent-payments/MietzahlungApril.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/TerradanDubai_License.pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/terradan/licenses/TerradanDubai_License.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AW REALESTATE 2024 License .pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/terradan/licenses/AW REALESTATE 2024 License .pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/PBP Trade License 2026.pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/dubai/terradan/licenses/PBP Trade License 2026.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Einkommensteuerbescheid.pdf",
+      "type": "tax-document",
+      "from": "germany-finanzamt",
+      "context": "taxes",
+      "path": "/personal/taxes/germany/Einkommensteuerbescheid.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Einkommensteuererklaerung2023.pdf",
+      "type": "tax-document",
+      "from": "germany-finanzamt",
+      "context": "taxes",
+      "path": "/personal/taxes/germany/Einkommensteuererklaerung2023.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Gewinnermittlung 2024.pdf",
+      "type": "tax-document",
+      "from": "germany-finanzamt",
+      "context": "taxes",
+      "path": "/personal/taxes/germany/Gewinnermittlung 2024.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/boarding-pass.pdf",
+      "type": "boarding-pass",
+      "from": "airline-generic",
+      "context": "travel",
+      "path": "/personal/travel/boarding-passes/boarding-pass.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/boarding-pass (3).pdf",
+      "type": "boarding-pass",
+      "from": "airline-generic",
+      "context": "travel",
+      "path": "/personal/travel/boarding-passes/boarding-pass (3).pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/BP_552630111_BOG-MAD_SP53282360_62859859_89156080_1733610902.pdf",
+      "type": "boarding-pass",
+      "from": "iberia",
+      "context": "travel",
+      "path": "/personal/travel/boarding-passes/BP_552630111_BOG-MAD_SP53282360_62859859_89156080_1733610902.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Trello-Receipt-30668189.pdf",
+      "type": "expense-receipt",
+      "from": "trello",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/Trello-Receipt-30668189.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/github-dfonnegra-receipt-2025-04-22.pdf",
+      "type": "expense-receipt",
+      "from": "github",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/github-dfonnegra-receipt-2025-04-22.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/github-dfonnegra-receipt-2025-05-22.pdf",
+      "type": "expense-receipt",
+      "from": "github",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/github-dfonnegra-receipt-2025-05-22.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/DiplomaPosgrado-Eng-Stamped.pdf",
+      "type": "certificate",
+      "from": "self",
+      "context": "education",
+      "path": "/personal/education/diplomas-transcripts/DiplomaPosgrado-Eng-Stamped.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/CalificacionesPosgrado-Eng-Stamped.pdf",
+      "type": "transcript",
+      "from": "self",
+      "context": "education",
+      "path": "/personal/education/diplomas-transcripts/CalificacionesPosgrado-Eng-Stamped.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/CalificacionesPregrado-Eng-Stamped.pdf",
+      "type": "transcript",
+      "from": "self",
+      "context": "education",
+      "path": "/personal/education/diplomas-transcripts/CalificacionesPregrado-Eng-Stamped.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Daniel Fonnegra CV.pdf",
+      "type": "cv-resume",
+      "from": "self",
+      "context": "work-employment",
+      "path": "/personal/job-search/cv-versions/Daniel Fonnegra CV.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/DanielFonnegraResume.pdf",
+      "type": "cv-resume",
+      "from": "self",
+      "context": "work-employment",
+      "path": "/personal/job-search/cv-versions/DanielFonnegraResume.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bewerbermappe_Daniel_Fonnegra.pdf",
+      "type": "cv-resume",
+      "from": "self",
+      "context": "work-employment",
+      "path": "/personal/job-search/cv-versions/Bewerbermappe_Daniel_Fonnegra.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/ECOPLAN-2-apr-2024.apk",
+      "type": "android-apk",
+      "from": "ecoplan-thiede",
+      "context": "work-projects",
+      "path": "/work/projects/ecoplan-thiede/ECOPLAN-2-apr-2024.apk"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/ecoplan-prod.apk",
+      "type": "android-apk",
+      "from": "ecoplan-thiede",
+      "context": "work-projects",
+      "path": "/work/projects/ecoplan-thiede/ecoplan-prod.apk"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Proposal Android App - Ecoplan Thiede.pdf",
+      "type": "diagram",
+      "from": "ecoplan-thiede",
+      "context": "work-projects",
+      "path": "/work/projects/ecoplan-thiede/Proposal Android App - Ecoplan Thiede.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bitrix24 Contacts REST API Documentation.pdf",
+      "type": "diagram",
+      "from": "bitrix24",
+      "context": "work-projects",
+      "path": "/work/projects/bitrix24/Bitrix24 Contacts REST API Documentation.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bitrix24.postman_collection.json",
+      "type": "diagram",
+      "from": "bitrix24",
+      "context": "work-projects",
+      "path": "/work/projects/bitrix24/Bitrix24.postman_collection.json"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/CAMPOS BITRIX24 validatech.docx",
+      "type": "diagram",
+      "from": "bitrix24",
+      "context": "work-projects",
+      "path": "/work/projects/bitrix24/CAMPOS BITRIX24 validatech.docx"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Vollmacht_STB-Munk.pdf",
+      "type": "power-of-attorney",
+      "from": "stb-munk",
+      "context": "taxes",
+      "path": "/personal/legal/power-of-attorney/Vollmacht_STB-Munk.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/POA - Mustafa to Haidar.pdf",
+      "type": "power-of-attorney",
+      "from": "self",
+      "context": "real-estate",
+      "path": "/personal/legal/power-of-attorney/POA - Mustafa to Haidar.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/POA Emirates ID.pdf",
+      "type": "power-of-attorney",
+      "from": "uae-emirates-id",
+      "context": "identity",
+      "path": "/personal/legal/power-of-attorney/POA Emirates ID.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Du bist dabei! Vertrag bei Ostrom bestätigt.eml",
+      "type": "utility-contract",
+      "from": "ostrom",
+      "context": "personal-finance",
+      "path": "/personal/utilities/Du bist dabei! Vertrag bei Ostrom bestätigt.eml"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Ostrom vertrag bestätigung.pdf",
+      "type": "utility-contract",
+      "from": "ostrom",
+      "context": "personal-finance",
+      "path": "/personal/utilities/Ostrom vertrag bestätigung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Vertragszusammenfassung_Kabel.pdf",
+      "type": "utility-contract",
+      "from": "vodafone",
+      "context": "personal-finance",
+      "path": "/personal/utilities/Vertragszusammenfassung_Kabel.pdf"
+    }
+  ]
+}

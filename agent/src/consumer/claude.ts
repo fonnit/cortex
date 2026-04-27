@@ -170,12 +170,22 @@ export async function invokeClaude<T>(
 
   const result = await executor('claude', ['-p', prompt], {
     timeout: timeoutMs,
-    // Pass full env: macOS Keychain access goes through securityd via XPC,
+    // Pass full env BUT scrub Anthropic-bound API keys.
+    //
+    // Why full env: macOS Keychain access goes through securityd via XPC,
     // which needs USER/LOGNAME/TMPDIR/XPC_SERVICE_NAME/XPC_FLAGS to identify
     // the session. Stripping to {PATH,HOME} caused launchd-spawned claude to
     // report "Not logged in" even though the same binary worked from a shell
-    // under the same launchd parent. Verified via controlled launchd test.
-    env: process.env,
+    // under the same launchd parent.
+    //
+    // Why scrub ANTHROPIC_API_KEY / CLAUDE_API_KEY: this project ships
+    // .env.local with ANTHROPIC_API_KEY (used by the Vercel API for the
+    // OpenAI/Anthropic SDK clients, not by the local CLI). If that var is
+    // visible to `claude -p`, the CLI bills against API credits instead of
+    // the user's Claude Code subscription — silently draining a metered
+    // budget that wasn't intended for batch classification. The Stage 1/2
+    // worker is a Code-subscription consumer, not an API consumer.
+    env: scrubAnthropicKeys(process.env),
   })
 
   // ── Timeout path ──────────────────────────────────────────────────
@@ -248,7 +258,7 @@ export async function assertClaudeOnPath(executor?: Executor): Promise<void> {
   // the executor surfaces non-zero exit via result.exitCode regardless.
   const result = await ex('which', ['claude'], {
     timeout: 5_000,
-    env: process.env,
+    env: scrubAnthropicKeys(process.env),
   })
   if (result.exitCode !== 0 || !result.stdout.trim()) {
     throw new Error('claude CLI not found on PATH — install Claude Code or run `claude login` to make the binary available')
@@ -295,6 +305,23 @@ export function extractFirstJsonObject(text: string): string | null {
     }
   }
   return null
+}
+
+/**
+ * Return a copy of `env` with Anthropic-bound API keys removed. Prevents the
+ * `claude -p` subprocess from billing against API credits when those vars
+ * are present in the parent (e.g. loaded via --env-file=.env.local for the
+ * Vercel API's SDK clients). The Code subscription path is taken iff none
+ * of these vars are visible to the CLI.
+ */
+export function scrubAnthropicKeys(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const out = { ...env }
+  delete out.ANTHROPIC_API_KEY
+  delete out.CLAUDE_API_KEY
+  delete out.ANTHROPIC_AUTH_TOKEN
+  return out
 }
 
 /**

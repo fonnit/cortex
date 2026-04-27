@@ -1,0 +1,787 @@
+{
+  "generated_at": "2026-04-27T16:37:11.361Z",
+  "axes": {
+    "type": [
+      "apostille",
+      "bank-statement",
+      "boarding-pass",
+      "brand-asset",
+      "certificate",
+      "civil-registry",
+      "contract",
+      "credit-application",
+      "cv-resume",
+      "diagram",
+      "diploma",
+      "employment-contract",
+      "flight-booking",
+      "hotel-booking",
+      "income-proof",
+      "insurance-policy",
+      "invoice",
+      "invoice-outgoing",
+      "misc",
+      "national-id",
+      "passport",
+      "payslip",
+      "photo",
+      "power-of-attorney",
+      "real-estate-permit",
+      "receipt",
+      "rent-payment",
+      "rental-contract",
+      "residence-permit",
+      "screenshot",
+      "self-disclosure",
+      "tax-document",
+      "ticket",
+      "title-deed"
+    ],
+    "from": [
+      "airbnb",
+      "amazon",
+      "apple",
+      "castlabs",
+      "colombia-government",
+      "ejari",
+      "esg-book",
+      "fonnit",
+      "germany-residence-office",
+      "github",
+      "habyt",
+      "misc",
+      "n26",
+      "s-ray",
+      "seven-palm",
+      "stb-munk",
+      "telc",
+      "terradan",
+      "trello",
+      "uae-government",
+      "upwork",
+      "wio-bank"
+    ],
+    "context": [
+      "business-finance",
+      "education",
+      "family",
+      "identity",
+      "legal",
+      "media-personal",
+      "personal-finance",
+      "real-estate",
+      "taxes",
+      "tools",
+      "travel",
+      "work-employment"
+    ]
+  },
+  "stable_folders": [
+    {
+      "path": "/travel/2025/",
+      "mapping_count": 15
+    },
+    {
+      "path": "/business/fonnit/invoices-in/2025/",
+      "mapping_count": 9
+    },
+    {
+      "path": "/personal/finance/payslips/2025/",
+      "mapping_count": 8
+    },
+    {
+      "path": "/real-estate/rental/contracts/",
+      "mapping_count": 8
+    },
+    {
+      "path": "/family/civil-registry/",
+      "mapping_count": 7
+    },
+    {
+      "path": "/personal/finance/receipts/2025/",
+      "mapping_count": 7
+    },
+    {
+      "path": "/identity/national-ids/",
+      "mapping_count": 6
+    },
+    {
+      "path": "/business/fonnit/invoices-in/2024/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/personal/finance/bank-statements/2025/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/personal/finance/credit-applications/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/identity/passport/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/real-estate/rental/2025/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/legal/power-of-attorney/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/tools/diagrams/",
+      "mapping_count": 5
+    },
+    {
+      "path": "/legal/contracts/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/personal/photos/",
+      "mapping_count": 4
+    },
+    {
+      "path": "/business/fonnit/invoices-out/2024/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/personal/finance/insurance/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/business/fonnit/branding/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/identity/residence-permit/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/identity/civil-registry/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/education/diplomas/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/misc/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/real-estate/property-deeds/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/education/certificates/",
+      "mapping_count": 3
+    },
+    {
+      "path": "/work/cv/",
+      "mapping_count": 3
+    }
+  ],
+  "tentative_folders": [
+    {
+      "path": "/education/apostilles/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/business/terradan/dubai/properties/seven-palm-149/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/screenshots/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/business/terradan/dubai/properties/seven-palm-49/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/personal/taxes/2025/",
+      "mapping_count": 2
+    },
+    {
+      "path": "/business/fonnit/bank-statements/2025/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/personal/finance/bank-statements/2024/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/work/employment/esg-book/contracts/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/work/employment/habyt/contracts/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/work/employment/other/contracts/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/work/employment/s-ray/contracts/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/business/terradan/dubai/properties/seven-palm-24/",
+      "mapping_count": 1
+    },
+    {
+      "path": "/personal/taxes/2024/",
+      "mapping_count": 1
+    }
+  ],
+  "anchors": [
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/FlightMadridMedellin.pdf",
+      "type": "flight-booking",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/2025/FlightMadridMedellin.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/HotelKualaLumpur.pdf",
+      "type": "hotel-booking",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/2025/HotelKualaLumpur.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/boarding-pass (4) 2.pdf",
+      "type": "boarding-pass",
+      "from": "misc",
+      "context": "travel",
+      "path": "/travel/2025/boarding-pass (4) 2.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Rechnung_52.pdf",
+      "type": "invoice",
+      "from": "misc",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2025/Rechnung_52.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Rechnung_63.pdf",
+      "type": "invoice",
+      "from": "misc",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2025/Rechnung_63.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Invoice-3195327959.pdf",
+      "type": "invoice",
+      "from": "amazon",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2025/Invoice-3195327959.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Brutto-Netto-Abrechnung 2025 08 August.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/2025/Brutto-Netto-Abrechnung 2025 08 August.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Payroll Sep 2025.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/2025/Payroll Sep 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel/Payslips 2401.pdf",
+      "type": "payslip",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/payslips/2025/Payslips 2401.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Mietvertrag.pdf",
+      "type": "contract",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/contracts/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Sublet Agreement.pdf",
+      "type": "contract",
+      "from": "misc",
+      "context": "real-estate",
+      "path": "/real-estate/rental/contracts/Sublet Agreement.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Mietvertrag.pdf",
+      "type": "rental-contract",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/contracts/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "family",
+      "path": "/family/civil-registry/REGISTRO CIVIL JAIME 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "family",
+      "path": "/family/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "misc",
+      "context": "family",
+      "path": "/family/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Trello-Receipt-30668189.pdf",
+      "type": "receipt",
+      "from": "trello",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/2025/Trello-Receipt-30668189.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/github-dfonnegra-receipt-2025-04-22.pdf",
+      "type": "receipt",
+      "from": "github",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/2025/github-dfonnegra-receipt-2025-04-22.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/github-dfonnegra-receipt-2025-05-22.pdf",
+      "type": "receipt",
+      "from": "github",
+      "context": "personal-finance",
+      "path": "/personal/finance/receipts/2025/github-dfonnegra-receipt-2025-05-22.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/Emirates ID Front.pdf",
+      "type": "national-id",
+      "from": "uae-government",
+      "context": "identity",
+      "path": "/identity/national-ids/Emirates ID Front.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AUFENTHALTSTITEL.pdf",
+      "type": "national-id",
+      "from": "misc",
+      "context": "identity",
+      "path": "/identity/national-ids/AUFENTHALTSTITEL.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Emirates ID.pdf",
+      "type": "national-id",
+      "from": "misc",
+      "context": "identity",
+      "path": "/identity/national-ids/Emirates ID.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Expenses/Invoice_Apple_8.pdf",
+      "type": "invoice",
+      "from": "apple",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2024/Invoice_Apple_8.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Expenses/Invoice_EUINDE24_1380117_AWS.pdf",
+      "type": "invoice",
+      "from": "misc",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2024/Invoice_EUINDE24_1380117_AWS.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Expenses/T656986555_Upwork.pdf",
+      "type": "invoice",
+      "from": "upwork",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-in/2024/T656986555_Upwork.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/N26_February.pdf",
+      "type": "bank-statement",
+      "from": "n26",
+      "context": "personal-finance",
+      "path": "/personal/finance/bank-statements/2025/N26_February.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Malaysia Visa/BankStatementNovember.pdf",
+      "type": "bank-statement",
+      "from": "n26",
+      "context": "personal-finance",
+      "path": "/personal/finance/bank-statements/2025/BankStatementNovember.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf",
+      "type": "bank-statement",
+      "from": "wio-bank",
+      "context": "personal-finance",
+      "path": "/personal/finance/bank-statements/2025/Wio_Bank_PJSC_Salary_Transfer_Guide_en.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Kreditunterlagen.pdf",
+      "type": "credit-application",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Kreditunterlagen.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Wohnungssuche Unterlagen/Bonitats-auskunft.pdf",
+      "type": "income-proof",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Bonitats-auskunft.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Einkommens-Nachweis.pdf",
+      "type": "income-proof",
+      "from": "s-ray",
+      "context": "personal-finance",
+      "path": "/personal/finance/credit-applications/Einkommens-Nachweis.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/Passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.heic",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/Passport.heic"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/danny passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/passport/danny passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Rent payment Feb 2025.pdf",
+      "type": "rent-payment",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/2025/Rent payment Feb 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Wohnungssuche Unterlagen/Mietzahlungsnachweis_April.pdf",
+      "type": "rent-payment",
+      "from": "habyt",
+      "context": "real-estate",
+      "path": "/real-estate/rental/2025/Mietzahlungsnachweis_April.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Rent January.pdf",
+      "type": "rent-payment",
+      "from": "misc",
+      "context": "real-estate",
+      "path": "/real-estate/rental/2025/Rent January.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/1.1. Poder Daniel Fonnegra CN.docx.pdf",
+      "type": "power-of-attorney",
+      "from": "misc",
+      "context": "legal",
+      "path": "/legal/power-of-attorney/1.1. Poder Daniel Fonnegra CN.docx.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/1.3. Poder Daniel Fonnegra CC.docx.pdf",
+      "type": "power-of-attorney",
+      "from": "misc",
+      "context": "legal",
+      "path": "/legal/power-of-attorney/1.3. Poder Daniel Fonnegra CC.docx.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Vollmacht_STB-Munk.pdf",
+      "type": "power-of-attorney",
+      "from": "stb-munk",
+      "context": "legal",
+      "path": "/legal/power-of-attorney/Vollmacht_STB-Munk.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Proposal Android App - Ecoplan Thiede.pdf",
+      "type": "diagram",
+      "from": "misc",
+      "context": "tools",
+      "path": "/tools/diagrams/Proposal Android App - Ecoplan Thiede.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bitrix24 Contacts REST API Documentation.pdf",
+      "type": "diagram",
+      "from": "misc",
+      "context": "tools",
+      "path": "/tools/diagrams/Bitrix24 Contacts REST API Documentation.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bitrix24.postman_collection.json",
+      "type": "diagram",
+      "from": "misc",
+      "context": "tools",
+      "path": "/tools/diagrams/Bitrix24.postman_collection.json"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Colombia/Contrato - Daniel Fonnegra.pdf",
+      "type": "contract",
+      "from": "terradan",
+      "context": "legal",
+      "path": "/legal/contracts/Contrato - Daniel Fonnegra.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf",
+      "type": "contract",
+      "from": "s-ray",
+      "context": "legal",
+      "path": "/legal/contracts/20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel/Employment Contract.pdf",
+      "type": "contract",
+      "from": "s-ray",
+      "context": "legal",
+      "path": "/legal/contracts/Employment Contract.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_0697.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "media-personal",
+      "path": "/personal/photos/IMG_0697.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_3560.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "media-personal",
+      "path": "/personal/photos/IMG_3560.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/IMG_4058.jpg",
+      "type": "photo",
+      "from": "misc",
+      "context": "media-personal",
+      "path": "/personal/photos/IMG_4058.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-10.pdf",
+      "type": "invoice-outgoing",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/2024/invoice_FONN-10.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-27.pdf",
+      "type": "invoice-outgoing",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/2024/invoice_FONN-27.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Steuererklaerung 2024/Income/invoice_FONN-54.pdf",
+      "type": "invoice-outgoing",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/invoices-out/2024/invoice_FONN-54.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Krankversicherung.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/Krankversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Unterlagen_Zusatzversicherung.pdf",
+      "type": "insurance-policy",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/personal/finance/insurance/Unterlagen_Zusatzversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/Logo.png",
+      "type": "brand-asset",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/branding/Logo.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/BlackLogo.png",
+      "type": "brand-asset",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/branding/BlackLogo.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/FonnIT/fonnit-cover.png",
+      "type": "brand-asset",
+      "from": "fonnit",
+      "context": "business-finance",
+      "path": "/business/fonnit/branding/fonnit-cover.png"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/AUFENTHALTSTITEL.pdf",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/AUFENTHALTSTITEL.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Aufenhaltstitel1.jpg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/Aufenhaltstitel1.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Permanent residence letter.jpeg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "context": "identity",
+      "path": "/identity/residence-permit/Permanent residence letter.jpeg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JENNY 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "context": "identity",
+      "path": "/identity/civil-registry/REGISTRO CIVIL JENNY 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "misc",
+      "context": "identity",
+      "path": "/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/DiplomaPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPosgrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/DiplomaPosgrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/CalificacionesPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "context": "education",
+      "path": "/education/diplomas/CalificacionesPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/6f65ead8-64a4-498c-ae0a-697b1fd3504e.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/6f65ead8-64a4-498c-ae0a-697b1fd3504e.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/1715035700.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/1715035700.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Boxing 1.pdf",
+      "type": "misc",
+      "from": "misc",
+      "context": "personal-finance",
+      "path": "/misc/Boxing 1.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/TerradanDubai_License.pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/property-deeds/TerradanDubai_License.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AW REALESTATE 2024 License .pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/property-deeds/AW REALESTATE 2024 License .pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/PBP Trade License 2026.pdf",
+      "type": "real-estate-permit",
+      "from": "terradan",
+      "context": "real-estate",
+      "path": "/real-estate/property-deeds/PBP Trade License 2026.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AWS Certified Solutions Architect - Professional certificate.pdf",
+      "type": "certificate",
+      "from": "misc",
+      "context": "education",
+      "path": "/education/certificates/AWS Certified Solutions Architect - Professional certificate.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Telc-Zertifikat.jpg",
+      "type": "certificate",
+      "from": "telc",
+      "context": "education",
+      "path": "/education/certificates/Telc-Zertifikat.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/DiplomaPosgrado-Eng-Stamped.pdf",
+      "type": "certificate",
+      "from": "misc",
+      "context": "education",
+      "path": "/education/certificates/DiplomaPosgrado-Eng-Stamped.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Daniel Fonnegra CV.pdf",
+      "type": "cv-resume",
+      "from": "misc",
+      "context": "work-employment",
+      "path": "/work/cv/Daniel Fonnegra CV.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/DanielFonnegraResume.pdf",
+      "type": "cv-resume",
+      "from": "misc",
+      "context": "work-employment",
+      "path": "/work/cv/DanielFonnegraResume.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Bewerbermappe_Daniel_Fonnegra.pdf",
+      "type": "cv-resume",
+      "from": "misc",
+      "context": "work-employment",
+      "path": "/work/cv/Bewerbermappe_Daniel_Fonnegra.pdf"
+    }
+  ]
+}

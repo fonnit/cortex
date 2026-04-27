@@ -169,15 +169,60 @@ export async function POST(request: Request) {
     }
 
     if (type === 'archive' || type === 'confirm') {
-      const data: Record<string, unknown> = { status: 'certain' }
+      // Fetch current item so we can carry proposed_drive_path → confirmed.
+      const item = await prisma.item.findUnique({
+        where: { id: itemId, user_id: userId },
+        select: { proposed_drive_path: true, confirmed_drive_path: true },
+      })
+      if (!item) return new Response('Not Found', { status: 404 })
+
+      // Build the patch.
+      // Bug-fix 260427: status was 'certain' (Stage-2-confident) — the actual
+      // terminal state for human-confirmed filing is 'filed'. Carry proposed
+      // path forward so the path tree (used by h9w's auto-file gate) grows.
+      const data: Record<string, unknown> = { status: 'filed' }
       if (picks?.Type) data.axis_type = picks.Type
       if (picks?.From) data.axis_from = picks.From
       if (picks?.Context) data.axis_context = picks.Context
-      await prisma.item.update({
-        where: { id: itemId, user_id: userId },
-        data,
-      })
-      return Response.json({ ok: true, status: 'certain' })
+      // Carry path forward unless triage explicitly cleared it. The h9w gate
+      // counts items where status='filed' AND confirmed_drive_path IS NOT NULL.
+      if (!item.confirmed_drive_path && item.proposed_drive_path) {
+        data.confirmed_drive_path = item.proposed_drive_path
+      }
+
+      // Bug-fix 260427: also upsert TaxonomyLabel rows for picked axes. Without
+      // this, approving items never grows the taxonomy → Stage 2 prompt's
+      // "Existing taxonomy" block stays empty no matter how many items get
+      // confirmed.
+      const labelOps: Array<Promise<unknown>> = []
+      const upsertLabel = (axis: string, name: string) =>
+        prisma.taxonomyLabel.upsert({
+          where: { user_id_axis_name: { user_id: userId, axis, name } },
+          create: {
+            user_id: userId,
+            axis,
+            name,
+            deprecated: false,
+            item_count: 1,
+            last_used: new Date(),
+          },
+          update: {
+            item_count: { increment: 1 },
+            last_used: new Date(),
+            // Un-deprecate if a previously-deprecated label gets re-confirmed.
+            deprecated: false,
+          },
+        })
+      if (picks?.Type) labelOps.push(upsertLabel('type', picks.Type))
+      if (picks?.From) labelOps.push(upsertLabel('from', picks.From))
+      if (picks?.Context) labelOps.push(upsertLabel('context', picks.Context))
+
+      await Promise.all([
+        prisma.item.update({ where: { id: itemId, user_id: userId }, data }),
+        ...labelOps,
+      ])
+
+      return Response.json({ ok: true, status: 'filed' })
     }
 
     return new Response('Bad Request', { status: 400 })

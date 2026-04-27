@@ -26,7 +26,8 @@ const WATCH_PATHS = (process.env.WATCH_PATHS ?? `${home}/Downloads`)
   .filter(Boolean)
 const DEBOUNCE_MS = 2000
 
-async function sha256OfFile(filePath: string): Promise<string> {
+/** Exposed so one-shot scripts can build the same payload the daemon does (no service-layer duplication). */
+export async function sha256OfFile(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const h = crypto.createHash('sha256')
     createReadStream(filePath)
@@ -36,7 +37,8 @@ async function sha256OfFile(filePath: string): Promise<string> {
   })
 }
 
-function inferMimeType(filePath: string): string | undefined {
+/** Exposed for one-shot scripts. Extension-only inference — see comment above. */
+export function inferMimeType(filePath: string): string | undefined {
   // Lightweight: extension-only. The API/consumer can override; the daemon does
   // not need libmagic to ship metadata.
   const ext = path.extname(filePath).toLowerCase()
@@ -54,7 +56,12 @@ function inferMimeType(filePath: string): string | undefined {
   return ext ? map[ext] : undefined
 }
 
-async function buildPayload(filePath: string): Promise<IngestRequest | null> {
+/**
+ * Build an IngestRequest from a file path the same way the chokidar collector
+ * does. Exposed for one-shot scripts (e.g. scripts/process-files.ts) so they
+ * use the same hashing + mime-inference logic as the daemon.
+ */
+export async function buildPayload(filePath: string): Promise<IngestRequest | null> {
   try {
     const st = await stat(filePath)
     if (!st.isFile()) return null
