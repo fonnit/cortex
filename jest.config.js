@@ -16,6 +16,11 @@ const config = {
     }],
   },
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
+  // Exclude orphan executor worktrees (dirty copies of source under .claude/worktrees/).
+  // Without this, jest discovers stale duplicates of every test and runs them
+  // against pre-h9w source.
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/.claude/worktrees/'],
+  modulePathIgnorePatterns: ['/.claude/worktrees/'],
 }
 
 module.exports = config

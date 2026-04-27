@@ -78,6 +78,10 @@ const ClassifyBodySchema = z.discriminatedUnion('outcome', [
       confidence: z.number().min(0).max(1).optional(),
       reason: z.string().optional(),
       proposed_drive_path: z.string().optional(),
+      // h9w-3 — emitted by Stage 2 alongside proposed_drive_path. Optional
+      // at the schema level to keep wire compat with older agent builds; the
+      // auto-file gate requires it at runtime (missing → blocked, not 400).
+      path_confidence: z.number().min(0).max(1).optional(),
     })
     // Stage 2 success: `decision` is REQUIRED and limited to the Stage 2 enum.
     .refine(
@@ -115,6 +119,24 @@ const ClassifyBodySchema = z.discriminatedUnion('outcome', [
 
 const AUTO_FILE_THRESHOLD = 0.85
 const AUTO_IGNORE_THRESHOLD = 0.85
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Path-based auto-file gate — quick task 260427-h9w.
+ *
+ * Replaces u47-3's `allLabelsExist` cold-start guard. Auto-file fires only
+ * when (a) Claude is confident about path placement AND (b) the proposed
+ * folder already has enough confirmed siblings to be considered "stable".
+ *
+ * The sibling count is grounded in actual filed items (not Claude's word),
+ * so even an over-confident LLM cannot bypass this — if no human has filed
+ * 3+ items into a folder yet, nothing auto-files there.
+ *
+ * Cold-start safety by construction: zero filed items → no path has ≥3
+ * siblings → nothing auto-files until the user manually triages a few.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+const PATH_AUTO_FILE_MIN_SIBLINGS = 3
+const PATH_AUTO_FILE_MIN_CONFIDENCE = 0.85
 
 /** Existing classification_trace shape — additive `queue` sibling alongside v1.0 stage1/stage2. */
 type ExistingTrace = {
@@ -250,59 +272,76 @@ export async function POST(request: NextRequest) {
           fConf >= CONFIDENCE_THRESHOLD &&
           cConf >= CONFIDENCE_THRESHOLD
 
-        // ─── COLD-START GUARD LOAD (quick task 260426-u47, D-cold-start) ──
-        // Read TaxonomyLabel rows once for this user. The guard prevents
-        // auto-file from acting on labels that don't exist in the closed
-        // vocabulary (currently trivially satisfied — the prompt forbids
-        // invented labels — but future-proofs against the sibling Task #2
-        // which lets Claude propose new labels).
-        //
-        // The lookup is read-only and runs at the route — the boundary that
-        // already validates Stage 2 payloads. Per CONTEXT, auto-IGNORE skips
-        // this guard (no labels are committed; vocabulary doesn't matter).
-        //
-        // TOCTOU safety: a stale read here is harmless because updateMany's
-        // compound-where (id + expectedStatus) catches concurrent races.
-        const coldStartSpan = trace.span({
-          name: 'cold-start-guard-load',
-          input: { user_id: item.user_id },
-        })
-        const labels = await prisma.taxonomyLabel.findMany({
-          where: { user_id: item.user_id, deprecated: false },
-          select: { axis: true, name: true },
-        })
-        coldStartSpan.end({ output: { label_count: labels.length } })
-        const labelSet = new Set(
-          labels.map((l: { axis: string; name: string }) => `${l.axis}:${l.name}`),
-        )
-        const isExistingLabel = (axis: 'type' | 'from' | 'context', value: string | null) =>
-          value !== null && labelSet.has(`${axis}:${value}`)
-
-        // ─── AUTO-FILE BRANCH (quick task 260426-u47, D-auto-file) ────────
+        // ─── AUTO-FILE BRANCH (quick task 260427-h9w, replaces u47-3) ─────
         // Preconditions (ALL must hold):
         //   - decision === 'auto_file'
         //   - All 3 axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
         //   - All 3 axis values are non-null
-        //   - All 3 axis values exist in TaxonomyLabel for that axis (cold-start)
+        //   - path_confidence is present and ≥ PATH_AUTO_FILE_MIN_CONFIDENCE (0.85)
+        //   - The PARENT of proposed_drive_path already contains
+        //     ≥ PATH_AUTO_FILE_MIN_SIBLINGS (3) confirmed-filed items.
+        //
+        // The TaxonomyLabel-based cold-start guard from u47-3 is REMOVED:
+        // axes can hold values not yet in TaxonomyLabel (sibling task wgk
+        // lets Claude propose new axis labels) without blocking auto-file.
+        // The new gate is grounded in actual filed items, not in vocabulary.
+        //
         // When fired: status='filed' (terminal). axis_* + proposed_drive_path
         // STILL written (reversibility — triage UI can override). Plus
         // confirmed_drive_path = proposed_drive_path so the file's drive
         // location is committed without human review.
+        //
+        // Root edge case: proposed_drive_path='/file.pdf' → parent='/' which
+        // makes startsWith match every confirmed path. YAGNI per CONTEXT —
+        // accepted because the user can trivially undo via triage.
         const allHighConf =
           tConf >= AUTO_FILE_THRESHOLD &&
           fConf >= AUTO_FILE_THRESHOLD &&
           cConf >= AUTO_FILE_THRESHOLD
         const allValuesPresent =
           tAxis.value !== null && fAxis.value !== null && cAxis.value !== null
-        const allLabelsExist =
-          isExistingLabel('type', tAxis.value) &&
-          isExistingLabel('from', fAxis.value) &&
-          isExistingLabel('context', cAxis.value)
+
+        const proposedPath = data.proposed_drive_path
+        const parent =
+          proposedPath && proposedPath.length > 0
+            ? proposedPath.slice(0, proposedPath.lastIndexOf('/') + 1) || '/'
+            : null
+        const pathConfidence = data.path_confidence
+        const pathConfidenceOk =
+          pathConfidence !== undefined && pathConfidence >= PATH_AUTO_FILE_MIN_CONFIDENCE
+
+        // Only run the count query when all cheaper checks pass — keeps the
+        // happy path single-SELECT and avoids DB load for items that can't
+        // possibly auto-file (T-h9w-07).
+        let siblingCount = 0
+        if (
+          data.decision === 'auto_file' &&
+          parent !== null &&
+          pathConfidenceOk &&
+          allHighConf &&
+          allValuesPresent
+        ) {
+          const siblingsSpan = trace.span({
+            name: 'auto-file-siblings-count',
+            input: { parent, user_id: item.user_id },
+          })
+          siblingCount = await prisma.item.count({
+            where: {
+              user_id: item.user_id,
+              status: QUEUE_STATUSES.FILED,
+              confirmed_drive_path: { startsWith: parent },
+            },
+          })
+          siblingsSpan.end({ output: { count: siblingCount } })
+        }
+
         const canAutoFile =
           data.decision === 'auto_file' &&
+          parent !== null &&
+          pathConfidenceOk &&
           allHighConf &&
           allValuesPresent &&
-          allLabelsExist
+          siblingCount >= PATH_AUTO_FILE_MIN_SIBLINGS
 
         // ─── AUTO-IGNORE BRANCH (quick task 260426-u47, D-auto-ignore) ─────
         // Read confidence from the explicit top-level field if Claude
@@ -321,9 +360,13 @@ export async function POST(request: NextRequest) {
         // blocked-by reason via Langfuse for observability.
         let autoFileBlockedReason: string | null = null
         if (data.decision === 'auto_file' && !canAutoFile) {
-          if (!allHighConf) autoFileBlockedReason = 'low_conf'
+          if (!allHighConf) autoFileBlockedReason = 'low_axis_conf'
           else if (!allValuesPresent) autoFileBlockedReason = 'null_axis'
-          else if (!allLabelsExist) autoFileBlockedReason = 'unknown_label'
+          else if (parent === null) autoFileBlockedReason = 'no_proposed_path'
+          else if (pathConfidence === undefined)
+            autoFileBlockedReason = 'missing_path_confidence'
+          else if (!pathConfidenceOk) autoFileBlockedReason = 'low_path_confidence'
+          else autoFileBlockedReason = 'insufficient_siblings'
         } else if (data.decision !== 'auto_file') {
           autoFileBlockedReason = 'wrong_decision'
         }
@@ -362,6 +405,9 @@ export async function POST(request: NextRequest) {
         // post-hoc audit can reconstruct WHY an item was auto-filed/ignored.
         if (data.decision !== undefined) stage2Patch.decision = data.decision
         if (data.confidence !== undefined) stage2Patch.confidence = data.confidence
+        // h9w-3: durable storage for path_confidence — no Prisma migration,
+        // lives only inside classification_trace.stage2 jsonb.
+        if (data.path_confidence !== undefined) stage2Patch.path_confidence = data.path_confidence
         newTrace.stage2 = stage2Patch
 
         // Auto-ignore: skip axis_* writes — they're null + low confidence on

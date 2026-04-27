@@ -16,6 +16,7 @@ import {
   buildStage1Prompt,
   buildStage2Prompt,
   type TaxonomyContext,
+  type PathContext,
 } from '../src/consumer/prompts'
 import type { QueueItem } from '../src/http/types'
 
@@ -50,6 +51,13 @@ const TAXONOMY: TaxonomyContext = {
   type: ['receipt', 'contract', 'statement'],
   from: ['Employer-Acme', 'BankOfAmerica'],
   context: ['finance-monthly', 'travel'],
+}
+
+const PATHS: PathContext = {
+  paths: [
+    { parent: '/fonnit/invoices/', count: 12 },
+    { parent: '/cortex/exports/', count: 4 },
+  ],
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -146,19 +154,19 @@ describe('buildStage1Prompt — gmail', () => {
 
 describe('buildStage2Prompt — file', () => {
   it('renders all allowed types/froms/contexts joined by ", "', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('Type axis: receipt, contract, statement')
     expect(p).toContain('From axis: Employer-Acme, BankOfAmerica')
     expect(p).toContain('Context axis: finance-monthly, travel')
   })
 
   it('interpolates the file path under "Read"', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('Read /Users/d/Downloads/2025-Q1-statement.pdf')
   })
 
   it('asks for the 3-axis JSON shape with proposed_drive_path', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('"axes"')
     expect(p).toContain('"type"')
     expect(p).toContain('"from"')
@@ -169,17 +177,18 @@ describe('buildStage2Prompt — file', () => {
   })
 
   it('contains the 0.85 confidence threshold', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('0.85')
   })
 
-  it('forbids inventing labels outside the allowed lists', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
-    expect(p).toMatch(/never invent/i)
+  it('allows proposing new labels at low confidence (wgk relaxation)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
+    expect(p).toMatch(/propose a new label/i)
+    expect(p).not.toMatch(/never invent/i)
   })
 
   it('renders empty taxonomy axes as (none yet)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, { type: [], from: [], context: [] })
+    const p = buildStage2Prompt(FILE_ITEM, { type: [], from: [], context: [] }, PATHS)
     expect(p).toContain('Type axis: (none yet)')
     expect(p).toContain('From axis: (none yet)')
     expect(p).toContain('Context axis: (none yet)')
@@ -187,13 +196,13 @@ describe('buildStage2Prompt — file', () => {
 
   it('throws on null file_path for downloads source', () => {
     const broken: QueueItem = { ...FILE_ITEM, file_path: null }
-    expect(() => buildStage2Prompt(broken, TAXONOMY)).toThrow(
+    expect(() => buildStage2Prompt(broken, TAXONOMY, PATHS)).toThrow(
       'downloads item missing file_path',
     )
   })
 
   it('does not include content_hash or size_bytes', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY, PATHS)
     expect(p).not.toContain('142337')
     expect(p).not.toContain('sha256_abc')
   })
@@ -201,7 +210,7 @@ describe('buildStage2Prompt — file', () => {
 
 describe('buildStage2Prompt — gmail', () => {
   it('renders gmail metadata block (subject, from, snippet, headers)', () => {
-    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('Subject:')
     expect(p).toContain('From:')
     expect(p).toContain('Preview:')
@@ -210,12 +219,12 @@ describe('buildStage2Prompt — gmail', () => {
   })
 
   it('still injects taxonomy axes', () => {
-    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY, PATHS)
     expect(p).toContain('Type axis: receipt, contract, statement')
   })
 
   it('does NOT include a downloads-style file path', () => {
-    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY)
+    const p = buildStage2Prompt(GMAIL_ITEM, TAXONOMY, PATHS)
     expect(p).not.toMatch(/\/Users\//)
   })
 })
@@ -231,7 +240,7 @@ describe('Stage 2 prompt length under heavy taxonomy', () => {
       from: Array.from({ length: 200 }, (_, i) => `from_${i}`),
       context: Array.from({ length: 200 }, (_, i) => `context_${i}`),
     }
-    const p = buildStage2Prompt(FILE_ITEM, huge)
+    const p = buildStage2Prompt(FILE_ITEM, huge, PATHS)
     // 16KB cap — generous; current builder produces well under this.
     expect(p.length).toBeLessThan(16 * 1024)
   })

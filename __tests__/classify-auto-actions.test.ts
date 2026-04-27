@@ -1,31 +1,33 @@
 /**
- * POST /api/classify auto-file / auto-ignore / cold-start guard tests —
- * quick task 260426-u47.
+ * POST /api/classify auto-file / auto-ignore / cold-start guard tests.
  *
- * Validates Stage 2 terminal-action transitions per CONTEXT D-auto-file,
- * D-auto-ignore, D-cold-start:
+ * Covers the path-based auto-file gate from quick task 260427-h9w
+ * (which replaces u47-3's TaxonomyLabel-based allLabelsExist rule), the
+ * auto-ignore branch from u47-2 (unchanged), and the Stage 1 + TOCTOU
+ * regression cases that must keep working.
  *
- *   - decision='auto_file' + 3 axes ≥ 0.85 + all values exist in
- *     TaxonomyLabel → status='filed' (terminal). axis_* + proposed_drive_path
- *     + confirmed_drive_path written for reversibility.
- *   - decision='ignore' + confidence ≥ 0.85 → status='ignored' (terminal).
- *     Cold-start guard does NOT apply (no labels committed).
- *   - decision='auto_file' but ANY axis value missing from TaxonomyLabel →
- *     auto-file BLOCKED, falls back to existing certain/uncertain semantics.
- *   - Stage 1 path unaffected (existing keep/ignore/uncertain transitions).
+ * Auto-file gate (post-h9w):
+ *   - decision='auto_file'
+ *   - All 3 axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
+ *   - All 3 axis values are non-null
+ *   - path_confidence is present and ≥ PATH_AUTO_FILE_MIN_CONFIDENCE (0.85)
+ *   - Parent of proposed_drive_path has ≥ PATH_AUTO_FILE_MIN_SIBLINGS (3)
+ *     confirmed-filed items in the database
  *
- * Mirrors __tests__/classify-api.test.ts patterns: prisma mocked at the
- * module boundary (findUnique + updateMany + taxonomyLabel.findMany), Langfuse
- * stubbed with stable trace.id.
+ * The TaxonomyLabel-based gate is GONE — axes can carry values that don't
+ * exist in TaxonomyLabel without blocking auto-file. The new mock surface
+ * is `prisma.item.count` instead of `prisma.taxonomyLabel.findMany`.
  */
 
-// Mock Prisma BEFORE imports — extra surface vs classify-api.test.ts:
-// taxonomyLabel.findMany is the cold-start guard's read.
+// Mock Prisma BEFORE imports — we need item.count for the new sibling
+// query and we explicitly verify that taxonomyLabel.findMany is NEVER
+// called from this route anymore.
 jest.mock('../lib/prisma', () => ({
   prisma: {
     item: {
       findUnique: jest.fn(),
       updateMany: jest.fn(),
+      count: jest.fn(),
     },
     taxonomyLabel: {
       findMany: jest.fn(),
@@ -52,6 +54,7 @@ import { prisma } from '../lib/prisma'
 
 const mockFindUnique = prisma.item.findUnique as jest.MockedFunction<typeof prisma.item.findUnique>
 const mockUpdateMany = prisma.item.updateMany as jest.MockedFunction<typeof prisma.item.updateMany>
+const mockItemCount = prisma.item.count as jest.MockedFunction<typeof prisma.item.count>
 const mockTaxonomyFindMany = (
   prisma as unknown as { taxonomyLabel: { findMany: jest.Mock } }
 ).taxonomyLabel.findMany
@@ -88,30 +91,24 @@ function makeItem(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-/** Helper: shape TaxonomyLabel rows for findMany mock. */
-function tlabels(rows: Array<{ axis: 'type' | 'from' | 'context'; name: string }>) {
-  return rows.map((r) => ({ axis: r.axis, name: r.name }))
+/** Default the sibling count to 0 (cold start). Tests opt into passing the gate. */
+function mockSiblingCount(n: number) {
+  mockItemCount.mockResolvedValue(n as never)
 }
-
-const ALL_LABELS_PRESENT = tlabels([
-  { axis: 'type', name: 'invoice' },
-  { axis: 'from', name: 'acme' },
-  { axis: 'context', name: 'paid' },
-])
 
 beforeEach(() => {
   process.env.CORTEX_API_KEY = 'test-secret'
   jest.clearAllMocks()
   mockUpdateMany.mockResolvedValue({ count: 1 } as never)
-  mockTaxonomyFindMany.mockResolvedValue([] as never)
+  mockSiblingCount(0)
 })
 
-/* ───────────────────────── AUTO-FILE branch ───────────────────────── */
+/* ───────────────────────── AUTO-FILE branch (h9w + u47) ───────────────────────── */
 
-describe('POST /api/classify — auto-file (u47)', () => {
-  it('Test 1: happy path — decision=auto_file, all axes ≥0.85, all labels exist → status=filed', async () => {
+describe('POST /api/classify — auto-file (h9w)', () => {
+  it('H9W-1: happy path — auto_file + all axes ≥0.85 + path_confidence 0.9 + parent has 5 siblings → status=filed', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue(ALL_LABELS_PRESENT as never)
+    mockSiblingCount(5)
 
     const req = makeRequest({
       body: {
@@ -119,12 +116,13 @@ describe('POST /api/classify — auto-file (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'auto_file',
+        path_confidence: 0.9,
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
           context: { value: 'paid', confidence: 0.9 },
         },
-        proposed_drive_path: '/invoice/acme/paid/x.pdf',
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
     })
     const res = await POST(req)
@@ -140,24 +138,29 @@ describe('POST /api/classify — auto-file (u47)', () => {
     }
     expect(updateArg.where.status).toBe('processing_stage2')
     expect(updateArg.data.status).toBe('filed')
-    // Reversibility: axis_* + proposed_drive_path STILL written so triage can override.
+    // Reversibility — axis_* + paths still written so triage can override.
     expect(updateArg.data.axis_type).toBe('invoice')
     expect(updateArg.data.axis_from).toBe('acme')
     expect(updateArg.data.axis_context).toBe('paid')
-    expect(updateArg.data.proposed_drive_path).toBe('/invoice/acme/paid/x.pdf')
-    // Auto-file confirms the proposed path — confirmed_drive_path is set.
-    expect(updateArg.data.confirmed_drive_path).toBe('/invoice/acme/paid/x.pdf')
-    // Cold-start guard read against TaxonomyLabel for this user_id.
-    expect(mockTaxonomyFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ user_id: 'cortex_owner', deprecated: false }),
-      }),
-    )
+    expect(updateArg.data.proposed_drive_path).toBe('/fonnit/invoices/x.pdf')
+    expect(updateArg.data.confirmed_drive_path).toBe('/fonnit/invoices/x.pdf')
+
+    // New gate: prisma.item.count called with parent prefix + status='filed'.
+    expect(mockItemCount).toHaveBeenCalledTimes(1)
+    expect(mockItemCount).toHaveBeenCalledWith({
+      where: {
+        user_id: 'cortex_owner',
+        status: 'filed',
+        confirmed_drive_path: { startsWith: '/fonnit/invoices/' },
+      },
+    })
+    // Old TaxonomyLabel gate is gone.
+    expect(mockTaxonomyFindMany).not.toHaveBeenCalled()
   })
 
-  it('Test 2: blocked — auto_file but one axis below 0.85 → falls back, status !== filed', async () => {
+  it('H9W-2: blocked — path_confidence 0.7 < 0.85 → falls back to certain', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue(ALL_LABELS_PRESENT as never)
+    mockSiblingCount(5)
 
     const req = makeRequest({
       body: {
@@ -165,35 +168,86 @@ describe('POST /api/classify — auto-file (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'auto_file',
+        path_confidence: 0.7,
         axes: {
-          // type below 0.85 — blocks auto-file. All ≥0.75, so existing
-          // CERTAIN/UNCERTAIN logic lands on 'certain'.
-          type: { value: 'invoice', confidence: 0.8 },
+          type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
           context: { value: 'paid', confidence: 0.9 },
         },
-        proposed_drive_path: '/invoice/acme/paid/x.pdf',
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
     const json = await res.json()
-    expect(json.status).not.toBe('filed')
+    expect(json.status).toBe('certain')
+
+    const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    // Cheap blockers short-circuit before the count query runs.
+    expect(mockItemCount).not.toHaveBeenCalled()
+  })
+
+  it('H9W-3: blocked — parent has 2 siblings (< 3) → falls back to certain', async () => {
+    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
+    mockSiblingCount(2)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'auto_file',
+        path_confidence: 0.95,
+        axes: {
+          type: { value: 'invoice', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('certain')
+
+    const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    expect(mockItemCount).toHaveBeenCalledTimes(1)
+  })
+
+  it('H9W-4: blocked — cold start (0 siblings) → falls back to certain', async () => {
+    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
+    mockSiblingCount(0)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'auto_file',
+        path_confidence: 0.95,
+        axes: {
+          type: { value: 'invoice', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
     expect(json.status).toBe('certain')
 
     const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
     expect(updateArg.data.confirmed_drive_path).toBeUndefined()
   })
 
-  it('Test 3: blocked — cold-start guard, axis_type "newlabel" not in TaxonomyLabel → status !== filed', async () => {
+  it('H9W-5: blocked — body missing path_confidence → no 400, just blocks auto_file (back-compat)', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    // 'invoice' for type is MISSING; 'newlabel' is what Claude proposed.
-    mockTaxonomyFindMany.mockResolvedValue(
-      tlabels([
-        { axis: 'from', name: 'acme' },
-        { axis: 'context', name: 'paid' },
-      ]) as never,
-    )
+    mockSiblingCount(5)
 
     const req = makeRequest({
       body: {
@@ -201,29 +255,59 @@ describe('POST /api/classify — auto-file (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'auto_file',
+        // path_confidence intentionally omitted.
         axes: {
-          type: { value: 'newlabel', confidence: 0.9 },
+          type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
           context: { value: 'paid', confidence: 0.9 },
         },
-        proposed_drive_path: '/newlabel/acme/paid/x.pdf',
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
+      },
+    })
+    const res = await POST(req)
+    // Wire-compat: no 400, just falls back.
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('certain')
+
+    const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
+    expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    expect(mockItemCount).not.toHaveBeenCalled()
+  })
+
+  it('H9W-6: NEW behavior — auto_file with axis value not in TaxonomyLabel still passes (label gate is gone)', async () => {
+    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
+    mockSiblingCount(5)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'auto_file',
+        path_confidence: 0.9,
+        axes: {
+          // 'wholly_new_value' would have failed u47-3's allLabelsExist —
+          // now allowed because the gate was replaced.
+          type: { value: 'wholly_new_value', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
     const json = await res.json()
-    // All ≥0.75 so the legacy fallback lands on 'certain', not 'filed'.
-    expect(json.status).toBe('certain')
-    expect(json.status).not.toBe('filed')
+    expect(json.status).toBe('filed')
 
-    const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
-    // confirmed_drive_path NOT set when auto-file is blocked.
-    expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    // The whole point: TaxonomyLabel.findMany must NOT be called from this route.
+    expect(mockTaxonomyFindMany).not.toHaveBeenCalled()
   })
 
-  it('Test 4: blocked — null axis value → falls back to uncertain (axis with confidence 0.1 < 0.75)', async () => {
+  it('H9W-7: blocked — null axis with low confidence falls back to uncertain (axis-conf gate still applies)', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue(ALL_LABELS_PRESENT as never)
+    mockSiblingCount(5)
 
     const req = makeRequest({
       body: {
@@ -231,8 +315,9 @@ describe('POST /api/classify — auto-file (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'auto_file',
+        path_confidence: 0.9,
         axes: {
-          type: { value: null, confidence: 0.1 }, // null + low confidence per AxisSchema refinement
+          type: { value: null, confidence: 0.1 },
           from: { value: 'acme', confidence: 0.9 },
           context: { value: 'paid', confidence: 0.9 },
         },
@@ -244,15 +329,75 @@ describe('POST /api/classify — auto-file (u47)', () => {
     const json = await res.json()
     expect(json.status).toBe('uncertain')
     expect(json.status).not.toBe('filed')
+    // Cheap blocker short-circuits before the count query.
+    expect(mockItemCount).not.toHaveBeenCalled()
+  })
+
+  it('H9W-2b: blocked — axis below 0.85 even with valid path_confidence → falls back to certain', async () => {
+    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
+    mockSiblingCount(5)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'auto_file',
+        path_confidence: 0.9,
+        axes: {
+          type: { value: 'invoice', confidence: 0.8 }, // below 0.85
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/fonnit/invoices/x.pdf',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('certain')
+    expect(mockItemCount).not.toHaveBeenCalled()
+  })
+
+  it('H9W-12: root edge — proposed_drive_path "/file.pdf" → parent "/", siblings ≥3 still fires (YAGNI)', async () => {
+    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
+    mockSiblingCount(3)
+
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'auto_file',
+        path_confidence: 0.9,
+        axes: {
+          type: { value: 'misc', confidence: 0.9 },
+          from: { value: 'unknown', confidence: 0.9 },
+          context: { value: 'inbox', confidence: 0.9 },
+        },
+        proposed_drive_path: '/file.pdf',
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.status).toBe('filed')
+
+    expect(mockItemCount).toHaveBeenCalledWith({
+      where: {
+        user_id: 'cortex_owner',
+        status: 'filed',
+        confirmed_drive_path: { startsWith: '/' },
+      },
+    })
   })
 })
 
-/* ───────────────────────── AUTO-IGNORE branch ───────────────────────── */
+/* ───────────────────────── AUTO-IGNORE branch (u47, unchanged) ───────────────────────── */
 
 describe('POST /api/classify — auto-ignore (u47)', () => {
-  it('Test 5: happy path — decision=ignore + confidence ≥0.85 → status=ignored, no axis writes, cold-start NOT consulted', async () => {
+  it('H9W-8: happy path — decision=ignore + confidence ≥0.85 → status=ignored, count NOT consulted', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue([] as never)
 
     const req = makeRequest({
       body: {
@@ -276,13 +421,13 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
 
     const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
     expect(updateArg.data.status).toBe('ignored')
-    // No confirmed_drive_path on ignore path.
     expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    // The new path-count query must NOT run for ignore.
+    expect(mockItemCount).not.toHaveBeenCalled()
   })
 
-  it('Test 6: blocked — decision=ignore + low confidence (<0.85) → falls back, status=uncertain (no auto-ignore)', async () => {
+  it('Test 6: blocked — decision=ignore + low confidence (<0.85) → falls back to uncertain', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue([] as never)
 
     const req = makeRequest({
       body: {
@@ -290,7 +435,7 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'ignore',
-        confidence: 0.6, // below AUTO_IGNORE_THRESHOLD (0.85)
+        confidence: 0.6,
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.1 },
@@ -302,40 +447,12 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
     const res = await POST(req)
     expect(res.status).toBe(200)
     const json = await res.json()
-    // All-null + low confidence → existing logic lands on uncertain.
     expect(json.status).toBe('uncertain')
     expect(json.status).not.toBe('ignored')
   })
 
-  it('Test 7: cold-start guard does NOT apply to auto-ignore — status=ignored even with empty TaxonomyLabel', async () => {
+  it('Test 7b: auto-ignore with no top-level confidence falls back to max(axis confidences)', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    // No labels at all — pre-bootstrap state.
-    mockTaxonomyFindMany.mockResolvedValue([] as never)
-
-    const req = makeRequest({
-      body: {
-        item_id: 'item_xyz',
-        stage: 2,
-        outcome: 'success',
-        decision: 'ignore',
-        confidence: 0.9,
-        axes: {
-          type: { value: null, confidence: 0.1 },
-          from: { value: null, confidence: 0.1 },
-          context: { value: null, confidence: 0.1 },
-        },
-        proposed_drive_path: '',
-      },
-    })
-    const res = await POST(req)
-    expect(res.status).toBe(200)
-    const json = await res.json()
-    expect(json.status).toBe('ignored')
-  })
-
-  it('Test 7b: auto-ignore with no top-level confidence falls back to max(axis confidences) — fires when max ≥0.85', async () => {
-    mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue([] as never)
 
     const req = makeRequest({
       body: {
@@ -355,18 +472,15 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
     const res = await POST(req)
     expect(res.status).toBe(200)
     const json = await res.json()
-    // Max axis confidence = 0.1, well below 0.85 → no auto-ignore. Falls
-    // back to existing 'uncertain' (all axes below 0.75 threshold).
     expect(json.status).toBe('uncertain')
   })
 })
 
 /* ───────────────── SCHEMA + REGRESSION ───────────────── */
 
-describe('POST /api/classify — schema + regression (u47)', () => {
-  it('Test 8: decision=uncertain + all axes ≥0.85 → existing CERTAIN logic (status=certain), no auto-action', async () => {
+describe('POST /api/classify — schema + regression', () => {
+  it('H9W-13: decision=uncertain + all axes ≥0.85 → existing CERTAIN logic, no auto-action, no count query', async () => {
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue(ALL_LABELS_PRESENT as never)
 
     const req = makeRequest({
       body: {
@@ -374,6 +488,7 @@ describe('POST /api/classify — schema + regression (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'uncertain',
+        path_confidence: 0.9,
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
@@ -389,15 +504,16 @@ describe('POST /api/classify — schema + regression (u47)', () => {
 
     const updateArg = mockUpdateMany.mock.calls[0][0] as { data: Record<string, unknown> }
     expect(updateArg.data.confirmed_drive_path).toBeUndefined()
+    expect(mockItemCount).not.toHaveBeenCalled()
   })
 
-  it('Test 9: stage=2 success body WITHOUT decision → 400 validation_failed (decision is REQUIRED)', async () => {
+  it('H9W-11: stage=2 success without decision → 400 validation_failed', async () => {
     const req = makeRequest({
       body: {
         item_id: 'item_xyz',
         stage: 2,
         outcome: 'success',
-        // decision intentionally omitted
+        path_confidence: 0.9,
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
@@ -413,8 +529,8 @@ describe('POST /api/classify — schema + regression (u47)', () => {
     expect(mockUpdateMany).not.toHaveBeenCalled()
   })
 
-  it('Test 10: Stage 1 path unaffected — keep/ignore/uncertain transitions unchanged; auto_file rejected on stage=1', async () => {
-    // Stage 1 keep → pending_stage2
+  it('H9W-9: Stage 1 path unaffected — keep/auto_file rejected on stage=1', async () => {
+    // Stage 1 keep → pending_stage2.
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage1' }) as never)
 
     const reqKeep = makeRequest({
@@ -431,8 +547,7 @@ describe('POST /api/classify — schema + regression (u47)', () => {
     const jsonKeep = await resKeep.json()
     expect(jsonKeep.status).toBe('pending_stage2')
 
-    // Stage 1 with decision='auto_file' is structurally invalid — rejected
-    // by the Zod schema (Stage 1 enum stays keep/ignore/uncertain).
+    // Stage 1 with decision='auto_file' is structurally invalid.
     jest.clearAllMocks()
     mockUpdateMany.mockResolvedValue({ count: 1 } as never)
     const reqBad = makeRequest({
@@ -450,10 +565,9 @@ describe('POST /api/classify — schema + regression (u47)', () => {
     expect(jsonBad.error).toBe('validation_failed')
   })
 
-  it('Test 11: TOCTOU guard preserved — auto_file on item no longer in processing_stage2 → 409', async () => {
+  it('H9W-10: TOCTOU guard preserved — auto_file on item no longer in processing_stage2 → 409', async () => {
     // Item was reclaimed mid-flight; current status is 'pending_stage2'.
     mockFindUnique.mockResolvedValue(makeItem({ status: 'pending_stage2' }) as never)
-    mockTaxonomyFindMany.mockResolvedValue(ALL_LABELS_PRESENT as never)
 
     const req = makeRequest({
       body: {
@@ -461,6 +575,7 @@ describe('POST /api/classify — schema + regression (u47)', () => {
         stage: 2,
         outcome: 'success',
         decision: 'auto_file',
+        path_confidence: 0.9,
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
