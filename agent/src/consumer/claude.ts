@@ -170,8 +170,12 @@ export async function invokeClaude<T>(
 
   const result = await executor('claude', ['-p', prompt], {
     timeout: timeoutMs,
-    // Strict env allowlist — see file header. Intentionally omits all secrets.
-    env: { PATH: process.env.PATH, HOME: process.env.HOME },
+    // Pass full env: macOS Keychain access goes through securityd via XPC,
+    // which needs USER/LOGNAME/TMPDIR/XPC_SERVICE_NAME/XPC_FLAGS to identify
+    // the session. Stripping to {PATH,HOME} caused launchd-spawned claude to
+    // report "Not logged in" even though the same binary worked from a shell
+    // under the same launchd parent. Verified via controlled launchd test.
+    env: process.env,
   })
 
   // ── Timeout path ──────────────────────────────────────────────────
@@ -244,7 +248,7 @@ export async function assertClaudeOnPath(executor?: Executor): Promise<void> {
   // the executor surfaces non-zero exit via result.exitCode regardless.
   const result = await ex('which', ['claude'], {
     timeout: 5_000,
-    env: { PATH: process.env.PATH, HOME: process.env.HOME },
+    env: process.env,
   })
   if (result.exitCode !== 0 || !result.stdout.trim()) {
     throw new Error('claude CLI not found on PATH — install Claude Code or run `claude login` to make the binary available')
