@@ -861,3 +861,40 @@ kbd.cx-kbd {
 .cx-density-compact .cx-card-title { font-size: 22px; }
 .cx-density-compact .cx-card-sub { font-size: 12.5px; }
 .cx-density-compact .cx-prop { padding: 6px 8px; }
+
+/* ── Combobox (input + dropdown, replaces native <datalist>) ─────── */
+.cx-combobox {
+  position: relative;
+  width: 100%;
+}
+.cx-combobox-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--cx-panel);
+  border: 1px solid var(--cx-rule);
+  border-radius: var(--cx-radius);
+  box-shadow: 0 8px 24px -12px rgba(32,29,23,.18);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cx-combobox-option {
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  color: var(--cx-ink);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.cx-combobox-option:hover {
+  background: var(--cx-ink-10);
+}
+.cx-combobox-option[aria-selected="true"] {
+  background: var(--cx-accent-soft);
+  color: var(--cx-accent-ink);
+}
