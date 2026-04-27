@@ -80,7 +80,7 @@ function readStdin(): Promise<string> {
 interface IngestResult {
   path: string
   itemId: string | null
-  deduped: boolean
+  deduped?: boolean
   reason?: string
 }
 
