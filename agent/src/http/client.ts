@@ -24,6 +24,7 @@ import type {
   ClassifyRequest,
   ClassifyOutcome,
   TaxonomyInternalResponse,
+  PathsInternalResponse,
 } from './types'
 
 // Minimal Langfuse contract — only `.trace({ name, metadata })` is exercised.
@@ -399,6 +400,59 @@ export async function getTaxonomyInternal(): Promise<TaxonomyInternalResponse> {
   throw err
 }
 
+/**
+ * Fetch the confirmed-folder tree for Stage 2 (quick task 260427-h9w). Same
+ * retry / 4xx-throws / Error.cause envelope as `getTaxonomyInternal` — the
+ * Stage 2 worker treats a thrown error as "skip this batch" and lets the
+ * stale-reclaim path return items to pending_stage2 on the next cycle.
+ */
+export async function getPathsInternal(): Promise<PathsInternalResponse> {
+  const { url, key } = readEnv()
+  const endpoint = `${url}/api/paths/internal`
+
+  let lastStatus: number | undefined
+  let lastError: string | undefined
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response | undefined
+    try {
+      res = await globalThis.fetch(endpoint, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${key}` },
+      })
+    } catch (err) {
+      lastStatus = undefined
+      lastError = err instanceof Error ? err.message : String(err)
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+      break
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      return (await res.json()) as PathsInternalResponse
+    }
+
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      throw new Error(`paths fetch failed: ${res.status}`)
+    }
+
+    lastStatus = res.status
+    lastError = `HTTP ${res.status}`
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(backoffDelay(attempt))
+      continue
+    }
+  }
+
+  const err = new Error(
+    `paths fetch failed after ${MAX_ATTEMPTS} attempts (lastStatus=${lastStatus ?? 'network'}, lastError=${lastError ?? 'unknown'})`,
+  )
+  ;(err as Error & { cause?: unknown }).cause = { lastStatus, lastError }
+  throw err
+}
+
 // Re-export the shared types so callers can `import { postIngest, IngestRequest } from './client'`.
 export type {
   IngestRequest,
@@ -409,4 +463,5 @@ export type {
   ClassifyRequest,
   ClassifyOutcome,
   TaxonomyInternalResponse,
+  PathsInternalResponse,
 } from './types'

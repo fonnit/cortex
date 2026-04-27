@@ -105,12 +105,20 @@ export interface ClassifyAxis {
  *     by the route).
  *   - Stage 2 success: 'auto_file' | 'ignore' | 'uncertain' (terminal action;
  *     required by the route per D-auto-file / D-auto-ignore). When 'auto_file'
- *     fires AND all 3 axes are ≥ AUTO_FILE_THRESHOLD AND every value already
- *     exists in TaxonomyLabel, the route transitions status='filed'. When
- *     'ignore' fires AND confidence ≥ AUTO_IGNORE_THRESHOLD, status='ignored'.
+ *     fires AND all 3 axes are ≥ AUTO_FILE_THRESHOLD AND `path_confidence`
+ *     ≥ 0.85 AND the parent of `proposed_drive_path` already has ≥3 confirmed-
+ *     filed siblings, the route transitions status='filed'. When 'ignore'
+ *     fires AND confidence ≥ AUTO_IGNORE_THRESHOLD, status='ignored'.
  *
  * `confidence` (optional, top-level): Stage 2 may emit it explicitly for the
  * ignore path so the route doesn't have to fall back to max(axis confidences).
+ *
+ * `path_confidence` (optional, top-level — quick task 260427-h9w): Stage 2
+ * emits per-path confidence (0..1) so the route can gate auto-file on
+ * `path_confidence ≥ 0.85` AND parent-has-≥3-confirmed-siblings (replaces
+ * u47-3's allLabelsExist rule). Optional at the type level so older agent
+ * builds during rollout don't break the route — auto_file just won't fire
+ * without it (the route logs autoFileBlockedReason='missing_path_confidence').
  */
 export type ClassifyRequest =
   | {
@@ -126,6 +134,7 @@ export type ClassifyRequest =
       confidence?: number
       reason?: string
       proposed_drive_path?: string
+      path_confidence?: number
     }
   | {
       item_id: string
@@ -166,5 +175,19 @@ export interface TaxonomyInternalResponse {
   type: string[]
   from: string[]
   context: string[]
+}
+
+/**
+ * Response shape from `GET /api/paths/internal` (quick task 260427-h9w) — the
+ * requireApiKey-guarded surface that Stage 2 consumers fetch each batch.
+ *
+ * `paths` is a list of confirmed parent directories with file counts, sorted
+ * by `count` descending and capped at 50. Computed from
+ *   `SELECT confirmed_drive_path FROM Item WHERE status='filed' AND
+ *    confirmed_drive_path IS NOT NULL` then bucketed by parent (everything
+ * before the last `/`).
+ */
+export interface PathsInternalResponse {
+  paths: Array<{ parent: string; count: number }>
 }
 

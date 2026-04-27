@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/queue(.*)',            // Phase 5/7 — consumer polls queue (requireApiKey)
   '/api/classify(.*)',         // Phase 5/7 — consumer POSTs classification result (requireApiKey)
   '/api/taxonomy/internal(.*)',// Phase 7 — consumer reads taxonomy (requireApiKey)
+  '/api/paths/internal(.*)',   // h9w — consumer reads confirmed-path tree (requireApiKey)
   '/api/cron(.*)',             // Vercel cron — Drive resolve, embed, taxonomy merge (CRON_SECRET)
 ])
 
