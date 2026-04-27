@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { CxCombobox } from '@/components/ui/CxCombobox'
 
 interface Identity { id: string; name: string; type: string; email: string | null }
 type EditState = { id: string; name: string; type: string; email: string } | null
@@ -65,10 +66,6 @@ export function IdentityForm() {
 
   return (
     <>
-      <datalist id="cx-id-types">
-        {existingTypes.map(t => <option key={t} value={t} />)}
-      </datalist>
-
       <table className="cx-table">
         <thead>
           <tr>
@@ -84,7 +81,13 @@ export function IdentityForm() {
               {editState?.id === row.id ? (
                 <>
                   <td><input className="cx-prop-newinput" value={editState.name} onChange={e => setEditState(s => s ? { ...s, name: e.target.value } : s)} /></td>
-                  <td><input className="cx-prop-newinput" list="cx-id-types" value={editState.type} onChange={e => setEditState(s => s ? { ...s, type: e.target.value } : s)} /></td>
+                  <td>
+                    <CxCombobox
+                      options={existingTypes}
+                      value={editState.type}
+                      onChange={(next) => setEditState(s => s ? { ...s, type: next } : s)}
+                    />
+                  </td>
                   <td><input className="cx-prop-newinput" type="email" value={editState.email} onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)} /></td>
                   <td className="cx-right">
                     <button className="cx-linkbtn" onClick={handleEdit} disabled={busy}>save</button>
@@ -107,7 +110,13 @@ export function IdentityForm() {
           {addOpen && (
             <tr>
               <td><input className="cx-prop-newinput" placeholder="Name" autoFocus value={addOpen.name} onChange={e => setAddOpen(s => s ? { ...s, name: e.target.value } : s)} /></td>
-              <td><input className="cx-prop-newinput" list="cx-id-types" value={addOpen.type} onChange={e => setAddOpen(s => s ? { ...s, type: e.target.value } : s)} /></td>
+              <td>
+                <CxCombobox
+                  options={existingTypes}
+                  value={addOpen.type}
+                  onChange={(next) => setAddOpen(s => s ? { ...s, type: next } : s)}
+                />
+              </td>
               <td><input className="cx-prop-newinput" type="email" placeholder="Email (optional)" value={addOpen.email} onChange={e => setAddOpen(s => s ? { ...s, email: e.target.value } : s)} /></td>
               <td className="cx-right">
                 <button className="cx-linkbtn" onClick={handleAdd} disabled={busy || !addOpen.name.trim() || !addOpen.type.trim()}>save</button>

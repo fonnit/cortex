@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AxisGroup } from './AxisGroup'
+import { CxCombobox } from '@/components/ui/CxCombobox'
 
 export interface TriageItem {
   id: string
@@ -151,19 +152,16 @@ export function ExpandedCard({
 
       {identitySuggest && !identitySaved && (
         <div className="cx-card-reason">
-          <datalist id="cx-id-suggest-types">
-            {['owner', 'company', ...identities.map(i => i.type)].filter((v, i, a) => a.indexOf(v) === i).map(t => <option key={t} value={t} />)}
-          </datalist>
           <div className="cx-reason-label">add identity — {identitySuggest.name}</div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              className="cx-prop-newinput"
-              list="cx-id-suggest-types"
-              placeholder="type (e.g. company, partner)"
-              style={{ flex: 1, minWidth: 140 }}
-              value={identitySuggest.type}
-              onChange={e => setIdentitySuggest(s => s ? { ...s, type: e.target.value } : s)}
-            />
+            <div style={{ flex: 1, minWidth: 140 }}>
+              <CxCombobox
+                options={['owner', 'company', ...identities.map(i => i.type)].filter((v, i, a) => a.indexOf(v) === i)}
+                value={identitySuggest.type}
+                onChange={(next) => setIdentitySuggest(s => s ? { ...s, type: next } : s)}
+                placeholder="type (e.g. company, partner)"
+              />
+            </div>
             <input
               className="cx-prop-newinput"
               type="email"
