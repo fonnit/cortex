@@ -27,11 +27,17 @@ import { z } from 'zod'
 import { Semaphore } from './semaphore.js'
 import { invokeClaude } from './claude.js'
 import { buildStage2Prompt } from './prompts.js'
-import { getQueue, postClassify, getTaxonomyInternal } from '../http/client.js'
+import {
+  getQueue,
+  postClassify,
+  getTaxonomyInternal,
+  getPathsInternal,
+} from '../http/client.js'
 import type {
   QueueItem,
   ClassifyRequest,
   TaxonomyInternalResponse,
+  PathsInternalResponse,
 } from '../http/types.js'
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -64,12 +70,20 @@ const AxisSchema = z.object({
  * layout matches how /api/classify ClassifyBodySchema layers `decision` +
  * `axes`). `confidence` is optional — used for the ignore path so the route
  * doesn't have to fall back to max(axis confidences).
+ *
+ * Per quick task 260427-h9w: the schema now REQUIRES `path_confidence`
+ * (0..1) at the top level. The route gates auto_file on this value AND
+ * parent-has-≥3-confirmed-siblings — replacing u47-3's allLabelsExist rule.
+ * Missing/out-of-range path_confidence ⇒ schema parse fails ⇒ worker POSTs
+ * outcome:'error' (T-h9w-03 mitigation: Zod clamps the value at the agent
+ * boundary so Claude cannot bypass the threshold by emitting `9999`).
  */
 const Stage2ResultSchema = z.object({
   // All-3-axes contract enforced inline so a static grep can pin it.
   axes: z.object({ type: AxisSchema, from: AxisSchema, context: AxisSchema }),
   proposed_drive_path: z.string(),
   decision: z.enum(['auto_file', 'ignore', 'uncertain']),
+  path_confidence: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1).optional(),
 })
 
@@ -87,6 +101,13 @@ export interface Stage2Deps {
   postClassifyImpl?: typeof postClassify
   invokeClaudeImpl?: typeof invokeClaude
   getTaxonomyInternalImpl?: typeof getTaxonomyInternal
+  /**
+   * Quick task 260427-h9w. Fetches the confirmed-folder tree once per
+   * non-empty batch (alongside the taxonomy fetch). Same skip-batch
+   * semantics on failure: items stay in processing_stage2 and the queue's
+   * stale-reclaim returns them on the next poll cycle.
+   */
+  getPathsInternalImpl?: typeof getPathsInternal
 }
 
 export interface Stage2Worker {
@@ -99,6 +120,7 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
   const postClassifyFn = deps.postClassifyImpl ?? postClassify
   const invokeClaudeFn = deps.invokeClaudeImpl ?? invokeClaude
   const getTaxonomyInternalFn = deps.getTaxonomyInternalImpl ?? getTaxonomyInternal
+  const getPathsInternalFn = deps.getPathsInternalImpl ?? getPathsInternal
   const lf = deps.langfuse
 
   let stopped = false
@@ -122,6 +144,7 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
   const handleOne = async (
     item: QueueItem,
     taxonomy: TaxonomyInternalResponse,
+    paths: PathsInternalResponse,
     parentTraceId: string | null,
   ): Promise<void> => {
     const release = await sem.acquire()
@@ -141,11 +164,15 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
 
       let prompt: string
       try {
-        prompt = buildStage2Prompt(item, {
-          type: taxonomy.type,
-          from: taxonomy.from,
-          context: taxonomy.context,
-        })
+        prompt = buildStage2Prompt(
+          item,
+          {
+            type: taxonomy.type,
+            from: taxonomy.from,
+            context: taxonomy.context,
+          },
+          { paths: paths.paths },
+        )
       } catch (err) {
         await safePostClassify(postClassifyFn, lf, {
           item_id: item.id,
@@ -188,8 +215,12 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
           axes,
           proposed_drive_path: outcome.value.proposed_drive_path,
           // Forward the decision unchanged — the route enforces auto-action
-          // preconditions (cold-start guard, confidence threshold) server-side.
+          // preconditions (path-based gate, confidence threshold) server-side.
           decision: outcome.value.decision,
+          // Forward path_confidence — the route gates auto_file on
+          // path_confidence ≥ 0.85 AND parent-has-≥3-confirmed-siblings.
+          // Always present here because Stage2ResultSchema requires it.
+          path_confidence: outcome.value.path_confidence,
           // Forward optional top-level confidence when present (used by the
           // route's auto-ignore path; falls back to max(axis confidences)
           // when omitted).
@@ -299,8 +330,28 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
         continue
       }
 
+      // Fetch the confirmed-folder tree ONCE per non-empty batch (h9w).
+      // Same skip-batch semantics as the taxonomy fetch above — items stay
+      // in processing_stage2 and the stale-reclaim path returns them on
+      // the next poll cycle.
+      let paths: PathsInternalResponse
+      try {
+        paths = await getPathsInternalFn()
+      } catch (err) {
+        try {
+          lf.trace({
+            name: 'consumer-stage2-paths-fetch-failed',
+            metadata: { error: String(err), batch_size: items.length },
+          })
+        } catch {
+          /* ignore */
+        }
+        await cancellableSleep(POLL_INTERVAL_ITEMS_MS)
+        continue
+      }
+
       for (const item of items) {
-        const promise = handleOne(item, taxonomy, traceId)
+        const promise = handleOne(item, taxonomy, paths, traceId)
         inFlight.add(promise)
         promise.finally(() => inFlight.delete(promise)).catch(() => {})
       }

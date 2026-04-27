@@ -21,6 +21,7 @@ import type {
   ClassifyOutcome,
   QueueResponse,
   TaxonomyInternalResponse,
+  PathsInternalResponse,
 } from '../src/http/types'
 import type { ClaudeOutcome } from '../src/consumer/claude'
 
@@ -63,9 +64,18 @@ const TAXONOMY: TaxonomyInternalResponse = {
 
 const EMPTY_TAXONOMY: TaxonomyInternalResponse = { type: [], from: [], context: [] }
 
+// h9w: Stage 2 worker now also fetches the confirmed-path tree once per
+// non-empty batch. Tests inject a small fixture so the worker doesn't try to
+// hit the real network.
+const PATHS_RESPONSE: PathsInternalResponse = {
+  paths: [{ parent: '/invoice/acme/finance/', count: 5 }],
+}
+
 const okStage2Outcome = (): ClaudeOutcome<{
   axes: { type: { value: string | null; confidence: number }; from: { value: string | null; confidence: number }; context: { value: string | null; confidence: number } }
   proposed_drive_path: string
+  decision: 'auto_file' | 'ignore' | 'uncertain'
+  path_confidence: number
 }> => ({
   kind: 'ok',
   value: {
@@ -75,6 +85,13 @@ const okStage2Outcome = (): ClaudeOutcome<{
       context: { value: 'finance', confidence: 0.85 },
     },
     proposed_drive_path: '/invoice/acme/finance/x.pdf',
+    // h9w: schema requires path_confidence + decision at the top level. Use
+    // 'uncertain' here so the existing Test 2 assertion (which doesn't include
+    // a decision in the expected payload) doesn't get a noisy diff — toEqual
+    // ignores undefined fields, but explicit 'uncertain' matches the legacy
+    // CERTAIN/UNCERTAIN fallback flow these tests exercise.
+    decision: 'uncertain',
+    path_confidence: 0.5,
   },
   durationMs: 12,
   exitCode: 0,
@@ -138,6 +155,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -167,12 +186,16 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
 
     expect(postClassifyImpl).toHaveBeenCalledTimes(1)
     const payload = postClassifyImpl.mock.calls[0]![0] as ClassifyRequest
+    // u47: decision is now part of the success payload. h9w: path_confidence
+    // is also part of the success payload. Use toEqual with the full shape.
     expect(payload).toEqual({
       item_id: 's2_happy',
       stage: 2,
@@ -183,6 +206,8 @@ describe('runStage2Worker', () => {
         context: { value: 'finance', confidence: 0.85 },
       },
       proposed_drive_path: '/invoice/acme/finance/x.pdf',
+      decision: 'uncertain',
+      path_confidence: 0.5,
     })
   })
 
@@ -206,6 +231,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -243,6 +270,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     // First poll resolves and dispatches.
@@ -281,6 +310,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -310,6 +341,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -353,6 +386,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -389,6 +424,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -419,6 +456,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     await Promise.resolve()
@@ -489,6 +528,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: stage2Invoke as never,
       postClassifyImpl: stage2Post as never,
       getTaxonomyInternalImpl: stage2Tax as never,
+      // h9w: stub the new path-tree fetch.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -527,6 +568,8 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
+      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 5; i++) await Promise.resolve()

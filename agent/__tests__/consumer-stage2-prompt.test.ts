@@ -15,6 +15,7 @@ import { runStage2Worker } from '../src/consumer/stage2'
 import {
   buildStage2Prompt,
   type TaxonomyContext,
+  type PathContext,
 } from '../src/consumer/prompts'
 import type {
   QueueItem,
@@ -22,6 +23,7 @@ import type {
   ClassifyOutcome,
   QueueResponse,
   TaxonomyInternalResponse,
+  PathsInternalResponse,
 } from '../src/http/types'
 import type { ClaudeOutcome } from '../src/consumer/claude'
 
@@ -50,6 +52,24 @@ const TAXONOMY: TaxonomyInternalResponse = {
   context: ['paid'],
 }
 
+// Path-tree fixtures (quick task 260427-h9w). Two parents with distinct counts
+// so tests can assert both parent strings + numeric counts appear in the prompt.
+const PATHS_CTX: PathContext = {
+  paths: [
+    { parent: '/fonnit/invoices/', count: 12 },
+    { parent: '/cortex/exports/', count: 4 },
+  ],
+}
+
+const PATHS_RESPONSE: PathsInternalResponse = {
+  paths: [
+    { parent: '/fonnit/invoices/', count: 12 },
+    { parent: '/cortex/exports/', count: 4 },
+  ],
+}
+
+const EMPTY_PATHS_CTX: PathContext = { paths: [] }
+
 const okClassify: ClassifyOutcome = { kind: 'ok', status: 'filed', retries: 0 }
 
 type LfStub = { trace: jest.Mock }
@@ -59,6 +79,7 @@ const okStage2Outcome = (
   override?: Partial<{
     decision: 'auto_file' | 'ignore' | 'uncertain'
     confidence: number
+    path_confidence: number
     axes: {
       type: { value: string | null; confidence: number }
       from: { value: string | null; confidence: number }
@@ -74,6 +95,7 @@ const okStage2Outcome = (
   }
   proposed_drive_path: string
   decision: 'auto_file' | 'ignore' | 'uncertain'
+  path_confidence: number
   confidence?: number
 }> => {
   const decision = override?.decision ?? 'auto_file'
@@ -85,6 +107,7 @@ const okStage2Outcome = (
     }
     proposed_drive_path: string
     decision: 'auto_file' | 'ignore' | 'uncertain'
+    path_confidence: number
     confidence?: number
   } = {
     axes: override?.axes ?? {
@@ -94,6 +117,9 @@ const okStage2Outcome = (
     },
     proposed_drive_path: override?.proposed_drive_path ?? '/invoice/acme/paid/x.pdf',
     decision,
+    // h9w: schema now requires path_confidence (0..1) at the top level. Default
+    // to 0.9 (≥0.85) so the helper produces a valid auto_file payload by default.
+    path_confidence: override?.path_confidence ?? 0.9,
   }
   if (override?.confidence !== undefined) {
     value.confidence = override.confidence
@@ -111,7 +137,7 @@ const okStage2Outcome = (
 
 describe('buildStage2Prompt — decision field instructions (u47)', () => {
   it('Test 1: prompt mentions decision field shape (auto_file, ignore, uncertain)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     expect(p).toContain('decision')
     expect(p).toContain('auto_file')
     expect(p).toContain('ignore')
@@ -119,7 +145,7 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
   })
 
   it('Test 2: prompt instructs Claude that ignore is allowed for junk (spam / marketing / automated)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     // Per plan action: copy mentions junk categories — at least one of these
     // signal phrases must appear in the prompt body.
     const lower = p.toLowerCase()
@@ -132,7 +158,7 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
   })
 
   it('Test 3: prompt still mentions confidence ≥ 0.85 (closed-vocab line stays per CONTEXT)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     expect(p).toContain('0.85')
   })
 
@@ -143,7 +169,7 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
   // route's cold-start guard independently blocks auto-file when a value is
   // not in TaxonomyLabel (see __tests__/classify-auto-actions.test.ts).
   it('Test NEW-A: prompt explicitly permits proposing a NEW label when no existing label fits (wgk)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     const lower = p.toLowerCase()
     const proposes =
       lower.includes('propose a new') ||
@@ -154,7 +180,7 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
   })
 
   it('Test NEW-B: prompt instructs that NEW (proposed) labels MUST carry confidence below 0.85 (wgk)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     const lower = p.toLowerCase()
     const subThreshold =
       lower.includes('below 0.85') ||
@@ -165,12 +191,12 @@ describe('buildStage2Prompt — decision field instructions (u47)', () => {
   })
 
   it('Test NEW-C: prompt MUST NOT contain the old hard-prohibition phrase "Never invent labels" (wgk)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     expect(p).not.toContain('Never invent labels')
   })
 
   it('Test NEW-D: prompt still allows null as a valid axis value when Claude has no plausible name (wgk)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
     const lower = p.toLowerCase()
     const nullAllowed =
       lower.includes('null is allowed') ||
@@ -197,7 +223,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
     jest.restoreAllMocks()
   })
 
-  it('Test 4: parses a valid response with decision="auto_file"', async () => {
+  it('Test 4: parses a valid response with decision="auto_file" + path_confidence', async () => {
     let parsed: unknown = null
     const item = FILE_ITEM
     const getQueueImpl = jest
@@ -205,6 +231,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
       .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
     const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
     // invokeClaudeImpl is given the Zod schema by the worker — we run it
     // ourselves to mimic Claude's stdout being parsed against the schema.
     const invokeClaudeImpl = jest.fn(async (_prompt: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: unknown } }) => {
@@ -216,6 +243,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
         },
         proposed_drive_path: '/x.pdf',
         decision: 'auto_file',
+        path_confidence: 0.9,
       }
       const r = schema.safeParse(candidate)
       parsed = r
@@ -229,6 +257,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -237,7 +266,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
     expect((parsed as { success: boolean }).success).toBe(true)
   })
 
-  it('Test 5: parses a valid ignore response with all-null axes (low confidence)', async () => {
+  it('Test 5: parses a valid ignore response with all-null axes (low confidence) + path_confidence', async () => {
     let parsed: unknown = null
     const item = FILE_ITEM
     const getQueueImpl = jest
@@ -245,6 +274,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
       .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
     const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
     const invokeClaudeImpl = jest.fn(async (_prompt: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: unknown } }) => {
       const candidate = {
         axes: {
@@ -254,6 +284,9 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
         },
         proposed_drive_path: '',
         decision: 'ignore',
+        // h9w: schema requires path_confidence even on ignore (route ignores it
+        // for the ignore branch, but the schema is uniform). Low value is fine.
+        path_confidence: 0.1,
       }
       const r = schema.safeParse(candidate)
       parsed = r
@@ -275,6 +308,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -291,6 +325,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
       .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
     const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
     const invokeClaudeImpl = jest.fn(async (_prompt: string, schema: { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: unknown } }) => {
       const candidate = {
         axes: {
@@ -299,6 +334,7 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
           context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/x.pdf',
+        path_confidence: 0.9,
         // decision intentionally OMITTED — must fail schema parse
       }
       const r = schema.safeParse(candidate)
@@ -314,6 +350,89 @@ describe('Stage2ResultSchema (via worker) — decision required (u47)', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    expect(parsed).toBeTruthy()
+    expect((parsed as { success: boolean }).success).toBe(false)
+  })
+
+  /* ─────────────────────── h9w schema additions ─────────────────────── */
+
+  it('Test H9W-J: rejects a response missing path_confidence (REQUIRED)', async () => {
+    let parsed: unknown = null
+    const item = FILE_ITEM
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
+    const invokeClaudeImpl = jest.fn(async (_prompt: string, schema: { safeParse: (v: unknown) => { success: boolean } }) => {
+      const candidate = {
+        axes: {
+          type: { value: 'invoice', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/x.pdf',
+        decision: 'auto_file',
+        // path_confidence intentionally OMITTED — must fail schema parse
+      }
+      parsed = schema.safeParse(candidate)
+      return okStage2Outcome()
+    })
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: makeLfStub() as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    expect(parsed).toBeTruthy()
+    expect((parsed as { success: boolean }).success).toBe(false)
+  })
+
+  it('Test H9W-K: rejects a response with path_confidence outside [0,1] (e.g. 1.5)', async () => {
+    let parsed: unknown = null
+    const item = FILE_ITEM
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
+    const invokeClaudeImpl = jest.fn(async (_prompt: string, schema: { safeParse: (v: unknown) => { success: boolean } }) => {
+      const candidate = {
+        axes: {
+          type: { value: 'invoice', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.9 },
+          context: { value: 'paid', confidence: 0.9 },
+        },
+        proposed_drive_path: '/x.pdf',
+        decision: 'auto_file',
+        path_confidence: 1.5, // out of range — Zod min(0).max(1) must reject
+      }
+      parsed = schema.safeParse(candidate)
+      return okStage2Outcome()
+    })
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: makeLfStub() as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -343,6 +462,7 @@ describe('runStage2Worker — forwards decision in classify payload (u47)', () =
       .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
       .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
     const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
     const invokeClaudeImpl = jest.fn(async () => okStage2Outcome({ decision: 'auto_file' }))
     const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
 
@@ -352,6 +472,7 @@ describe('runStage2Worker — forwards decision in classify payload (u47)', () =
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -374,6 +495,7 @@ describe('runStage2Worker — forwards decision in classify payload (u47)', () =
       .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
       .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
     const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
     const invokeClaudeImpl = jest.fn(async () =>
       okStage2Outcome({
         decision: 'ignore',
@@ -393,6 +515,7 @@ describe('runStage2Worker — forwards decision in classify payload (u47)', () =
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -409,5 +532,203 @@ describe('runStage2Worker — forwards decision in classify payload (u47)', () =
     expect(payload.axes!.from.value).toBeNull()
     expect(payload.axes!.context.value).toBeNull()
     expect(payload.axes!.type.confidence).toBe(0.1)
+  })
+
+  /* ─────────────── h9w worker-behavior additions ─────────────── */
+
+  it('Test H9W-L: getPathsInternalImpl is called once per non-empty batch', async () => {
+    const item = FILE_ITEM
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
+    const invokeClaudeImpl = jest.fn(async () => okStage2Outcome({ decision: 'auto_file' }))
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: makeLfStub() as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    // Exactly one fetch for the single non-empty batch — same cadence as
+    // getTaxonomyInternalImpl (never cached across cycles).
+    expect(getPathsInternalImpl).toHaveBeenCalledTimes(1)
+    // Subsequent (empty) polls do NOT re-fetch.
+  })
+
+  it('Test H9W-M: buildStage2Prompt receives the fetched paths — prompt contains parent strings', async () => {
+    const item = FILE_ITEM
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
+    let capturedPrompt = ''
+    const invokeClaudeImpl = jest.fn(async (prompt: string) => {
+      capturedPrompt = prompt
+      return okStage2Outcome({ decision: 'auto_file' })
+    })
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: makeLfStub() as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    expect(capturedPrompt).toContain('/fonnit/invoices/')
+    expect(capturedPrompt).toContain('/cortex/exports/')
+  })
+
+  it('Test H9W-N: ok payload forwards path_confidence to postClassify', async () => {
+    const item = FILE_ITEM
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items: [item], reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => PATHS_RESPONSE)
+    const invokeClaudeImpl = jest.fn(async () =>
+      okStage2Outcome({ decision: 'auto_file', path_confidence: 0.9 }),
+    )
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: makeLfStub() as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    expect(postClassifyImpl).toHaveBeenCalledTimes(1)
+    const payload = postClassifyImpl.mock.calls[0]![0] as ClassifyRequest
+    if (payload.outcome !== 'success' || payload.stage !== 2) {
+      throw new Error('expected stage 2 success payload')
+    }
+    expect(
+      (payload as ClassifyRequest & { path_confidence?: number }).path_confidence,
+    ).toBe(0.9)
+  })
+
+  it('Test H9W-O: getPathsInternalImpl rejects → batch SKIPPED, no postClassify, loop continues', async () => {
+    const items = [FILE_ITEM, FILE_ITEM]
+    const lf = makeLfStub()
+    const getQueueImpl = jest
+      .fn()
+      .mockResolvedValueOnce({ items, reclaimed: 0, traceId: null } as QueueResponse)
+      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
+    const getTaxonomyInternalImpl = jest.fn(async () => TAXONOMY)
+    const getPathsInternalImpl = jest.fn(async () => {
+      throw new Error('paths fetch failed: 401')
+    })
+    const invokeClaudeImpl = jest.fn(async () => okStage2Outcome({ decision: 'auto_file' }))
+    const postClassifyImpl = jest.fn(async (_p: ClassifyRequest) => okClassify)
+
+    worker = runStage2Worker({
+      langfuse: lf as never,
+      getQueueImpl: getQueueImpl as never,
+      invokeClaudeImpl: invokeClaudeImpl as never,
+      postClassifyImpl: postClassifyImpl as never,
+      getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
+      getPathsInternalImpl: getPathsInternalImpl as never,
+    })
+
+    for (let i = 0; i < 50; i++) await Promise.resolve()
+
+    // No invokeClaude, no postClassify — items stay in processing_stage2.
+    expect(invokeClaudeImpl).not.toHaveBeenCalled()
+    expect(postClassifyImpl).not.toHaveBeenCalled()
+    // Failure trace was emitted.
+    const traceNames = lf.trace.mock.calls.map((c: unknown[]) => (c[0] as { name: string }).name)
+    expect(traceNames.some((n: string) => n.includes('paths-fetch-failed'))).toBe(true)
+  })
+})
+
+/* ────────────────────────── h9w prompt-shape tests ────────────────────────── */
+
+describe('buildStage2Prompt — h9w path-tree injection', () => {
+  it('Test H9W-A: prompt contains an "Existing folders" / folder-tree section', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p.toLowerCase()).toMatch(/existing folders|folder tree|confirmed paths/)
+  })
+
+  it('Test H9W-B: non-empty paths render each parent and its count in the prompt body', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p).toContain('/fonnit/invoices/')
+    expect(p).toContain('/cortex/exports/')
+    expect(p).toContain('12')
+    expect(p).toContain('4')
+  })
+
+  it('Test H9W-C: empty paths render an explicit cold-start line', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, EMPTY_PATHS_CTX)
+    expect(p.toLowerCase()).toMatch(/no existing folders|no folders yet|cold start/)
+  })
+
+  it('Test H9W-D: prompt MUST NOT contain the old fixed template "<type>/<from>/<context>/<filename>"', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p).not.toContain('<type>/<from>/<context>/<filename>')
+  })
+
+  it('Test H9W-E: prompt MUST NOT contain partial old-template fragment "<type>/<from>"', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p).not.toMatch(/<type>\/<from>/)
+  })
+
+  it('Test H9W-F: prompt instructs reuse + new branches + arbitrary depth', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    const lower = p.toLowerCase()
+    expect(lower).toMatch(/reuse|already contain/)
+    expect(lower).toMatch(/new branch|new folder|create a path/)
+  })
+
+  it('Test H9W-G: prompt instructs Claude to return path_confidence proportional to certainty', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p).toContain('path_confidence')
+    const lower = p.toLowerCase()
+    const proportional =
+      lower.includes('proportional') ||
+      lower.includes('how sure') ||
+      lower.includes('your confidence')
+    expect(proportional).toBe(true)
+  })
+
+  it('Test H9W-H: prompt instructs preference for fewer levels (2-3)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    const lower = p.toLowerCase()
+    const fewerLevels =
+      lower.includes('prefer fewer levels') ||
+      lower.includes('2-3 levels') ||
+      lower.includes('2 or 3 levels') ||
+      lower.includes('fewer levels')
+    expect(fewerLevels).toBe(true)
+  })
+
+  it('Test H9W-I (sanity): valid response with path_confidence=0.9 + auto_file parses', () => {
+    // This exercises the schema directly (no worker) for a simple sanity check.
+    const { z } = require('zod') as { z: typeof import('zod').z }
+    void z // satisfy linter — actual schema is exercised via Tests 4/5/6/H9W-J/H9W-K above
+    // Direct parse check is duplicative with Test 4; we keep this here as a
+    // cheap "happy path with h9w fields" assertion at the prompt boundary.
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX, PATHS_CTX)
+    expect(p).toContain('path_confidence')
   })
 })

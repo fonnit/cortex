@@ -33,6 +33,21 @@ export interface TaxonomyContext {
   context: string[]
 }
 
+/**
+ * Existing confirmed-folder tree injected into Stage 2 prompts (quick task
+ * 260427-h9w). Each entry is a parent directory (everything before the last
+ * `/` of a `confirmed_drive_path`) plus the count of confirmed-filed items
+ * underneath it. The prompt instructs Claude to reuse a parent if this item
+ * belongs there, or to propose a new branch otherwise.
+ *
+ * Empty `paths` is the cold-start signal — the prompt switches to "no
+ * existing folders yet" copy so Claude doesn't try to invent fictional
+ * matches.
+ */
+export interface PathContext {
+  paths: Array<{ parent: string; count: number }>
+}
+
 /* ─────────────────────────────────────────────────────────────────────── */
 /* Stage 1                                                                  */
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -73,14 +88,24 @@ export function buildStage1Prompt(item: QueueItem): string {
 /* Stage 2                                                                  */
 /* ─────────────────────────────────────────────────────────────────────── */
 
-export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): string {
+export function buildStage2Prompt(
+  item: QueueItem,
+  taxonomy: TaxonomyContext,
+  paths: PathContext,
+): string {
   const itemBlock = buildStage2ItemBlock(item)
   // Per quick task 260426-u47 (D-auto-file, D-auto-ignore): Stage 2 emits an
   // explicit `decision` field so it can finalize an item without human triage.
   // Per quick task 260426-wgk: the closed-vocab rule has been RELAXED — Claude
   // may now propose a brand-new label name on any axis when no existing label
-  // is a confident match, with confidence < 0.85 so the route's cold-start
-  // guard naturally routes the item to human review (defense in depth).
+  // is a confident match, with confidence < 0.85 so the route's path-based
+  // gate naturally routes the item to human review (defense in depth).
+  // Per quick task 260427-h9w: the fixed `<type>/<from>/<context>/<filename>`
+  // path template is REPLACED by a model-defined evolving folder tree. Claude
+  // sees existing confirmed parents (with file counts) and proposes a path
+  // of arbitrary depth — reusing existing folders or branching when needed.
+  // Auto-file gates on `path_confidence ≥ 0.85` AND parent-has-≥3-siblings,
+  // both of which the route enforces server-side.
   return [
     `Classify this item: ${itemBlock}.`,
     '',
@@ -90,15 +115,23 @@ export function buildStage2Prompt(item: QueueItem, taxonomy: TaxonomyContext): s
     `Context axis: ${listOrNoneYet(taxonomy.context)}`,
     '',
     'Propose 3-axis labels. If an existing label from the lists above is a confident match (confidence ≥ 0.85), use it. If no existing label fits, you may propose a new label name on that axis — pick a short lowercased name (hyphen- or underscore-separated) following the style of the existing labels — but mark it with confidence below 0.85 so a human can review and approve the new label before it is added to the taxonomy. If you have no plausible label for an axis, value may be null with low confidence.',
-    'Compute proposed_drive_path: e.g., "/<type>/<from>/<context>/<filename>" using your best mapping.',
+    '',
+    'Existing folders (parents that already contain confirmed items, by file count):',
+    renderPathsBlock(paths),
+    '',
+    'Pick a proposed_drive_path:',
+    '- Reuse one of the parents above if this item belongs there. Append a filename.',
+    '- If no parent fits, propose a new branch — but prefer fewer levels (2-3) over deeply nested paths.',
+    '- The path can be of arbitrary depth; do not force any fixed shape.',
+    'Return path_confidence (0..1) proportional to how sure you are about the placement.',
     '',
     'Decide one of:',
-    '- auto_file: you are confident across all 3 axes ≥ 0.85 AND every value is in the lists above (we will file the item without human review).',
+    '- auto_file: you are confident across all 3 axes ≥ 0.85 AND confident the path placement is correct (path_confidence ≥ 0.85). The route will only file when the chosen parent already has 3+ confirmed siblings.',
     '- ignore: junk that does not deserve a label — spam, marketing emails, automated security alerts, installer files, etc. (we will mark it ignored without human review).',
     '- uncertain: anything else (a human will triage).',
     'If decision="ignore", axes may be null with low confidence — we trust the ignore signal.',
     '',
-    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string, "decision":"auto_file"|"ignore"|"uncertain"}.',
+    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string, "path_confidence":0..1, "decision":"auto_file"|"ignore"|"uncertain"}.',
   ].join('\n')
 }
 
@@ -159,4 +192,18 @@ function stringOrNone(v: unknown): string {
 function listOrNoneYet(items: string[]): string {
   if (!items || items.length === 0) return '(none yet)'
   return items.join(', ')
+}
+
+/**
+ * Render the existing-folder block for the Stage 2 prompt. Non-empty: bullet
+ * list of `"<parent>" (<count> items)` lines. Empty: explicit cold-start
+ * line so Claude doesn't try to invent matches against the empty tree.
+ */
+function renderPathsBlock(paths: PathContext): string {
+  if (!paths.paths || paths.paths.length === 0) {
+    return '  (no existing folders yet — propose any path you think makes sense; low path_confidence is fine.)'
+  }
+  return paths.paths
+    .map((p) => `  - "${p.parent}" (${p.count} items)`)
+    .join('\n')
 }
