@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: ingest-rearchitect
 status: code_complete_pending_acceptance
 stopped_at: v1.1 code-complete (4 phases, 8 plans, 32 requirements). Operator acceptance pending — see .planning/phases/08-operational-acceptance/RUNBOOK.md.
-last_updated: "2026-04-27T19:30:00.000Z"
-last_activity: 2026-04-27 — Completed quick task 260427-tlk: base-taxonomy seed + triage-confirm bug fixes (88 labels, 277 anchors, 38 stable folders, auto-file verified)
+last_updated: "2026-04-28T12:14:11.867Z"
+last_activity: 2026-04-28 — Completed quick task 260428-jrt: Stage 1 removal + ingest routing change (size-based routing only; no LLM relevance gate)
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25 — v1.1 marked shipped)
 Phase: All v1.1 phases complete (5–8)
 Plan: —
 Status: Code-complete; live operator acceptance pending
-Last activity: 2026-04-27 — Completed quick task 260427-h9w: model-defined evolving folder structure (replaces fixed type/from/context template; auto-file now gates on parent-≥3-siblings + path_confidence)
+Last activity: 2026-04-28 — Completed quick task 260428-jrt: Stage 1 removal + ingest routing change (size-based routing only; no LLM relevance gate)
 
 Progress: [██████████] 100% (v1.1 — 8/8 plans)
 
@@ -79,6 +79,7 @@ v1.1 decisions all marked ✓ Shipped:
 | 260427-fpx | CxCombobox replaces datalist; cx-* styled, custom-value support, Playwright-verified | 2026-04-27 | dd2c64b | [260427-fpx-custom-combobox-input-dropdown-replaces-](./quick/260427-fpx-custom-combobox-input-dropdown-replaces-/) |
 | 260427-h9w | Model-defined evolving folder structure: paths-internal endpoint + Stage 2 path_confidence + parent-≥3-siblings auto-file gate (replaces allLabelsExist) | 2026-04-27 | cf9781a, 2260988, 04ade42 | [260427-h9w-model-defined-evolving-folder-structure-](./quick/260427-h9w-model-defined-evolving-folder-structure-/) |
 | 260427-tlk | Base-taxonomy seed (intent-driven archive) + triage-confirm bug fixes (TaxonomyLabel growth + status='filed' transition + path carry); auto-file verified via 8-file smoke test | 2026-04-27 | c291311, 42520f6 | [260427-tlk-base-taxonomy-seed](./quick/260427-tlk-base-taxonomy-seed/) |
+| 260428-jrt | Stage 1 removal + ingest routing change (`<1MiB` → `pending_stage2`; `≥1MiB`/unknown → `uncertain` triage). Drop `runStage1Worker`, `consumer/stage1.ts`, `buildStage1Prompt`, Stage 1 tests. Rename `STAGE1_MIN_SIZE_BYTES` → `TRIAGE_MIN_SIZE_BYTES`. | 2026-04-28 | 0b9d32c, 0dbc534 | [260428-jrt-stage-1-removal-ingest-routing-change-fi](./quick/260428-jrt-stage-1-removal-ingest-routing-change-fi/) |
 
 ## Session Continuity
 
