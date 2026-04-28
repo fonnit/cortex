@@ -3,7 +3,7 @@ import { z } from 'zod'
 import Langfuse from 'langfuse'
 import { prisma } from '@/lib/prisma'
 import { requireApiKey } from '@/lib/api-key'
-import { QUEUE_STATUSES, STAGE1_MIN_SIZE_BYTES } from '@/lib/queue-config'
+import { QUEUE_STATUSES, TRIAGE_MIN_SIZE_BYTES } from '@/lib/queue-config'
 
 /**
  * Locked single-operator user id. Multi-user is explicitly out of scope for v1.1
@@ -41,18 +41,22 @@ const IngestBodySchema = z
   )
 
 /**
- * Routing decision (quick task 260426-u47, D-stage1-routing).
+ * Routing decision (quick task 260428-jrt, D-stage1-removal).
  *
- * Decides the initial Item.status at ingest time so that small / metadata-only
- * items skip Stage 1 (the expensive relevance gate) and go straight to Stage 2.
+ * Decides the initial Item.status at ingest time. Stage 1 was removed
+ * (see plan 260428-jrt): small / metadata-only items go straight to Stage 2,
+ * and large or unknown-size items go to triage (status='uncertain') so a
+ * human handles them — Stage 2's `claude -p` Read tool budget can't read
+ * content beyond ~1 MiB anyway.
  *
  * Rules:
- *   - source='downloads': size_bytes > STAGE1_MIN_SIZE_BYTES → PENDING_STAGE_1.
+ *   - source='downloads': size_bytes > TRIAGE_MIN_SIZE_BYTES → UNCERTAIN.
  *     If size_bytes is undefined (unknown — could be huge), default to
- *     PENDING_STAGE_1 (safe default that preserves the v1.1 behavior for
- *     size-less items).
+ *     UNCERTAIN (defensive default flipped from the pre-jrt rule: with no
+ *     Stage 1 worker, unknown-size items must land in human triage rather
+ *     than queue for a worker that no longer exists).
  *   - source='gmail': inspect source_metadata.attachments. If any attachment
- *     has a numeric size_bytes > STAGE1_MIN_SIZE_BYTES → PENDING_STAGE_1.
+ *     has a numeric size_bytes > TRIAGE_MIN_SIZE_BYTES → UNCERTAIN.
  *     Otherwise (no attachments / all small / malformed) → PENDING_STAGE_2.
  *
  * Defensive (T-u47-01): malformed source_metadata.attachments (non-array,
@@ -63,14 +67,14 @@ function computeInitialStatus(input: {
   source: 'downloads' | 'gmail'
   size_bytes?: number
   source_metadata?: Record<string, unknown>
-}): typeof QUEUE_STATUSES.PENDING_STAGE_1 | typeof QUEUE_STATUSES.PENDING_STAGE_2 {
+}): typeof QUEUE_STATUSES.PENDING_STAGE_2 | typeof QUEUE_STATUSES.UNCERTAIN {
   if (input.source === 'downloads') {
-    if (typeof input.size_bytes === 'number' && input.size_bytes > STAGE1_MIN_SIZE_BYTES) {
-      return QUEUE_STATUSES.PENDING_STAGE_1
+    if (typeof input.size_bytes === 'number' && input.size_bytes > TRIAGE_MIN_SIZE_BYTES) {
+      return QUEUE_STATUSES.UNCERTAIN
     }
     if (input.size_bytes === undefined) {
-      // Unknown size — treat as "potentially large" and route through Stage 1.
-      return QUEUE_STATUSES.PENDING_STAGE_1
+      // Unknown size — route to triage so a human handles it (no Stage 1 worker exists).
+      return QUEUE_STATUSES.UNCERTAIN
     }
     return QUEUE_STATUSES.PENDING_STAGE_2
   }
@@ -83,9 +87,9 @@ function computeInitialStatus(input: {
   const hasLarge = attachments.some((a) => {
     if (a === null || typeof a !== 'object') return false
     const sz = (a as Record<string, unknown>).size_bytes
-    return typeof sz === 'number' && sz > STAGE1_MIN_SIZE_BYTES
+    return typeof sz === 'number' && sz > TRIAGE_MIN_SIZE_BYTES
   })
-  return hasLarge ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
+  return hasLarge ? QUEUE_STATUSES.UNCERTAIN : QUEUE_STATUSES.PENDING_STAGE_2
 }
 
 export async function POST(request: NextRequest) {
@@ -179,10 +183,12 @@ export async function POST(request: NextRequest) {
       ...(file_path ? { file_path } : {}),
     }
 
-    // Routing decision (quick task 260426-u47, D-stage1-routing).
-    // Small / metadata-only items skip Stage 1 (the expensive relevance gate)
-    // and go straight to Stage 2. The decision is observable per-item via the
-    // `route-decision` Langfuse span so we can audit which items took which path.
+    // Routing decision (quick task 260428-jrt). Small / metadata-only items
+    // go straight to Stage 2; large or unknown-size items go to triage
+    // (status='uncertain'). Stage 1 was removed because Stage 2's
+    // `decision='ignore'` already handles relevance signals. The decision is
+    // observable per-item via the `route-decision` Langfuse span so we can
+    // audit which items took which path.
     const routeSpan = t.span({
       name: 'route-decision',
       input: { source, size_bytes },

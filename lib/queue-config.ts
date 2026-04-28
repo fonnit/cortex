@@ -16,18 +16,32 @@ export const TERMINAL_ERROR_STATUS = 'error' as const
 export const QUEUE_TRACE_KEY = 'queue' as const
 
 /**
- * Items strictly greater than this go through Stage 1 (relevance gate); items
- * ≤ this skip straight to Stage 2. See quick task 260426-u47 (D-stage1-routing).
+ * Items strictly greater than this go straight to triage (status='uncertain');
+ * smaller items go to Stage 2 (status='pending_stage2'). See quick task
+ * 260428-jrt — Stage 1 was removed because Stage 2's `decision='ignore'`
+ * already handles relevance signals, and large items (≥ 1 MiB) always went
+ * to triage anyway because Stage 2's `claude -p` Read tool budget can't
+ * read content beyond ~1 MiB.
  *
  * Exactly 1 MiB (1024 * 1024 = 1_048_576) — NOT 1_000_000. The threshold is
- * strict-greater-than: `size_bytes > STAGE1_MIN_SIZE_BYTES`, so a file at
- * exactly 1 MiB skips Stage 1.
+ * strict-greater-than: `size_bytes > TRIAGE_MIN_SIZE_BYTES`, so a file at
+ * exactly 1 MiB still goes to Stage 2.
  */
-export const STAGE1_MIN_SIZE_BYTES = 1_048_576
+export const TRIAGE_MIN_SIZE_BYTES = 1_048_576
 
 /** Status string values used by the queue state machine. Additive — sit alongside existing v1.0 values. */
 export const QUEUE_STATUSES = {
+  /**
+   * Retained for back-compat with in-flight items and the /api/queue
+   * legacy-reclaim path; new ingests no longer produce this status
+   * (quick task 260428-jrt).
+   */
   PENDING_STAGE_1: 'pending_stage1',
+  /**
+   * Retained for back-compat with in-flight items and the /api/queue
+   * legacy-reclaim path; new ingests no longer produce this status
+   * (quick task 260428-jrt).
+   */
   PROCESSING_STAGE_1: 'processing_stage1',
   PENDING_STAGE_2: 'pending_stage2',
   PROCESSING_STAGE_2: 'processing_stage2',

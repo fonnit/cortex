@@ -1,18 +1,19 @@
 /**
- * POST /api/ingest routing tests — quick task 260426-u47.
+ * POST /api/ingest routing tests — quick task 260428-jrt.
  *
- * Validates the routing decision (Stage 1 vs straight-to-Stage 2) at ingest time
- * per CONTEXT decision D-stage1-routing:
+ * Validates the routing decision at ingest time after Stage 1 removal:
  *
- *   Stage 1 (relevance gate) runs only when:
- *     - source = 'downloads' AND size_bytes > STAGE1_MIN_SIZE_BYTES (1 MiB), OR
- *     - source = 'gmail' AND has at least one attachment with
- *       size_bytes > STAGE1_MIN_SIZE_BYTES.
+ *   New rule (no Stage 1 worker exists):
+ *     - source = 'downloads' AND size_bytes > TRIAGE_MIN_SIZE_BYTES (1 MiB) → status='uncertain'
+ *     - source = 'downloads' AND size_bytes undefined                      → status='uncertain'
+ *       (defensive default flipped: with no Stage 1 worker, unknown-size items
+ *        must land in human triage rather than queue for a worker that no longer exists)
+ *     - source = 'gmail' AND any attachment > TRIAGE_MIN_SIZE_BYTES         → status='uncertain'
+ *     - everything else                                                     → status='pending_stage2'
  *
- *   All other items go straight to Stage 2 (status='pending_stage2').
- *
- *   Defensive default: a downloads item with no size_bytes routes to Stage 1
- *   (treat unknown as "potentially large").
+ *   The old PENDING_STAGE_1 cases (Tests 2, 6, 7) now resolve to 'uncertain'.
+ *   The boundary at exactly 1 MiB is unchanged: strict-greater-than threshold
+ *   means 1_048_576 still goes to pending_stage2.
  *
  * Mirrors the patterns from __tests__/ingest-api.test.ts: Prisma mocked at the
  * module boundary, Langfuse stubbed with stable trace.id, request built via the
@@ -68,7 +69,10 @@ function statusFromCreate(): string {
   return arg.data.status as string
 }
 
-describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => {
+describe('POST /api/ingest — routing decision (quick task 260428-jrt)', () => {
+  // After Stage 1 removal, the old PENDING_STAGE_1 cases (Tests 2, 6, 7) now
+  // resolve to 'uncertain' so a human triages them. Small items still go
+  // straight to Stage 2; only the >=1 MiB and unknown-size paths changed.
   beforeEach(() => {
     process.env.CORTEX_API_KEY = 'test-secret'
     jest.clearAllMocks()
@@ -90,7 +94,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     expect(statusFromCreate()).toBe('pending_stage2')
   })
 
-  it('Test 2: large downloads file (2 MiB) → status=pending_stage1', async () => {
+  it('Test 2: large downloads file (2 MiB) → status=uncertain', async () => {
     const req = makeRequest({
       body: {
         source: 'downloads',
@@ -101,7 +105,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
-    expect(statusFromCreate()).toBe('pending_stage1')
+    expect(statusFromCreate()).toBe('uncertain')
   })
 
   it('Test 3: boundary — downloads file at exactly 1 MiB (1_048_576) → pending_stage2 (strictly greater than)', async () => {
@@ -115,8 +119,8 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
-    // STAGE1_MIN_SIZE_BYTES is a strict-greater-than threshold per CONTEXT —
-    // exactly 1 MiB does NOT cross it, so the item skips Stage 1.
+    // TRIAGE_MIN_SIZE_BYTES is a strict-greater-than threshold —
+    // exactly 1 MiB does NOT cross it, so the item still goes to Stage 2.
     expect(statusFromCreate()).toBe('pending_stage2')
   })
 
@@ -143,7 +147,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
           from: 'a@b.com',
           attachments: [
             { size_bytes: 100_000 },
-            // Boundary attachment — exactly 1 MiB does NOT trigger Stage 1.
+            // Boundary attachment — exactly 1 MiB does NOT trigger the triage threshold.
             { size_bytes: 1_048_576 },
           ],
         },
@@ -154,7 +158,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     expect(statusFromCreate()).toBe('pending_stage2')
   })
 
-  it('Test 6: gmail email with at least one attachment > 1 MiB → status=pending_stage1', async () => {
+  it('Test 6: gmail email with at least one attachment > 1 MiB → status=uncertain', async () => {
     const req = makeRequest({
       body: {
         source: 'gmail',
@@ -171,11 +175,11 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
-    expect(statusFromCreate()).toBe('pending_stage1')
+    expect(statusFromCreate()).toBe('uncertain')
   })
 
-  it('Test 7: downloads with NO size_bytes → defensive default = pending_stage1', async () => {
-    // Unknown size could be huge; safe default is to route through Stage 1.
+  it('Test 7: downloads with NO size_bytes → defensive default = uncertain', async () => {
+    // Unknown size — route to triage so a human handles it (no Stage 1 worker exists).
     const req = makeRequest({
       body: {
         source: 'downloads',
@@ -185,7 +189,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
-    expect(statusFromCreate()).toBe('pending_stage1')
+    expect(statusFromCreate()).toBe('uncertain')
   })
 
   it('Test 8: heartbeat path unchanged — returns 204, no Item.create', async () => {
@@ -208,7 +212,7 @@ describe('POST /api/ingest — routing decision (quick task 260426-u47)', () => 
       body: {
         source: 'downloads',
         content_hash: 'h_existing',
-        size_bytes: 5_000_000, // would have routed to stage1 if recomputed
+        size_bytes: 5_000_000, // would have routed to 'uncertain' if recomputed
         file_path: '/tmp/x.pdf',
       },
     })

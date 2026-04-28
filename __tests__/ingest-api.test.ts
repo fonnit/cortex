@@ -105,10 +105,10 @@ describe('POST /api/ingest', () => {
   })
 
   it('Test 6: returns 200 { id, deduped: false } when content_hash is new — creates Item with routed initial status', async () => {
-    // Per quick task 260426-u47 (D-stage1-routing): a 1 KB downloads file is
-    // FAR below STAGE1_MIN_SIZE_BYTES (1 MiB), so it skips the relevance gate
-    // and routes straight to pending_stage2. Pre-u47 this test expected
-    // pending_stage1 (unconditional) — the routing decision now overrides.
+    // Per quick task 260428-jrt: a 1 KB downloads file is FAR below
+    // TRIAGE_MIN_SIZE_BYTES (1 MiB), so it routes straight to pending_stage2.
+    // (Pre-u47 this test expected pending_stage1; pre-jrt the >=1 MiB path
+    // returned pending_stage1 too — Stage 1 has now been removed.)
     mockFindUnique.mockResolvedValue(null as never)
     mockCreate.mockResolvedValue({ id: 'item_new_1' } as never)
 
