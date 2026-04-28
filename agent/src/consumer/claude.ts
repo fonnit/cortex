@@ -21,14 +21,15 @@
  *   - Build a temporary MCP config JSON file declaring the cortex stdio MCP
  *     server (agent/dist/mcp/cortex-tools.js) with CORTEX_API_URL and
  *     CORTEX_API_KEY in its env. Pass --mcp-config <tmpfile>,
- *     --strict-mcp-config, --allowedTools "<3 qualified cortex tools>",
- *     --max-budget-usd 0.50.
+ *     --strict-mcp-config, --allowedTools "<3 qualified cortex tools>".
  *   - tmpfile lives under os.tmpdir() (T-lx4-01); cleanup runs in finally so
  *     a crash leaves at most one ephemeral config behind.
  *   - extractFinalJsonObject scans all balanced top-level brace ranges and
  *     returns the LAST one whose JSON.parse succeeds — multi-turn output
- *     after tool calls puts the assistant's decision JSON last (D3 — agent-
- *     side iteration cap is $0.50 budget + 120s wall-clock; no native flag).
+ *     after tool calls puts the assistant's decision JSON last.
+ *   - Iteration cap: the executor's 120s wall-clock timeout is the ONLY
+ *     governor. The CLI runs against the Code subscription (env scrub strips
+ *     ANTHROPIC_API_KEY) so per-invocation cost caps don't apply.
  *
  * Executor seam: invokeClaude takes an optional `executor` so tests can
  * substitute a deterministic stub. defaultExecutor wraps node:child_process.execFile.
@@ -108,15 +109,6 @@ export type ClaudeOutcome<T> =
 export const ALLOWED_TOOLS =
   'mcp__cortex__cortex_paths_internal,mcp__cortex__cortex_label_samples,mcp__cortex__cortex_path_feedback'
 
-/**
- * Hard cost cap on a single Stage 2 `claude -p` invocation. Per planner D3:
- * there is no native --max-turns / --max-iterations flag in `claude -p`. The
- * agent-side iteration cap from the original plan (8 round-trips) is
- * translated to a $0.50 budget — a Haiku tool-loop call plus 8 round-trips
- * fits comfortably under that. Defense in depth: the executor's 120s timeout
- * still bounds wall-clock.
- */
-export const MAX_BUDGET_USD = 0.5
 
 /* ------------------------------------------------------------------ */
 /* Default executor (production)                                      */
@@ -265,8 +257,8 @@ function writeMcpConfigTmpfile(): { tmpPath: string; cleanup: () => void } {
  * Invoke `claude -p <prompt>` and return a structured outcome. Never throws,
  * never retries — the caller decides what to do with parse/exit/timeout.
  *
- * lx4 Task 3: passes --mcp-config + --strict-mcp-config + --allowedTools +
- * --max-budget-usd. The tmpfile is written before spawn, unlinked in finally.
+ * lx4 Task 3: passes --mcp-config + --strict-mcp-config + --allowedTools.
+ * The tmpfile is written before spawn, unlinked in finally.
  */
 export async function invokeClaude<T>(
   prompt: string,
@@ -290,8 +282,6 @@ export async function invokeClaude<T>(
         '--strict-mcp-config',
         '--allowedTools',
         ALLOWED_TOOLS,
-        '--max-budget-usd',
-        String(MAX_BUDGET_USD),
       ],
       {
         timeout: timeoutMs,

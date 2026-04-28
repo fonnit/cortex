@@ -3,20 +3,22 @@
  *
  * Tests use the executor-injection seam (no real subprocess spawned). Coverage:
  *   - argv form invocation now includes --mcp-config / --strict-mcp-config /
- *     --allowedTools / --max-budget-usd (lx4 Task 3 wires the agentic loop).
+ *     --allowedTools (lx4 Task 3 wires the agentic loop).
  *   - The tmpfile passed to --mcp-config contains a valid MCP config JSON
  *     spawning agent/dist/mcp/cortex-tools.js with CORTEX_API_URL and
  *     CORTEX_API_KEY in its env.
  *   - The tmpfile is unlinked after the executor resolves (success and failure).
  *   - extractFinalJsonObject finds the LAST balanced JSON object in multi-turn
  *     stdout (final assistant message comes last; earlier braces are tool I/O).
- *   - 120s default timeout; custom override honored.
+ *   - 120s default timeout; custom override honored. Timeout is the SOLE
+ *     iteration cap — claude runs against the Code subscription so per-call
+ *     cost caps don't apply.
  *   - JSON regex-extract on stdout, Zod-validated, returned as kind:'ok'.
  *   - Malformed stdout / failed Zod / non-zero exit / timeout — all return
  *     typed kinds without retry.
  *   - stderr redaction for Bearer tokens and sk-* secrets.
  *   - assertClaudeOnPath helper.
- *   - --max-budget-usd exhaustion → exit_error (caller maps to outcome:'error').
+ *   - non-zero exit → exit_error (caller maps to outcome:'error').
  *
  * Plan's anti-pattern guards verified by source-text grep at the bottom:
  *   - execFile, never spawn-with-shell.
@@ -35,7 +37,6 @@ import {
   extractFinalJsonObject,
   redactAndSlice,
   ALLOWED_TOOLS,
-  MAX_BUDGET_USD,
   type Executor,
   type ExecutorResult,
 } from '../src/consumer/claude'
@@ -173,7 +174,7 @@ describe('redactAndSlice', () => {
 /* ------------------------------------------------------------------ */
 
 describe('invokeClaude — argv shape and MCP plumbing (lx4 Task 3)', () => {
-  it('Test A1: passes -p, prompt, --mcp-config <tmpfile>, --strict-mcp-config, --allowedTools, --max-budget-usd', async () => {
+  it('Test A1: passes -p, prompt, --mcp-config <tmpfile>, --strict-mcp-config, --allowedTools', async () => {
     const calls: CapturedCall[] = []
     const ex = stubExecutor({ stdout: '{"decision":"keep","confidence":0.9,"reason":"r"}' }, calls)
     await invokeClaude('hello world', SCHEMA, { executor: ex })
@@ -184,7 +185,6 @@ describe('invokeClaude — argv shape and MCP plumbing (lx4 Task 3)', () => {
     expect(args).toContain('--mcp-config')
     expect(args).toContain('--strict-mcp-config')
     expect(args).toContain('--allowedTools')
-    expect(args).toContain('--max-budget-usd')
 
     // --allowedTools value is the comma-separated qualified tool names.
     const idxAllowed = args.indexOf('--allowedTools')
@@ -193,10 +193,10 @@ describe('invokeClaude — argv shape and MCP plumbing (lx4 Task 3)', () => {
     expect(args[idxAllowed + 1]).toContain('mcp__cortex__cortex_label_samples')
     expect(args[idxAllowed + 1]).toContain('mcp__cortex__cortex_path_feedback')
 
-    // --max-budget-usd value is the configured cap (planner D3: $0.50).
-    const idxBudget = args.indexOf('--max-budget-usd')
-    expect(args[idxBudget + 1]).toBe(String(MAX_BUDGET_USD))
-    expect(MAX_BUDGET_USD).toBe(0.5)
+    // No cost-cap flag — the CLI runs against the Code subscription (env scrub
+    // strips ANTHROPIC_API_KEY) so per-invocation USD budgets don't apply. The
+    // executor's 120s wall-clock timeout is the sole iteration governor.
+    expect(args).not.toContain('--max-budget-usd')
   })
 
   it('Test A2: the tmpfile contents are a valid MCP config spawning cortex-tools.js with CORTEX_API_URL/KEY in env', async () => {
@@ -294,12 +294,13 @@ describe('invokeClaude — argv shape and MCP plumbing (lx4 Task 3)', () => {
     }
   })
 
-  it('Test A7: --max-budget-usd exhaustion → exit_error (worker maps to outcome:error)', async () => {
-    // Claude exits non-zero when the budget cap is hit; the wrapper surfaces this
-    // as kind:'exit_error' which the Stage 2 worker maps to outcome:'error'.
+  it('Test A7: non-zero CLI exit → exit_error (worker maps to outcome:error)', async () => {
+    // Any non-zero exit from `claude -p` (network failure, MCP startup error,
+    // rate-limit hit, etc.) surfaces as kind:'exit_error' which the Stage 2
+    // worker maps to outcome:'error'. The 120s timeout is a separate kind.
     const ex = stubExecutor({
       stdout: '',
-      stderr: 'budget exhausted',
+      stderr: 'rate limit hit',
       exitCode: 2,
       durationMs: 60,
     })
