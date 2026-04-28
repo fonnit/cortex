@@ -2,23 +2,22 @@
 // Phase 7 Plan 02 Task 3 (v1.1).
 //
 // SEPARATE process from agent/src/index.ts (the daemon). Started by
-// agent/launchd/com.cortex.consumer.plist. Runs Stage 1 (limit=10,
-// concurrency=10) and Stage 2 (limit=2, concurrency=2) worker loops in
-// parallel, draining /api/queue end-to-end.
+// agent/launchd/com.cortex.consumer.plist. Runs the Stage 2 worker loop,
+// draining /api/queue?stage=2 end-to-end. (Stage 1 was removed in quick
+// task 260428-jrt — large-file routing now lands directly in triage.)
 //
 // ZERO Neon access (HTTP only via /api/queue + /api/classify), ZERO Drive
-// calls. Two-pool architecture per CONTEXT D-process-layout.
+// calls. Single-pool architecture per CONTEXT D-process-layout (post-jrt).
 //
 // Bootstrap contract (D-claude-not-on-path-exit-1):
 //   1. validate required env vars (CORTEX_API_URL, CORTEX_API_KEY,
 //      LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) — exit 1 if any missing.
 //   2. assertClaudeOnPath() — exit 1 if claude CLI is not resolvable.
-//   3. Start Stage 1 + Stage 2 workers (independent loops).
+//   3. Start the Stage 2 worker (single pool, /api/queue?stage=2 only).
 //   4. Install SIGTERM / SIGINT handlers — orderly drain on shutdown.
 
 import Langfuse from 'langfuse'
 import { assertClaudeOnPath } from './claude.js'
-import { runStage1Worker } from './stage1.js'
 import { runStage2Worker } from './stage2.js'
 
 const REQUIRED_ENV = [
@@ -29,7 +28,7 @@ const REQUIRED_ENV = [
 ] as const
 
 /**
- * Hard cap on the shutdown drain. Stage 1's invokeClaude has its own 120s
+ * Hard cap on the shutdown drain. Stage 2's invokeClaude has its own 120s
  * timeout, so a single in-flight item can hold the drain for that long. We
  * cap orderly shutdown at 5s so launchd's SIGKILL escalation never fires
  * during normal restarts (in-flight items will be reclaimed by the queue's
@@ -50,8 +49,6 @@ export function validateConsumerEnv(): BootstrapEnvResult {
 
 export interface BootstrapOpts {
   langfuse?: Langfuse
-  /** DI seam — defaults to runStage1Worker. */
-  runStage1?: typeof runStage1Worker
   /** DI seam — defaults to runStage2Worker. */
   runStage2?: typeof runStage2Worker
   /** DI seam — defaults to assertClaudeOnPath. */
@@ -60,7 +57,7 @@ export interface BootstrapOpts {
 
 /**
  * Bootstraps the consumer process. Exits with code 1 on missing required env
- * or if `claude` is not on PATH. Otherwise starts both worker loops and
+ * or if `claude` is not on PATH. Otherwise starts the Stage 2 worker loop and
  * installs signal handlers, then resolves.
  */
 export async function bootstrapConsumer(opts?: BootstrapOpts): Promise<void> {
@@ -111,15 +108,14 @@ export async function bootstrapConsumer(opts?: BootstrapOpts): Promise<void> {
     return
   }
 
-  // ── 3) Start both worker loops ─────────────────────────────────────────
-  const stage1 = (opts?.runStage1 ?? runStage1Worker)({ langfuse })
+  // ── 3) Start the Stage 2 worker loop ───────────────────────────────────
   const stage2 = (opts?.runStage2 ?? runStage2Worker)({ langfuse })
 
   langfuse.trace({
     name: 'consumer_start',
     metadata: { pid: process.pid, version: '0.1.1' },
   })
-  console.log('[cortex-consumer] started (Stage 1 + Stage 2 pools running)')
+  console.log('[cortex-consumer] started (Stage 2 pool running)')
 
   // ── 4) Signal handlers — orderly drain on SIGTERM/SIGINT ───────────────
   let shuttingDown = false
@@ -128,7 +124,7 @@ export async function bootstrapConsumer(opts?: BootstrapOpts): Promise<void> {
     shuttingDown = true
     try {
       await Promise.race([
-        Promise.all([stage1.stop(), stage2.stop()]),
+        stage2.stop(),
         new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_TIMEOUT_MS)),
       ])
     } catch {

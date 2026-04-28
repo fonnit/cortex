@@ -8,12 +8,13 @@
  *     (never cached across cycles — D-no-cache-taxonomy).
  *   - Posts ONE classify per item (success: all-3-axes; error mapping otherwise).
  *   - 409 conflict logged + skipped (D-postClassify-no-retry-409).
- *   - Stage 1 saturation does NOT block Stage 2 throughput (CONS-05).
  *   - Taxonomy fetch failure → batch is skipped (items stay in processing_stage2,
  *     queue's stale-reclaim returns them).
+ *
+ * (Quick task 260428-jrt: removed the Stage-1-saturation test (CONS-05) — Stage 1
+ * no longer exists; the consumer is single-pool.)
  */
 
-import { runStage1Worker } from '../src/consumer/stage1'
 import { runStage2Worker, STAGE2_LIMIT, STAGE2_CONCURRENCY } from '../src/consumer/stage2'
 import type {
   QueueItem,
@@ -110,16 +111,11 @@ const makeLfStub = (): LfStub => ({ trace: jest.fn() })
 
 describe('runStage2Worker', () => {
   let worker: { stop: () => Promise<void> } | null = null
-  let stage1Worker: { stop: () => Promise<void> } | null = null
 
   afterEach(async () => {
     if (worker) {
       await worker.stop().catch(() => {})
       worker = null
-    }
-    if (stage1Worker) {
-      await stage1Worker.stop().catch(() => {})
-      stage1Worker = null
     }
     jest.useRealTimers()
     jest.restoreAllMocks()
@@ -472,79 +468,6 @@ describe('runStage2Worker', () => {
 
     await jest.advanceTimersByTimeAsync(6_000)
     expect(pollCount).toBeGreaterThanOrEqual(3)
-  })
-
-  it('Test 10 (CONS-05): Stage 1 saturation does NOT block Stage 2 throughput', async () => {
-    // Two workers running in the same process. Stage 1 has 10 items in flight
-    // (all paused on releasers); Stage 2 has 1 item — it must process and
-    // postClassify even while Stage 1 is fully saturated.
-
-    const stage1Items = Array.from({ length: 10 }, (_, i) => FILE_ITEM(`s1_${i}`))
-    const stage1GetQueue = jest.fn(async () => {
-      // First call returns the batch; subsequent calls empty so the loop
-      // doesn't try to re-poll while items are pending.
-      const c = stage1GetQueue.mock.calls.length
-      if (c === 1) return { items: stage1Items, reclaimed: 0, traceId: null } as QueueResponse
-      return { items: [], reclaimed: 0, traceId: null } as QueueResponse
-    })
-    const stage1Releasers: Array<() => void> = []
-    const stage1Invoke = jest.fn(async () => {
-      await new Promise<void>((r) => stage1Releasers.push(r))
-      return {
-        kind: 'ok',
-        value: { decision: 'keep', confidence: 0.9 },
-        durationMs: 10,
-        exitCode: 0,
-        stdoutFirst200: '',
-      } as ClaudeOutcome<{ decision: 'keep'; confidence: number }>
-    })
-    const stage1Post = jest.fn(async (_p: ClassifyRequest) => okClassify)
-
-    stage1Worker = runStage1Worker({
-      langfuse: makeLfStub() as never,
-      getQueueImpl: stage1GetQueue as never,
-      invokeClaudeImpl: stage1Invoke as never,
-      postClassifyImpl: stage1Post as never,
-    })
-
-    // Let Stage 1 saturate (all 10 acquired, paused on releasers).
-    for (let i = 0; i < 50; i++) await Promise.resolve()
-    expect(stage1Invoke).toHaveBeenCalledTimes(10)
-
-    // Now spin up Stage 2 — it should process its item even though Stage 1
-    // is saturated (independent semaphore).
-    const stage2Item = FILE_ITEM('s2_independent')
-    const stage2GetQueue = jest
-      .fn()
-      .mockResolvedValueOnce({ items: [stage2Item], reclaimed: 0, traceId: null } as QueueResponse)
-      .mockResolvedValue({ items: [], reclaimed: 0, traceId: null } as QueueResponse)
-    const stage2Tax = jest.fn(async () => TAXONOMY)
-    const stage2Invoke = jest.fn(async () => okStage2Outcome())
-    const stage2Post = jest.fn(async (_p: ClassifyRequest) => okClassify)
-
-    worker = runStage2Worker({
-      langfuse: makeLfStub() as never,
-      getQueueImpl: stage2GetQueue as never,
-      invokeClaudeImpl: stage2Invoke as never,
-      postClassifyImpl: stage2Post as never,
-      getTaxonomyInternalImpl: stage2Tax as never,
-      // h9w: stub the new path-tree fetch.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
-    })
-
-    for (let i = 0; i < 50; i++) await Promise.resolve()
-
-    // Stage 1 still saturated…
-    expect(stage1Post).not.toHaveBeenCalled()
-    // …but Stage 2 made progress.
-    expect(stage2Invoke).toHaveBeenCalledTimes(1)
-    expect(stage2Post).toHaveBeenCalledTimes(1)
-
-    // Drain Stage 1.
-    while (stage1Releasers.length > 0) {
-      stage1Releasers.shift()!()
-      for (let i = 0; i < 5; i++) await Promise.resolve()
-    }
   })
 
   it('Test 11: stop() halts polling and drains in-flight invocations', async () => {

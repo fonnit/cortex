@@ -1,17 +1,13 @@
 /**
- * Stage 1 (relevance gate) and Stage 2 (3-axis classification) prompt builders.
+ * Stage 2 (3-axis classification) prompt builder.
  *
- * Phase 7 Plan 01, Task 2. CONTEXT decisions enforced verbatim:
- *
- * D-stage1-prompt:
- *   - File items: prompt contains the absolute file path and instructs
- *     Claude to use its Read tool. NEVER includes file content.
- *   - Gmail items: prompt contains subject/from/snippet/headers from
- *     source_metadata. NEVER tries to fetch the full body.
- *   - Both: confidence ≥ 0.75 required for actionable keep/ignore.
+ * Phase 7 Plan 01, Task 2. Stage 1 was removed in quick task 260428-jrt
+ * (the large-file path now goes straight to triage; Stage 2's
+ * `decision='ignore'` already handles relevance signals for the small-file
+ * path). CONTEXT decisions enforced verbatim for Stage 2:
  *
  * D-stage2-prompt:
- *   - Same item-source split (file path vs gmail metadata block).
+ *   - Item-source split (file path vs gmail metadata block).
  *   - Existing taxonomy injected as flat lists per axis.
  *   - Empty axes render as `(none yet)` so the LLM never sees a dangling label.
  *   - Confident-match threshold 0.85 in body.
@@ -46,42 +42,6 @@ export interface TaxonomyContext {
  */
 export interface PathContext {
   paths: Array<{ parent: string; count: number }>
-}
-
-/* ─────────────────────────────────────────────────────────────────────── */
-/* Stage 1                                                                  */
-/* ─────────────────────────────────────────────────────────────────────── */
-
-export function buildStage1Prompt(item: QueueItem): string {
-  if (item.source === 'downloads') {
-    if (!item.file_path) {
-      // Defensive: an item that reaches the consumer without a file_path
-      // indicates a Phase 5/6 contract violation. Fail fast so the worker
-      // emits outcome:'error' instead of asking Claude to read an empty path.
-      throw new Error('downloads item missing file_path')
-    }
-    return [
-      `Classify this file: "${item.file_path}". Read the file with the Read tool to see content.`,
-      '',
-      'Decide: keep (relevant professional document), ignore (junk/spam/installer), or uncertain.',
-      '',
-      'Respond JSON only: {"decision": "keep"|"ignore"|"uncertain", "confidence": 0..1, "reason": "..."}.',
-      'Confidence ≥ 0.75 required for actionable keep/ignore; else respond uncertain.',
-    ].join('\n')
-  }
-  // gmail
-  const meta = metaString(item)
-  return [
-    'Classify this email:',
-    `Subject: ${meta.subject}`,
-    `From: ${meta.from}`,
-    `Preview: ${meta.snippet}`,
-    `Headers: ${meta.headers}`,
-    '',
-    'Decide: keep / ignore / uncertain. Do not attempt to fetch the full body — judge from the metadata above.',
-    'Respond JSON: {"decision":..., "confidence":..., "reason":...}.',
-    'Confidence ≥ 0.75 required for actionable keep/ignore; else respond uncertain.',
-  ].join('\n')
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */

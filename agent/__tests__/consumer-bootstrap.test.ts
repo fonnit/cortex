@@ -8,10 +8,10 @@
  *     consumer_bootstrap_fatal Langfuse trace + process.exit(1).
  *   - bootstrapConsumer with all env present BUT claude not on PATH →
  *     consumer_bootstrap_fatal trace with reason:claude_cli_missing + exit(1).
- *   - bootstrapConsumer happy path: Stage 1 + Stage 2 workers both start
- *     exactly once, with the langfuse instance passed.
- *   - SIGTERM handler triggers stop() on both workers + flushes Langfuse +
- *     exits 0.
+ *   - bootstrapConsumer happy path: Stage 2 worker starts exactly once with
+ *     the langfuse instance passed.
+ *   - SIGTERM handler triggers stop() on the Stage 2 worker + flushes Langfuse
+ *     + exits 0.
  *   - consumer_start trace emitted on successful boot.
  *   - Plist tests (regex-based, no plist parser dep): file exists, contains
  *     KeepAlive, ThrottleInterval, separate logs, NO DATABASE_URL, NO
@@ -210,7 +210,7 @@ describe('bootstrapConsumer — happy path', () => {
     onSpy.mockRestore()
   })
 
-  it('Test 4: Stage 1 + Stage 2 workers each started exactly once with langfuse', async () => {
+  it('Test 4: Stage 2 worker started exactly once with langfuse', async () => {
     process.env.CORTEX_API_URL = 'https://example.test'
     process.env.CORTEX_API_KEY = 'k'
     process.env.LANGFUSE_PUBLIC_KEY = 'pk'
@@ -220,12 +220,7 @@ describe('bootstrapConsumer — happy path', () => {
     const flushAsync = jest.fn().mockResolvedValue(undefined)
     const lf = { trace, flushAsync } as unknown as Langfuse
 
-    const stage1Stop = jest.fn().mockResolvedValue(undefined)
     const stage2Stop = jest.fn().mockResolvedValue(undefined)
-    const runStage1 = jest.fn((deps: { langfuse: unknown }) => {
-      void deps
-      return { stop: stage1Stop }
-    })
     const runStage2 = jest.fn((deps: { langfuse: unknown }) => {
       void deps
       return { stop: stage2Stop }
@@ -234,15 +229,12 @@ describe('bootstrapConsumer — happy path', () => {
 
     await bootstrapConsumer({
       langfuse: lf,
-      runStage1: runStage1 as never,
       runStage2: runStage2 as never,
       assertClaudeOnPathImpl: assertClaudeOnPathImpl as never,
     })
 
-    expect(runStage1).toHaveBeenCalledTimes(1)
     expect(runStage2).toHaveBeenCalledTimes(1)
-    // Each receives the langfuse instance.
-    expect(runStage1.mock.calls[0]![0]).toEqual(expect.objectContaining({ langfuse: lf }))
+    // Receives the langfuse instance.
     expect(runStage2.mock.calls[0]![0]).toEqual(expect.objectContaining({ langfuse: lf }))
   })
 
@@ -258,7 +250,6 @@ describe('bootstrapConsumer — happy path', () => {
 
     await bootstrapConsumer({
       langfuse: lf,
-      runStage1: (() => ({ stop: jest.fn().mockResolvedValue(undefined) })) as never,
       runStage2: (() => ({ stop: jest.fn().mockResolvedValue(undefined) })) as never,
       assertClaudeOnPathImpl: (async () => {}) as never,
     })
@@ -273,7 +264,7 @@ describe('bootstrapConsumer — happy path', () => {
 /* ────────────────────────────────────────────────────────────────────── */
 
 describe('bootstrapConsumer — signal handlers', () => {
-  it('Test 5: SIGTERM triggers stop() on both workers + flushAsync + exit(0)', async () => {
+  it('Test 5: SIGTERM triggers stop() on the Stage 2 worker + flushAsync + exit(0)', async () => {
     process.env.CORTEX_API_URL = 'https://example.test'
     process.env.CORTEX_API_KEY = 'k'
     process.env.LANGFUSE_PUBLIC_KEY = 'pk'
@@ -283,7 +274,6 @@ describe('bootstrapConsumer — signal handlers', () => {
     const flushAsync = jest.fn().mockResolvedValue(undefined)
     const lf = { trace, flushAsync } as unknown as Langfuse
 
-    const stage1Stop = jest.fn().mockResolvedValue(undefined)
     const stage2Stop = jest.fn().mockResolvedValue(undefined)
 
     // Mock process.exit to a no-op so the async shutdown chain inside the
@@ -306,7 +296,6 @@ describe('bootstrapConsumer — signal handlers', () => {
 
     await bootstrapConsumer({
       langfuse: lf,
-      runStage1: (() => ({ stop: stage1Stop })) as never,
       runStage2: (() => ({ stop: stage2Stop })) as never,
       assertClaudeOnPathImpl: (async () => {}) as never,
     })
@@ -315,11 +304,10 @@ describe('bootstrapConsumer — signal handlers', () => {
 
     // Fire SIGTERM and let the async shutdown promise resolve.
     sigtermHandlers[0]!()
-    // Give the async chain time to walk through stage1.stop / stage2.stop /
+    // Give the async chain time to walk through stage2.stop /
     // langfuse.flushAsync before exit() is called.
     for (let i = 0; i < 20; i++) await Promise.resolve()
 
-    expect(stage1Stop).toHaveBeenCalled()
     expect(stage2Stop).toHaveBeenCalled()
     expect(flushAsync).toHaveBeenCalled()
     expect(exitSpy).toHaveBeenCalledWith(0)
