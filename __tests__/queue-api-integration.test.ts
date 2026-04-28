@@ -93,12 +93,14 @@ describe('API-06: v1.0 routes are unchanged', () => {
     expect(res.status).toBe(401) // proves cron does not accept CORTEX_API_KEY
   })
 
-  it('app/api/ directory contains EXACTLY the post-Phase-5 entries (locked snapshot)', () => {
+  it('app/api/ directory contains EXACTLY the post-lx4 entries (locked snapshot)', () => {
     const apiDir = path.join(__dirname, '..', 'app', 'api')
     const entries = fs.readdirSync(apiDir).sort()
     // LOCKED at plan-write time. Filesystem ground truth: v1.0 had 9 entries
     // (ask, cron, delete, identity, metrics, rules, status, taxonomy, triage).
     // Phase 5 adds exactly three: classify, ingest, queue. Total = 12.
+    // h9w (260427) adds: paths. Total = 13.
+    // lx4 (260428) adds: labels, path-feedback. Total = 15.
     // No `admin` directory — that name appears in REQUIREMENTS.md but never shipped.
     // If this assertion fails in the future, update the snapshot deliberately
     // alongside whatever phase added/removed a route. Do NOT silently rebase.
@@ -109,7 +111,10 @@ describe('API-06: v1.0 routes are unchanged', () => {
       'delete',
       'identity',
       'ingest',
+      'labels',
       'metrics',
+      'path-feedback',
+      'paths',
       'queue',
       'rules',
       'status',

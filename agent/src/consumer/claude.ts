@@ -4,28 +4,40 @@
  * Phase 7 Plan 01, Task 1. CONTEXT decisions enforced verbatim:
  *
  * D-claude-invocation:
- *   - execFile('claude', ['-p', prompt], { timeout: 120_000, env: { PATH, HOME } })
+ *   - execFile('claude', ['-p', prompt, ...mcp-args], { timeout: 120_000, env: scrubAnthropicKeys(process.env) })
  *   - NEVER spawn-with-the-shell, NEVER use the shelling exec variant.
- *   - Strict env allowlist: only PATH and HOME pass through. Explicitly omit
- *     all API key vars (we don't reference any here so a future grep can
- *     prove they never leak). Claude CLI reads its own credentials via
- *     ~/.config/claude/.
  *   - 120s default timeout; caller can override.
- *   - Output parsing: regex-extract `\{[\s\S]*\}` (balanced-brace walk in
- *     practice), JSON.parse, validate with the caller's Zod schema.
+ *   - Output parsing: regex-extract balanced `{...}` blocks, walk LAST→first
+ *     until JSON.parse succeeds, validate with the caller's Zod schema.
  *   - On parse failure / non-zero exit / timeout: return a typed
- *     ClaudeOutcome variant — NEVER throw, NEVER retry. The Stage 1/2 worker
+ *     ClaudeOutcome variant — NEVER throw, NEVER retry. The Stage 2 worker
  *     decides whether to POST `outcome:'error'`; the queue's RETRY_CAP
  *     handles backoff.
  *   - stderr is redacted (Bearer tokens, sk-* secrets) before slicing first
  *     200 bytes — the worker may surface this on a Langfuse span, so leaking
  *     creds via observability is the threat we mitigate (T-07-03).
  *
+ * Quick task 260428-lx4 Task 3 (MCP plumbing):
+ *   - Build a temporary MCP config JSON file declaring the cortex stdio MCP
+ *     server (agent/dist/mcp/cortex-tools.js) with CORTEX_API_URL and
+ *     CORTEX_API_KEY in its env. Pass --mcp-config <tmpfile>,
+ *     --strict-mcp-config, --allowedTools "<3 qualified cortex tools>",
+ *     --max-budget-usd 0.50.
+ *   - tmpfile lives under os.tmpdir() (T-lx4-01); cleanup runs in finally so
+ *     a crash leaves at most one ephemeral config behind.
+ *   - extractFinalJsonObject scans all balanced top-level brace ranges and
+ *     returns the LAST one whose JSON.parse succeeds — multi-turn output
+ *     after tool calls puts the assistant's decision JSON last (D3 — agent-
+ *     side iteration cap is $0.50 budget + 120s wall-clock; no native flag).
+ *
  * Executor seam: invokeClaude takes an optional `executor` so tests can
  * substitute a deterministic stub. defaultExecutor wraps node:child_process.execFile.
  */
 
 import { execFile } from 'node:child_process'
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import type { ZodType } from 'zod'
 
 /* ------------------------------------------------------------------ */
@@ -56,8 +68,8 @@ export type Executor = (
 ) => Promise<ExecutorResult>
 
 /**
- * Outcome of a single `claude -p` invocation. Designed so callers (Stage 1/2
- * workers) can pattern-match without ever needing try/catch on the wrapper.
+ * Outcome of a single `claude -p` invocation. Designed so callers (Stage 2
+ * worker) can pattern-match without ever needing try/catch on the wrapper.
  */
 export type ClaudeOutcome<T> =
   | {
@@ -83,6 +95,30 @@ export type ClaudeOutcome<T> =
   | { kind: 'timeout'; durationMs: number }
 
 /* ------------------------------------------------------------------ */
+/* MCP config constants (lx4 Task 3)                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The 3 qualified cortex MCP tool names allowed in --allowedTools. The MCP
+ * server name (in the config JSON) is `cortex`, so the model sees each tool
+ * as `mcp__cortex__<tool_name>`. The cortex-tools server registers the
+ * unqualified names cortex_paths_internal, cortex_label_samples,
+ * cortex_path_feedback.
+ */
+export const ALLOWED_TOOLS =
+  'mcp__cortex__cortex_paths_internal,mcp__cortex__cortex_label_samples,mcp__cortex__cortex_path_feedback'
+
+/**
+ * Hard cost cap on a single Stage 2 `claude -p` invocation. Per planner D3:
+ * there is no native --max-turns / --max-iterations flag in `claude -p`. The
+ * agent-side iteration cap from the original plan (8 round-trips) is
+ * translated to a $0.50 budget — a Haiku tool-loop call plus 8 round-trips
+ * fits comfortably under that. Defense in depth: the executor's 120s timeout
+ * still bounds wall-clock.
+ */
+export const MAX_BUDGET_USD = 0.5
+
+/* ------------------------------------------------------------------ */
 /* Default executor (production)                                      */
 /* ------------------------------------------------------------------ */
 
@@ -99,9 +135,6 @@ export const defaultExecutor: Executor = (cmd, args, opts) => {
       args,
       {
         timeout: opts.timeout,
-        // Cast: Next.js's global.d.ts narrows NODE_ENV as required, but we
-        // intentionally pass a strict allowlist (PATH+HOME only). The
-        // child_process API accepts any record shape at runtime.
         env: opts.env as NodeJS.ProcessEnv,
         // Default 8MB output buffer is plenty for Claude JSON responses.
         maxBuffer: 8 * 1024 * 1024,
@@ -109,8 +142,6 @@ export const defaultExecutor: Executor = (cmd, args, opts) => {
       },
       (err, stdout, stderr) => {
         const durationMs = Date.now() - start
-        // execFile with options.env returns string overload by default
-        // (since we don't pass `encoding: 'buffer'`).
         const stdoutStr = String(stdout ?? '')
         const stderrStr = String(stderr ?? '')
         if (err) {
@@ -157,8 +188,85 @@ interface InvokeOpts {
 }
 
 /**
+ * Resolve the absolute path to the cortex-tools MCP server entry point. The
+ * agent compiles to agent/dist/{consumer,mcp}/, so claude.js sits next to
+ * mcp/cortex-tools.js after build.
+ *
+ * We resolve from process.cwd() walking up to find the agent root, because
+ * the source layout is the same shape under both ts-jest (src/) and the
+ * production build (dist/). The launchd plist sets cwd to the agent root.
+ *
+ * For unit tests under ts-jest the cwd is the repo root (cortex/). We probe
+ * a few likely candidates: the dist path next to claude.js (production) and
+ * the source path under agent/src/mcp/cortex-tools.ts (tests). The probe
+ * order biases production (dist .js wins under launchd because it ships
+ * compiled JS).
+ */
+function resolveCortexToolsPath(): string {
+  // ts-jest sets `__dirname` (CJS); the production tsx/launchd loader
+  // exposes it via the synthetic `__dirname` shim that tsx provides for
+  // ESM-as-CJS interop. Either way, `__dirname` is defined at runtime —
+  // we declare it as `any` to dodge the TS module-mode check.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const here: string = (globalThis as any).__dirname
+    ?? (typeof __dirname !== 'undefined' ? __dirname : '')
+  if (here) {
+    // claude.{ts,js} lives in {agent}/{src|dist}/consumer/. Sibling of
+    // consumer/ is mcp/. Compose the dist filename (production build).
+    return resolve(here, '..', 'mcp', 'cortex-tools.js')
+  }
+  // Fallback: assume cwd is the agent root (launchd plist sets this).
+  return resolve(process.cwd(), 'dist', 'mcp', 'cortex-tools.js')
+}
+
+/**
+ * Build the MCP config tmpfile contents. Spawns the cortex stdio server with
+ * CORTEX_API_URL + CORTEX_API_KEY in its env so it can authenticate to the
+ * Next.js API. The tmpfile path is randomized per invocation so concurrent
+ * Stage 2 workers do not collide.
+ */
+function writeMcpConfigTmpfile(): { tmpPath: string; cleanup: () => void } {
+  const apiUrl = process.env.CORTEX_API_URL ?? ''
+  const apiKey = process.env.CORTEX_API_KEY ?? ''
+  const cortexToolsPath = resolveCortexToolsPath()
+  const config = {
+    mcpServers: {
+      cortex: {
+        command: 'node',
+        args: [cortexToolsPath],
+        env: {
+          CORTEX_API_URL: apiUrl,
+          CORTEX_API_KEY: apiKey,
+        },
+      },
+    },
+  }
+  const fileName = `cortex-mcp-${process.pid}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}.json`
+  const tmpPath = join(tmpdir(), fileName)
+  // os.tmpdir() defaults to 0700/0755 perms on macOS+Linux; the file inherits
+  // umask. We don't chmod explicitly — the threat (T-lx4-01) is bounded by
+  // the per-user tmpdir + the unlink in finally.
+  writeFileSync(tmpPath, JSON.stringify(config), 'utf8')
+  return {
+    tmpPath,
+    cleanup: () => {
+      try {
+        unlinkSync(tmpPath)
+      } catch {
+        /* best-effort — file may already be gone */
+      }
+    },
+  }
+}
+
+/**
  * Invoke `claude -p <prompt>` and return a structured outcome. Never throws,
  * never retries — the caller decides what to do with parse/exit/timeout.
+ *
+ * lx4 Task 3: passes --mcp-config + --strict-mcp-config + --allowedTools +
+ * --max-budget-usd. The tmpfile is written before spawn, unlinked in finally.
  */
 export async function invokeClaude<T>(
   prompt: string,
@@ -168,25 +276,51 @@ export async function invokeClaude<T>(
   const executor = opts?.executor ?? defaultExecutor
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
-  const result = await executor('claude', ['-p', prompt], {
-    timeout: timeoutMs,
-    // Pass full env BUT scrub Anthropic-bound API keys.
-    //
-    // Why full env: macOS Keychain access goes through securityd via XPC,
-    // which needs USER/LOGNAME/TMPDIR/XPC_SERVICE_NAME/XPC_FLAGS to identify
-    // the session. Stripping to {PATH,HOME} caused launchd-spawned claude to
-    // report "Not logged in" even though the same binary worked from a shell
-    // under the same launchd parent.
-    //
-    // Why scrub ANTHROPIC_API_KEY / CLAUDE_API_KEY: this project ships
-    // .env.local with ANTHROPIC_API_KEY (used by the Vercel API for the
-    // OpenAI/Anthropic SDK clients, not by the local CLI). If that var is
-    // visible to `claude -p`, the CLI bills against API credits instead of
-    // the user's Claude Code subscription — silently draining a metered
-    // budget that wasn't intended for batch classification. The Stage 1/2
-    // worker is a Code-subscription consumer, not an API consumer.
-    env: scrubAnthropicKeys(process.env),
-  })
+  const { tmpPath, cleanup } = writeMcpConfigTmpfile()
+
+  let result: ExecutorResult
+  try {
+    result = await executor(
+      'claude',
+      [
+        '-p',
+        prompt,
+        '--mcp-config',
+        tmpPath,
+        '--strict-mcp-config',
+        '--allowedTools',
+        ALLOWED_TOOLS,
+        '--max-budget-usd',
+        String(MAX_BUDGET_USD),
+      ],
+      {
+        timeout: timeoutMs,
+        // Pass full env BUT scrub Anthropic-bound API keys.
+        //
+        // Why full env: macOS Keychain access goes through securityd via XPC,
+        // which needs USER/LOGNAME/TMPDIR/XPC_SERVICE_NAME/XPC_FLAGS to identify
+        // the session. Stripping to {PATH,HOME} caused launchd-spawned claude to
+        // report "Not logged in" even though the same binary worked from a shell
+        // under the same launchd parent.
+        //
+        // Why scrub ANTHROPIC_API_KEY / CLAUDE_API_KEY: this project ships
+        // .env.local with ANTHROPIC_API_KEY (used by the Vercel API for the
+        // OpenAI/Anthropic SDK clients, not by the local CLI). If that var is
+        // visible to `claude -p`, the CLI bills against API credits instead of
+        // the user's Claude Code subscription — silently draining a metered
+        // budget that wasn't intended for batch classification. The Stage 2
+        // worker is a Code-subscription consumer, not an API consumer.
+        //
+        // CORTEX_API_KEY DOES flow through (post-lx4): the spawned MCP server
+        // (cortex-tools) needs it to authenticate to /api/paths/internal etc.
+        // The MCP config tmpfile sets it in the cortex server's env explicitly;
+        // claude itself does not consume it.
+        env: scrubAnthropicKeys(process.env),
+      },
+    )
+  } finally {
+    cleanup()
+  }
 
   // ── Timeout path ──────────────────────────────────────────────────
   if (result.killed) {
@@ -203,9 +337,11 @@ export async function invokeClaude<T>(
     }
   }
 
-  // ── Success path: extract JSON, parse, validate ───────────────────
+  // ── Success path: extract FINAL JSON, parse, validate ────────────
+  // lx4 Task 3: multi-turn output after tool calls interleaves tool I/O JSON
+  // blocks with the final assistant message. The decision JSON is LAST.
   const stdoutFirst200 = redactAndSlice(result.stdout, 200)
-  const json = extractFirstJsonObject(result.stdout)
+  const json = extractFinalJsonObject(result.stdout)
   if (!json) {
     return {
       kind: 'parse_error',
@@ -270,12 +406,15 @@ export async function assertClaudeOnPath(executor?: Executor): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 /**
- * Extract the first balanced JSON object from arbitrary stdout. Strategy:
+ * Extract the FIRST balanced JSON object from arbitrary stdout. Strategy:
  *   1. Find the first `{`.
  *   2. Walk forward tracking brace depth (respecting strings / escapes)
  *      until depth returns to zero.
  * This is more robust than a single regex for stdout that contains nested
  * JSON inside the response. Returns null if no balanced object is found.
+ *
+ * Kept exported for backwards compat (extractFinalJsonObject below is the
+ * post-lx4 multi-turn-aware variant; some single-shot tests still target this).
  */
 export function extractFirstJsonObject(text: string): string | null {
   const start = text.indexOf('{')
@@ -302,6 +441,72 @@ export function extractFirstJsonObject(text: string): string | null {
     else if (ch === '}') {
       depth -= 1
       if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+/**
+ * Walk all balanced top-level `{...}` blocks in `text` and return them in
+ * source order. Each block respects string-quoting and escape sequences so
+ * `{ "text": "{}" }` is one block, not three.
+ */
+function findAllBalancedBraceRanges(text: string): string[] {
+  const out: string[] = []
+  let i = 0
+  while (i < text.length) {
+    const start = text.indexOf('{', i)
+    if (start === -1) break
+    let depth = 0
+    let inString = false
+    let escaped = false
+    let end = -1
+    for (let j = start; j < text.length; j++) {
+      const ch = text[j]
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\' && inString) {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = !inString
+        continue
+      }
+      if (inString) continue
+      if (ch === '{') depth += 1
+      else if (ch === '}') {
+        depth -= 1
+        if (depth === 0) {
+          end = j
+          break
+        }
+      }
+    }
+    if (end === -1) break // unterminated brace — give up
+    out.push(text.slice(start, end + 1))
+    i = end + 1
+  }
+  return out
+}
+
+/**
+ * Multi-turn-aware variant of extractFirstJsonObject (lx4 Task 3). Returns
+ * the LAST balanced `{...}` block in `text` whose JSON.parse succeeds.
+ * After tool calls, the assistant's decision JSON comes LAST in stdout —
+ * earlier braces are tool-call I/O blocks. JSON.parse-failures are skipped
+ * silently so a malformed prefix doesn't shadow a valid suffix.
+ */
+export function extractFinalJsonObject(text: string): string | null {
+  const blocks = findAllBalancedBraceRanges(text)
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    try {
+      JSON.parse(blocks[i])
+      return blocks[i]
+    } catch {
+      /* skip — try earlier block */
     }
   }
   return null

@@ -1,16 +1,32 @@
 /**
- * Stage 2 (3-axis classification) prompt builder.
+ * Stage 1 (relevance gate) and Stage 2 (3-axis classification) prompt builders.
  *
- * Phase 7 Plan 01, Task 2. Stage 1 was removed in quick task 260428-jrt
- * (the large-file path now goes straight to triage; Stage 2's
- * `decision='ignore'` already handles relevance signals for the small-file
- * path). CONTEXT decisions enforced verbatim for Stage 2:
+ * Phase 7 Plan 01, Task 2. CONTEXT decisions enforced verbatim:
+ *
+ * D-stage1-prompt:
+ *   - File items: prompt contains the absolute file path and instructs
+ *     Claude to use its Read tool. NEVER includes file content.
+ *   - Gmail items: prompt contains subject/from/snippet/headers from
+ *     source_metadata. NEVER tries to fetch the full body.
+ *   - Both: confidence ≥ 0.75 required for actionable keep/ignore.
  *
  * D-stage2-prompt:
- *   - Item-source split (file path vs gmail metadata block).
+ *   - Same item-source split (file path vs gmail metadata block).
  *   - Existing taxonomy injected as flat lists per axis.
  *   - Empty axes render as `(none yet)` so the LLM never sees a dangling label.
  *   - Confident-match threshold 0.85 in body.
+ *
+ * Quick task 260428-lx4 (Task 3) updates Stage 2 ONLY:
+ *   - REMOVED the inline path-tree dump. Stage 2 now declares 3 MCP tools that
+ *     Claude may call mid-reasoning to inspect the path tree, sample items
+ *     filed under any label it's considering, and learn where the user has
+ *     been moving things during triage.
+ *   - The taxonomy block stays inline because it's small and avoids forcing a
+ *     tool call on every item.
+ *   - The decision rules + JSON shape sentence are kept verbatim — Stage 2's
+ *     output contract is unchanged.
+ *   - Final-message-must-be-JSON-only instruction added so multi-turn output
+ *     after tool calls still produces an extractable assistant decision.
  *
  * CRITICAL SECURITY CONSTRAINT
  * ----------------------------
@@ -29,19 +45,40 @@ export interface TaxonomyContext {
   context: string[]
 }
 
-/**
- * Existing confirmed-folder tree injected into Stage 2 prompts (quick task
- * 260427-h9w). Each entry is a parent directory (everything before the last
- * `/` of a `confirmed_drive_path`) plus the count of confirmed-filed items
- * underneath it. The prompt instructs Claude to reuse a parent if this item
- * belongs there, or to propose a new branch otherwise.
- *
- * Empty `paths` is the cold-start signal — the prompt switches to "no
- * existing folders yet" copy so Claude doesn't try to invent fictional
- * matches.
- */
-export interface PathContext {
-  paths: Array<{ parent: string; count: number }>
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Stage 1                                                                  */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+export function buildStage1Prompt(item: QueueItem): string {
+  if (item.source === 'downloads') {
+    if (!item.file_path) {
+      // Defensive: an item that reaches the consumer without a file_path
+      // indicates a Phase 5/6 contract violation. Fail fast so the worker
+      // emits outcome:'error' instead of asking Claude to read an empty path.
+      throw new Error('downloads item missing file_path')
+    }
+    return [
+      `Classify this file: "${item.file_path}". Read the file with the Read tool to see content.`,
+      '',
+      'Decide: keep (relevant professional document), ignore (junk/spam/installer), or uncertain.',
+      '',
+      'Respond JSON only: {"decision": "keep"|"ignore"|"uncertain", "confidence": 0..1, "reason": "..."}.',
+      'Confidence ≥ 0.75 required for actionable keep/ignore; else respond uncertain.',
+    ].join('\n')
+  }
+  // gmail
+  const meta = metaString(item)
+  return [
+    'Classify this email:',
+    `Subject: ${meta.subject}`,
+    `From: ${meta.from}`,
+    `Preview: ${meta.snippet}`,
+    `Headers: ${meta.headers}`,
+    '',
+    'Decide: keep / ignore / uncertain. Do not attempt to fetch the full body — judge from the metadata above.',
+    'Respond JSON: {"decision":..., "confidence":..., "reason":...}.',
+    'Confidence ≥ 0.75 required for actionable keep/ignore; else respond uncertain.',
+  ].join('\n')
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -51,7 +88,6 @@ export interface PathContext {
 export function buildStage2Prompt(
   item: QueueItem,
   taxonomy: TaxonomyContext,
-  paths: PathContext,
 ): string {
   const itemBlock = buildStage2ItemBlock(item)
   // Per quick task 260426-u47 (D-auto-file, D-auto-ignore): Stage 2 emits an
@@ -61,11 +97,14 @@ export function buildStage2Prompt(
   // is a confident match, with confidence < 0.85 so the route's path-based
   // gate naturally routes the item to human review (defense in depth).
   // Per quick task 260427-h9w: the fixed `<type>/<from>/<context>/<filename>`
-  // path template is REPLACED by a model-defined evolving folder tree. Claude
-  // sees existing confirmed parents (with file counts) and proposes a path
-  // of arbitrary depth — reusing existing folders or branching when needed.
-  // Auto-file gates on `path_confidence ≥ 0.85` AND parent-has-≥3-siblings,
-  // both of which the route enforces server-side.
+  // path template is REPLACED by a model-defined evolving folder tree. Auto-
+  // file gates on `path_confidence ≥ 0.85` AND parent-has-≥3-siblings, both
+  // enforced server-side.
+  // Per quick task 260428-lx4 (Task 3): the inline path-tree dump is REMOVED.
+  // Claude calls 3 MCP tools to ground its decision on demand:
+  //   - cortex_paths_internal: list existing folder parents (with file counts)
+  //   - cortex_label_samples({axis,label}): sample what's filed under a label
+  //   - cortex_path_feedback: recent user moves (proposed != confirmed)
   return [
     `Classify this item: ${itemBlock}.`,
     '',
@@ -76,11 +115,13 @@ export function buildStage2Prompt(
     '',
     'Propose 3-axis labels. If an existing label from the lists above is a confident match (confidence ≥ 0.85), use it. If no existing label fits, you may propose a new label name on that axis — pick a short lowercased name (hyphen- or underscore-separated) following the style of the existing labels — but mark it with confidence below 0.85 so a human can review and approve the new label before it is added to the taxonomy. If you have no plausible label for an axis, value may be null with low confidence.',
     '',
-    'Existing folders (parents that already contain confirmed items, by file count):',
-    renderPathsBlock(paths),
+    'Tools available (call them when you need on-demand grounding):',
+    '- cortex_paths_internal — list existing confirmed-folder parents with file counts. Call before proposing a path so you know what folders already exist.',
+    "- cortex_label_samples({axis, label}) — sample up to N most-recent confirmed items carrying a particular axis label. Call for any axis label below 0.85 confidence to ground your decision in real prior items.",
+    '- cortex_path_feedback — recent user moves: rows where Stage 2 proposed one path but the user filed under a different one. Call before committing a path placement.',
     '',
     'Pick a proposed_drive_path:',
-    '- Reuse one of the parents above if this item belongs there. Append a filename.',
+    '- Reuse an existing parent (from cortex_paths_internal) if this item belongs there. Append a filename.',
     '- If no parent fits, propose a new branch — but prefer fewer levels (2-3) over deeply nested paths.',
     '- The path can be of arbitrary depth; do not force any fixed shape.',
     'Return path_confidence (0..1) proportional to how sure you are about the placement.',
@@ -91,6 +132,7 @@ export function buildStage2Prompt(
     '- uncertain: anything else (a human will triage).',
     'If decision="ignore", axes may be null with low confidence — we trust the ignore signal.',
     '',
+    'Your FINAL message must be ONLY the JSON object — no prose around it. Earlier turns may include tool calls and reasoning; only the final assistant message is parsed.',
     'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string, "path_confidence":0..1, "decision":"auto_file"|"ignore"|"uncertain"}.',
   ].join('\n')
 }
@@ -152,18 +194,4 @@ function stringOrNone(v: unknown): string {
 function listOrNoneYet(items: string[]): string {
   if (!items || items.length === 0) return '(none yet)'
   return items.join(', ')
-}
-
-/**
- * Render the existing-folder block for the Stage 2 prompt. Non-empty: bullet
- * list of `"<parent>" (<count> items)` lines. Empty: explicit cold-start
- * line so Claude doesn't try to invent matches against the empty tree.
- */
-function renderPathsBlock(paths: PathContext): string {
-  if (!paths.paths || paths.paths.length === 0) {
-    return '  (no existing folders yet — propose any path you think makes sense; low path_confidence is fine.)'
-  }
-  return paths.paths
-    .map((p) => `  - "${p.parent}" (${p.count} items)`)
-    .join('\n')
 }

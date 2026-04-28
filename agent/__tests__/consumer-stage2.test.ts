@@ -1,5 +1,5 @@
 /**
- * Stage 2 worker loop unit tests — Phase 7 Plan 02, Task 2.
+ * Stage 2 worker loop unit tests — Phase 7 Plan 02, Task 2 (updated for lx4 Task 3).
  *
  * Validates the labelling-pool consumer loop:
  *   - Polls /api/queue?stage=2&limit=2 with adaptive cadence (5s/30s).
@@ -8,11 +8,16 @@
  *     (never cached across cycles — D-no-cache-taxonomy).
  *   - Posts ONE classify per item (success: all-3-axes; error mapping otherwise).
  *   - 409 conflict logged + skipped (D-postClassify-no-retry-409).
+ *   - Stage 1 saturation does NOT block Stage 2 throughput (CONS-05).
  *   - Taxonomy fetch failure → batch is skipped (items stay in processing_stage2,
  *     queue's stale-reclaim returns them).
  *
- * (Quick task 260428-jrt: removed the Stage-1-saturation test (CONS-05) — Stage 1
- * no longer exists; the consumer is single-pool.)
+ * lx4 Task 3 changes (Tests W1–W3):
+ *   - Worker no longer fetches paths via getPathsInternalImpl. The model fetches
+ *     via the cortex_paths_internal MCP tool. PATHS_RESPONSE fixture removed.
+ *   - The "paths fetch failed" test is removed (no longer applicable).
+ *   - Other behaviors (taxonomy fetch, parse_error, exit_error, timeout, 409,
+ *     adaptive cadence, stop()) are unchanged.
  */
 
 import { runStage2Worker, STAGE2_LIMIT, STAGE2_CONCURRENCY } from '../src/consumer/stage2'
@@ -22,7 +27,6 @@ import type {
   ClassifyOutcome,
   QueueResponse,
   TaxonomyInternalResponse,
-  PathsInternalResponse,
 } from '../src/http/types'
 import type { ClaudeOutcome } from '../src/consumer/claude'
 
@@ -65,13 +69,6 @@ const TAXONOMY: TaxonomyInternalResponse = {
 
 const EMPTY_TAXONOMY: TaxonomyInternalResponse = { type: [], from: [], context: [] }
 
-// h9w: Stage 2 worker now also fetches the confirmed-path tree once per
-// non-empty batch. Tests inject a small fixture so the worker doesn't try to
-// hit the real network.
-const PATHS_RESPONSE: PathsInternalResponse = {
-  paths: [{ parent: '/invoice/acme/finance/', count: 5 }],
-}
-
 const okStage2Outcome = (): ClaudeOutcome<{
   axes: { type: { value: string | null; confidence: number }; from: { value: string | null; confidence: number }; context: { value: string | null; confidence: number } }
   proposed_drive_path: string
@@ -86,11 +83,6 @@ const okStage2Outcome = (): ClaudeOutcome<{
       context: { value: 'finance', confidence: 0.85 },
     },
     proposed_drive_path: '/invoice/acme/finance/x.pdf',
-    // h9w: schema requires path_confidence + decision at the top level. Use
-    // 'uncertain' here so the existing Test 2 assertion (which doesn't include
-    // a decision in the expected payload) doesn't get a noisy diff — toEqual
-    // ignores undefined fields, but explicit 'uncertain' matches the legacy
-    // CERTAIN/UNCERTAIN fallback flow these tests exercise.
     decision: 'uncertain',
     path_confidence: 0.5,
   },
@@ -151,8 +143,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -182,16 +172,12 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
 
     expect(postClassifyImpl).toHaveBeenCalledTimes(1)
     const payload = postClassifyImpl.mock.calls[0]![0] as ClassifyRequest
-    // u47: decision is now part of the success payload. h9w: path_confidence
-    // is also part of the success payload. Use toEqual with the full shape.
     expect(payload).toEqual({
       item_id: 's2_happy',
       stage: 2,
@@ -227,8 +213,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -266,21 +250,15 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
-    // First poll resolves and dispatches.
     for (let i = 0; i < 30; i++) await Promise.resolve()
     expect(getTaxonomyInternalImpl).toHaveBeenCalledTimes(1)
 
-    // Advance past the 5s items-cadence sleep → second poll fires.
     await jest.advanceTimersByTimeAsync(6_000)
     for (let i = 0; i < 30; i++) await Promise.resolve()
-    // Second non-empty poll → second taxonomy fetch.
     expect(getTaxonomyInternalImpl).toHaveBeenCalledTimes(2)
 
-    // Now an empty poll — taxonomy MUST NOT be re-fetched.
     await jest.advanceTimersByTimeAsync(6_000)
     for (let i = 0; i < 30; i++) await Promise.resolve()
     expect(getTaxonomyInternalImpl).toHaveBeenCalledTimes(2)
@@ -306,14 +284,11 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
 
     expect(capturedPrompt).toContain('(none yet)')
-    // Three axes each render "(none yet)".
     const matches = capturedPrompt.match(/\(none yet\)/g) ?? []
     expect(matches.length).toBeGreaterThanOrEqual(3)
   })
@@ -337,16 +312,12 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
 
-    // No invokeClaude, no postClassify — items stay in processing_stage2.
     expect(invokeClaudeImpl).not.toHaveBeenCalled()
     expect(postClassifyImpl).not.toHaveBeenCalled()
-    // A failure trace was emitted.
     const traceNames = lf.trace.mock.calls.map((c: unknown[]) => (c[0] as { name: string }).name)
     expect(traceNames.some((n: string) => n.includes('taxonomy'))).toBe(true)
   })
@@ -382,8 +353,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -420,8 +389,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 50; i++) await Promise.resolve()
@@ -452,8 +419,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     await Promise.resolve()
@@ -470,7 +435,7 @@ describe('runStage2Worker', () => {
     expect(pollCount).toBeGreaterThanOrEqual(3)
   })
 
-  it('Test 11: stop() halts polling and drains in-flight invocations', async () => {
+  it('Test 10: stop() halts polling and drains in-flight invocations', async () => {
     const items = [FILE_ITEM('s2_drain_a'), FILE_ITEM('s2_drain_b')]
     const getQueueImpl = jest
       .fn()
@@ -491,8 +456,6 @@ describe('runStage2Worker', () => {
       invokeClaudeImpl: invokeClaudeImpl as never,
       postClassifyImpl: postClassifyImpl as never,
       getTaxonomyInternalImpl: getTaxonomyInternalImpl as never,
-      // h9w: stub the new path-tree fetch so the worker doesn't reach the real network.
-      getPathsInternalImpl: jest.fn(async () => PATHS_RESPONSE) as never,
     })
 
     for (let i = 0; i < 5; i++) await Promise.resolve()

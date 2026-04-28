@@ -15,6 +15,10 @@
  *     processing_stage2 and the queue's stale-reclaim path will return
  *     them to pending_stage2 on the next poll cycle.
  *
+ * Quick task 260428-lx4 (Task 3): the worker no longer fetches the path
+ * tree — Claude does that on demand via the cortex_paths_internal MCP tool
+ * spawned by invokeClaude. The taxonomy fetch stays inline.
+ *
  * Independence (T-07-10 mitigation): this worker runs alongside the Stage 1
  * worker but holds its own Semaphore — Stage 1 saturation cannot block
  * Stage 2 items from being claimed and classified.
@@ -31,13 +35,11 @@ import {
   getQueue,
   postClassify,
   getTaxonomyInternal,
-  getPathsInternal,
 } from '../http/client.js'
 import type {
   QueueItem,
   ClassifyRequest,
   TaxonomyInternalResponse,
-  PathsInternalResponse,
 } from '../http/types.js'
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -101,13 +103,6 @@ export interface Stage2Deps {
   postClassifyImpl?: typeof postClassify
   invokeClaudeImpl?: typeof invokeClaude
   getTaxonomyInternalImpl?: typeof getTaxonomyInternal
-  /**
-   * Quick task 260427-h9w. Fetches the confirmed-folder tree once per
-   * non-empty batch (alongside the taxonomy fetch). Same skip-batch
-   * semantics on failure: items stay in processing_stage2 and the queue's
-   * stale-reclaim returns them on the next poll cycle.
-   */
-  getPathsInternalImpl?: typeof getPathsInternal
 }
 
 export interface Stage2Worker {
@@ -120,7 +115,6 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
   const postClassifyFn = deps.postClassifyImpl ?? postClassify
   const invokeClaudeFn = deps.invokeClaudeImpl ?? invokeClaude
   const getTaxonomyInternalFn = deps.getTaxonomyInternalImpl ?? getTaxonomyInternal
-  const getPathsInternalFn = deps.getPathsInternalImpl ?? getPathsInternal
   const lf = deps.langfuse
 
   let stopped = false
@@ -144,7 +138,6 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
   const handleOne = async (
     item: QueueItem,
     taxonomy: TaxonomyInternalResponse,
-    paths: PathsInternalResponse,
     parentTraceId: string | null,
   ): Promise<void> => {
     const release = await sem.acquire()
@@ -164,15 +157,11 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
 
       let prompt: string
       try {
-        prompt = buildStage2Prompt(
-          item,
-          {
-            type: taxonomy.type,
-            from: taxonomy.from,
-            context: taxonomy.context,
-          },
-          { paths: paths.paths },
-        )
+        prompt = buildStage2Prompt(item, {
+          type: taxonomy.type,
+          from: taxonomy.from,
+          context: taxonomy.context,
+        })
       } catch (err) {
         await safePostClassify(postClassifyFn, lf, {
           item_id: item.id,
@@ -330,28 +319,11 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
         continue
       }
 
-      // Fetch the confirmed-folder tree ONCE per non-empty batch (h9w).
-      // Same skip-batch semantics as the taxonomy fetch above — items stay
-      // in processing_stage2 and the stale-reclaim path returns them on
-      // the next poll cycle.
-      let paths: PathsInternalResponse
-      try {
-        paths = await getPathsInternalFn()
-      } catch (err) {
-        try {
-          lf.trace({
-            name: 'consumer-stage2-paths-fetch-failed',
-            metadata: { error: String(err), batch_size: items.length },
-          })
-        } catch {
-          /* ignore */
-        }
-        await cancellableSleep(POLL_INTERVAL_ITEMS_MS)
-        continue
-      }
+      // lx4 Task 3: paths fetch removed — Claude calls cortex_paths_internal
+      // via the MCP tool when it needs the path tree.
 
       for (const item of items) {
-        const promise = handleOne(item, taxonomy, paths, traceId)
+        const promise = handleOne(item, taxonomy, traceId)
         inFlight.add(promise)
         promise.finally(() => inFlight.delete(promise)).catch(() => {})
       }
