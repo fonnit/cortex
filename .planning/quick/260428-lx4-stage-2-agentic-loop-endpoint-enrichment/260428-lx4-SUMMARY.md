@@ -11,7 +11,7 @@ provides:
   - /api/labels/samples (GET, requireApiKey)
   - /api/path-feedback (GET, requireApiKey)
   - agent stdio MCP server `cortex-tools` (3 tools)
-  - claude.ts MCP plumbing: --mcp-config + --strict-mcp-config + --allowedTools + --max-budget-usd
+  - claude.ts MCP plumbing: --mcp-config + --strict-mcp-config + --allowedTools (post-hoc correction: --max-budget-usd was removed in a follow-up commit — claude runs against the Code subscription so per-invocation USD caps don't apply; 120s timeout is the sole governor)
   - extractFinalJsonObject for multi-turn stdout
 affects:
   - Stage 2 prompt no longer inlines path tree; declares 3 MCP tools instead
