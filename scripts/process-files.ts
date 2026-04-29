@@ -2,9 +2,13 @@
  * Manual one-shot file processor.
  *
  * Drives the existing daemon + consumer pipeline against an ad-hoc list of
- * file paths, end-to-end (ingest → Stage 1 → Stage 2 → terminal status), then
- * exits. Useful for bootstrapping a base taxonomy without standing up the
+ * file paths, end-to-end (ingest → Stage 2 → terminal status), then exits.
+ * Useful for bootstrapping a base taxonomy without standing up the
  * long-running daemon.
+ *
+ * Routing post-jrt: ingest sends <1MiB → pending_stage2; ≥1MiB or unknown →
+ * uncertain (terminal at ingest, no LLM call). Stage 2 is the only worker the
+ * script needs to drive.
  *
  * Usage:
  *   npx tsx --env-file=.env.local scripts/process-files.ts <file> [<file> ...]
@@ -13,19 +17,18 @@
  * Reuses (no service-layer duplication):
  *   - buildPayload  from agent/src/collectors/downloads.ts (sha256 + mime + IngestRequest)
  *   - postIngest    from agent/src/http/client.ts          (retry/backoff to /api/ingest)
- *   - runStage1Worker / runStage2Worker from agent/src/consumer/{stage1,stage2}.ts
+ *   - runStage2Worker from agent/src/consumer/stage2.ts
  *   - prisma        from lib/prisma.ts                     (status polling)
  *
  * Exits cleanly when every ingested item reaches a terminal status. Non-zero
  * exit if any item ends in 'error' or hits the wall-clock timeout.
  */
 
-import { readFile, stat as fsStat } from 'fs/promises'
+import { stat as fsStat } from 'fs/promises'
 import { resolve } from 'path'
 
 import { buildPayload } from '../agent/src/collectors/downloads.js'
 import { postIngest } from '../agent/src/http/client.js'
-import { runStage1Worker } from '../agent/src/consumer/stage1.js'
 import { runStage2Worker } from '../agent/src/consumer/stage2.js'
 import { prisma } from '../lib/prisma'
 import { QUEUE_STATUSES } from '../lib/queue-config'
@@ -193,16 +196,15 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  console.log(`[process-files] starting Stage 1 + Stage 2 workers (${ids.length} items in flight)`)
-  const stage1 = runStage1Worker({ langfuse: lfStub })
+  console.log(`[process-files] starting Stage 2 worker (${ids.length} items in flight)`)
   const stage2 = runStage2Worker({ langfuse: lfStub })
 
   let snap: Map<string, ItemSnapshot>
   try {
     snap = await waitForTerminal(ids)
   } finally {
-    console.log('[process-files] stopping workers…')
-    await Promise.allSettled([stage1.stop(), stage2.stop()])
+    console.log('[process-files] stopping worker…')
+    await stage2.stop()
   }
 
   // Final report.
