@@ -36,7 +36,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { writeFileSync, unlinkSync } from 'node:fs'
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { ZodType } from 'zod'
@@ -209,13 +209,30 @@ function resolveCortexToolsPath(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const here: string = (globalThis as any).__dirname
     ?? (typeof __dirname !== 'undefined' ? __dirname : '')
+
+  // Probe order: sibling-of-consumer .js (production dist OR launchd cwd
+  // sibling), then dist/ rewrite of src/ (tsx-script context where __dirname
+  // points at agent/src/consumer/), then cwd fallback.
+  const candidates: string[] = []
   if (here) {
-    // claude.{ts,js} lives in {agent}/{src|dist}/consumer/. Sibling of
-    // consumer/ is mcp/. Compose the dist filename (production build).
-    return resolve(here, '..', 'mcp', 'cortex-tools.js')
+    candidates.push(resolve(here, '..', 'mcp', 'cortex-tools.js'))
+    // tsx-script context: __dirname=agent/src/consumer; flip src→dist so we
+    // find the COMPILED .js even though we're running from source.
+    if (here.includes(`${'/src/'}`) || here.includes(`${'/src'}`)) {
+      const distHere = here.replace(`${'/src/'}`, `${'/dist/'}`)
+      candidates.push(resolve(distHere, '..', 'mcp', 'cortex-tools.js'))
+    }
   }
-  // Fallback: assume cwd is the agent root (launchd plist sets this).
-  return resolve(process.cwd(), 'dist', 'mcp', 'cortex-tools.js')
+  candidates.push(resolve(process.cwd(), 'agent', 'dist', 'mcp', 'cortex-tools.js'))
+  candidates.push(resolve(process.cwd(), 'dist', 'mcp', 'cortex-tools.js'))
+
+  // First candidate that exists wins. If none, claude -p will fail to spawn
+  // the MCP server and the model will report tools-not-available — caller
+  // sees this in the per-item /tmp/cortex-stage2-<id>.log.
+  for (const c of candidates) {
+    if (existsSync(c)) return c
+  }
+  return candidates[0] // last-resort: return the original path so error msg is informative
 }
 
 /**
