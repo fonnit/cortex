@@ -1,248 +1,76 @@
 /**
- * Partial seed apply — quick task 260427-tlk.
+ * Seed applier — JSON-driven (v4).
  *
- * Inserts:
- *   - TaxonomyLabel rows for canonical type / from / context values
- *   - Item rows at status='filed' + confirmed_drive_path set, for date-agnostic
- *     folders (identity, contracts, properties, employment history, education,
- *     brand, photos) AND date-bucketed folders where the year is reliable from
- *     the filename (Steuer Erklaerung 2023.pdf, PayslipsCastlabs2021.pdf, etc.)
+ * Loads cortex-seed-v4.json, validates it via Zod, and either:
+ *   --dry-run   → statSyncs every anchor file, prints a summary + per-parent
+ *                 count table, exits 0 if all files exist (1 if any missing).
+ *                 NEVER opens a Prisma connection. Runs fine without
+ *                 DATABASE_URL set or SEED_USER_ID set.
+ *   live run    → upserts TaxonomyLabel rows for axes.type + axes.from (NOT
+ *                 context — Decision 1 of SEED-v4-prod.md), and upserts Item
+ *                 rows at status='filed' for every anchor whose file is on
+ *                 disk. Requires SEED_USER_ID env var.
  *
- * Defers (content-pass needed):
- *   - /business/{entity}/invoices-in|out/{year}/{month}/
- *   - /personal/finance/invoices/{year}/{month}/
- *   - /business/{entity}/bank-statements/{year}/
- *   - /personal/finance/payslips/{employer}/{year}/  (where year not in filename)
+ * Usage:
+ *   npx tsx --env-file=.env.local scripts/apply-seed.ts [--dry-run] [--seed=<path>]
  *
- * Each anchor uses the REAL sha256 of the local file so a future re-ingest
- * via /api/ingest dedups onto the existing row instead of creating a phantom.
+ * Defaults:
+ *   --seed=.planning/quick/260427-tlk-base-taxonomy-seed/cortex-seed-v4.json
+ *
+ * v4 changes vs v3:
+ *   - No hardcoded axis-value arrays or anchor lists in this file. Everything
+ *     loads from the JSON at runtime.
+ *   - The third axis (path-redundant context grouping) is no longer written.
+ *     Schema column for it stays — just left null on every Item upsert.
+ *   - TaxonomyLabel rows for that third axis are not inserted.
+ *   - --dry-run flag added, gated to zero-DB execution via dynamic import.
  */
 
 import { readFileSync, statSync, createReadStream } from 'fs'
 import { createHash } from 'crypto'
 import { extname, basename } from 'path'
-import { prisma } from '../lib/prisma'
+import { parseArgs } from 'node:util'
+import { z } from 'zod'
 
 /* ─────────────────────────────────────────────────────────────────────── */
-/* Canonical axis values                                                    */
+/* v4 JSON schema (Zod) — strict so a stray `context` key fails fast        */
 /* ─────────────────────────────────────────────────────────────────────── */
 
-const TYPE_VALUES = [
-  'invoice',
-  'invoice-outgoing',
-  'payslip',
-  'bank-statement',
-  'contract',
-  'employment-contract',
-  'rental-contract',
-  'passport',
-  'residence-permit',
-  'national-id',
-  'civil-registry',
-  'boarding-pass',
-  'hotel-booking',
-  'flight-booking',
-  'ticket',
-  'diploma',
-  'transcript',
-  'apostille',
-  'certificate',
-  'cv-resume',
-  'photo',
-  'screenshot',
-  'rent-payment',
-  'payment-confirmation',
-  'receipt',
-  'title-deed',
-  'real-estate-permit',
-  'real-estate-license',
-  'power-of-attorney',
-  'tax-document',
-  'tax-filing',
-  'self-disclosure',
-  'income-proof',
-  'credit-application',
-  'insurance-policy',
-  'brand-asset',
-  'corporate-registration',
-  'diagram',
-] as const
+const SeedV4Schema = z.object({
+  version: z.literal('v4'),
+  generated_at: z.string(),
+  source: z
+    .object({
+      from: z.string(),
+      transformer: z.string(),
+      decisions: z.string(),
+    })
+    .optional(),
+  axes: z
+    .object({
+      type: z.array(z.string()).min(1),
+      from: z.array(z.string()).min(1),
+    })
+    .strict(), // FAILS if `context` key is present — guards Decision 1.
+  anchors: z
+    .array(
+      z
+        .object({
+          file: z.string().startsWith('/'),
+          type: z.string(),
+          from: z.string().nullable(),
+          drivePath: z.string().startsWith('/'),
+        })
+        .strict(), // FAILS if anchor object has a `context` field.
+    )
+    .min(1),
+})
 
-const FROM_VALUES = [
-  // Employers / clients
-  'fonnit',
-  'habyt',
-  'castlabs',
-  's-ray',
-  'esg-book',
-  'nuvant',
-  // Business entities owned by user
-  'terradan',
-  'terradan-colombia',
-  'terradan-dubai',
-  // Government / authorities
-  'germany-residence-office',
-  'german-tax-authority',
-  'colombia-government',
-  'uae-government',
-  'bvfa',
-  'schufa',
-  // Banks
-  'n26',
-  'wio-bank',
-  'revolut',
-  // SaaS / commerce
-  'amazon',
-  'apple',
-  'github',
-  'trello',
-  'upwork',
-  'aws',
-  'booking-com',
-  'hostelworld',
-  'airbnb',
-  // Tax / legal services
-  'accountable',
-  'stb-munk',
-  'elster',
-  'ejari',
-  // Utilities
-  'ostrom',
-  'duesselfibre',
-  'alditalk',
-  // Education
-  'telc',
-  // Real estate
-  'seven-palm',
-] as const
-
-const CONTEXT_VALUES = [
-  'personal-finance',
-  'business-finance',
-  'taxes',
-  'work-employment',
-  'work-freelance',
-  'work-projects',
-  'real-estate',
-  'travel',
-  'identity',
-  'immigration',
-  'family',
-  'education',
-  'legal',
-  'media-personal',
-] as const
+type SeedV4 = z.infer<typeof SeedV4Schema>
+type Anchor = SeedV4['anchors'][number]
 
 /* ─────────────────────────────────────────────────────────────────────── */
-/* Curated anchor list — file path → target Drive path + axes               */
-/* ─────────────────────────────────────────────────────────────────────── */
-
-interface Anchor {
-  file: string
-  drivePath: string // including filename
-  type: (typeof TYPE_VALUES)[number]
-  from: (typeof FROM_VALUES)[number] | null
-  context: (typeof CONTEXT_VALUES)[number]
-}
-
-const ANCHORS: Anchor[] = [
-  // ─── /identity/passport/ (3+) ────────────────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/Passport.pdf', drivePath: '/identity/passport/Passport.pdf', type: 'passport', from: 'colombia-government', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/Passport.heic', drivePath: '/identity/passport/Passport.heic', type: 'passport', from: 'colombia-government', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/Passport.jpg', drivePath: '/identity/passport/Passport.jpg', type: 'passport', from: 'colombia-government', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/Passport.png', drivePath: '/identity/passport/Passport.png', type: 'passport', from: 'colombia-government', context: 'identity' },
-
-  // ─── /identity/residence-permit/ (3+) ───────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/AUFENTHALTSTITEL.pdf', drivePath: '/identity/residence-permit/AUFENTHALTSTITEL.pdf', type: 'residence-permit', from: 'germany-residence-office', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/Permanent residence letter.jpeg', drivePath: '/identity/residence-permit/Permanent residence letter.jpeg', type: 'residence-permit', from: 'germany-residence-office', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/digital_idp.pdf', drivePath: '/identity/residence-permit/digital_idp.pdf', type: 'residence-permit', from: 'germany-residence-office', context: 'identity' },
-
-  // ─── /identity/civil-registry/ (3+, self+spouse) ─────────────────────
-  { file: '/Users/dfonnegrag/Documents/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf', drivePath: '/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf', type: 'civil-registry', from: 'colombia-government', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/REGISTRO CIVIL JENNY 7 JUL 2025.pdf', drivePath: '/identity/civil-registry/REGISTRO CIVIL JENNY 7 JUL 2025.pdf', type: 'civil-registry', from: 'colombia-government', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/danny passport.pdf', drivePath: '/identity/civil-registry/danny passport.pdf', type: 'civil-registry', from: 'colombia-government', context: 'identity' },
-
-  // ─── /identity/national-ids/ (3+) ────────────────────────────────────
-  // GesundheitsKarte = German health insurance card (national-id-like)
-  { file: '/Users/dfonnegrag/Documents/GesundheitsKarte 1.HEIC', drivePath: '/identity/national-ids/GesundheitsKarte 1.HEIC', type: 'national-id', from: 'germany-residence-office', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/GesundheitsKarte 2.HEIC', drivePath: '/identity/national-ids/GesundheitsKarte 2.HEIC', type: 'national-id', from: 'germany-residence-office', context: 'identity' },
-  { file: '/Users/dfonnegrag/Documents/Passbild.jpg', drivePath: '/identity/national-ids/Passbild.jpg', type: 'national-id', from: 'germany-residence-office', context: 'identity' },
-
-  // ─── /family/civil-registry/ (3+, family ex-self) ────────────────────
-  { file: '/Users/dfonnegrag/Documents/REGISTRO CIVIL JAIME 7 JUL 2025.pdf', drivePath: '/family/civil-registry/REGISTRO CIVIL JAIME 7 JUL 2025.pdf', type: 'civil-registry', from: 'colombia-government', context: 'family' },
-  { file: '/Users/dfonnegrag/Documents/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf', drivePath: '/family/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf', type: 'civil-registry', from: 'colombia-government', context: 'family' },
-
-  // ─── /education/higher-ed/ (Diplomas) (3+) ──────────────────────────
-  // Note: Diploma files originally in subdirectories under Documents.
-  // We use only ones we can verify exist or are safely fallback-able.
-  // Skip if file doesn't exist; partial seed will just include fewer.
-
-  // ─── /legal/powers-of-attorney/ (3+) ────────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/1.1. Poder Daniel Fonnegra CN.docx.pdf', drivePath: '/legal/powers-of-attorney/Poder Daniel Fonnegra CN.pdf', type: 'power-of-attorney', from: 'colombia-government', context: 'legal' },
-  { file: '/Users/dfonnegrag/Documents/1.3. Poder Daniel Fonnegra CC.docx.pdf', drivePath: '/legal/powers-of-attorney/Poder Daniel Fonnegra CC.pdf', type: 'power-of-attorney', from: 'colombia-government', context: 'legal' },
-
-  // ─── /employment/cv/ (1, will need 2 more) ──────────────────────────
-  { file: '/Users/dfonnegrag/Documents/DanielFonnegraCV.pdf', drivePath: '/employment/cv/DanielFonnegraCV.pdf', type: 'cv-resume', from: null, context: 'work-employment' },
-
-  // ─── /real-estate/primary-residence/lease/ (3+) ─────────────────────
-  { file: '/Users/dfonnegrag/Documents/Daniel Fonnegra - 00061029 + Habyt contract.pdf', drivePath: '/real-estate/primary-residence/lease/Habyt contract 00061029.pdf', type: 'rental-contract', from: 'habyt', context: 'real-estate' },
-  { file: '/Users/dfonnegrag/Documents/Sublet Agreement.pdf', drivePath: '/real-estate/primary-residence/lease/Sublet Agreement.pdf', type: 'rental-contract', from: null, context: 'real-estate' },
-
-  // ─── /personal/finance/credit-applications/ (3+) ────────────────────
-  { file: '/Users/dfonnegrag/Documents/Selbstauskunft.pdf', drivePath: '/personal/finance/credit-applications/Selbstauskunft.pdf', type: 'self-disclosure', from: null, context: 'personal-finance' },
-  { file: '/Users/dfonnegrag/Documents/Selbstauskunft Zweckentfremdung.pdf', drivePath: '/personal/finance/credit-applications/Selbstauskunft Zweckentfremdung.pdf', type: 'self-disclosure', from: null, context: 'personal-finance' },
-  { file: '/Users/dfonnegrag/Documents/Einkommens-Nachweis.pdf', drivePath: '/personal/finance/credit-applications/Einkommens-Nachweis.pdf', type: 'income-proof', from: 's-ray', context: 'personal-finance' },
-  { file: '/Users/dfonnegrag/Downloads/1.Mieterselbstauskunft_Self-disclosure.pdf', drivePath: '/personal/finance/credit-applications/Mieterselbstauskunft.pdf', type: 'self-disclosure', from: null, context: 'personal-finance' },
-
-  // ─── /personal/finance/insurance/ (3+) ──────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf', drivePath: '/personal/finance/insurance/Versicherungsvertrag 2025.pdf', type: 'insurance-policy', from: null, context: 'personal-finance' },
-
-  // ─── /personal/photos/ (3+) ─────────────────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/IMG_0697.jpg', drivePath: '/personal/photos/IMG_0697.jpg', type: 'photo', from: null, context: 'media-personal' },
-  { file: '/Users/dfonnegrag/Documents/IMG_3560.jpg', drivePath: '/personal/photos/IMG_3560.jpg', type: 'photo', from: null, context: 'media-personal' },
-  { file: '/Users/dfonnegrag/Documents/IMG_4058.jpg', drivePath: '/personal/photos/IMG_4058.jpg', type: 'photo', from: null, context: 'media-personal' },
-  { file: '/Users/dfonnegrag/Documents/IMG_4059.jpg', drivePath: '/personal/photos/IMG_4059.jpg', type: 'photo', from: null, context: 'media-personal' },
-  { file: '/Users/dfonnegrag/Documents/IMG_8792.jpg', drivePath: '/personal/photos/IMG_8792.jpg', type: 'photo', from: null, context: 'media-personal' },
-
-  // ─── /business/terradan/dubai/properties/seven-palm-149/ (3+) ───────
-  { file: '/Users/dfonnegrag/Documents/SEVEN PALM 149 TITLE DEED.pdf', drivePath: '/business/terradan/dubai/properties/seven-palm-149/TITLE DEED.pdf', type: 'title-deed', from: 'seven-palm', context: 'real-estate' },
-
-  // ─── /personal/finance/payslips/castlabs/2021/ (date in filename) ──
-  { file: '/Users/dfonnegrag/Documents/PayslipsCastlabs2021.pdf', drivePath: '/personal/finance/payslips/castlabs/2021/PayslipsCastlabs2021.pdf', type: 'payslip', from: 'castlabs', context: 'personal-finance' },
-  { file: '/Users/dfonnegrag/Documents/2021 Payslips_Income tax_PW.pdf', drivePath: '/personal/finance/payslips/castlabs/2021/Payslips_Income tax.pdf', type: 'payslip', from: 'castlabs', context: 'personal-finance' },
-
-  // ─── /personal/finance/payslips/s-ray/2025/ (date in filename) ─────
-  { file: '/Users/dfonnegrag/Documents/Brutto-Netto-Abrechnung 2025 08 August.pdf', drivePath: '/personal/finance/payslips/s-ray/2025/Brutto-Netto-Abrechnung 2025-08.pdf', type: 'payslip', from: 's-ray', context: 'personal-finance' },
-
-  // ─── /employment/s-ray/contracts/ (1, need more) ────────────────────
-  { file: '/Users/dfonnegrag/Documents/20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf', drivePath: '/employment/s-ray/contracts/Offer Letter 2022-07.pdf', type: 'employment-contract', from: 's-ray', context: 'work-employment' },
-
-  // ─── /legal/notarized-documents/ (will be sparse — apostilles/MSAs) ──
-  { file: '/Users/dfonnegrag/Documents/(DE) MSA inkl. Datenschutz, Daniel Fonnegra, Daniel Alvarado.pdf', drivePath: '/legal/notarized-documents/MSA Daniel Alvarado.pdf', type: 'contract', from: null, context: 'legal' },
-
-  // ─── /personal/finance/correspondence/2024/ (Mahnungen) ─────────────
-  { file: '/Users/dfonnegrag/Documents/64557 - BvFA Mahnung USt 2024.pdf', drivePath: '/personal/finance/correspondence/2024/BvFA Mahnung USt 2024.pdf', type: 'tax-document', from: 'bvfa', context: 'taxes' },
-  { file: '/Users/dfonnegrag/Documents/Anfrage an das Referat S 4 - Berlin.de.pdf', drivePath: '/personal/finance/correspondence/2024/Anfrage Berlin Referat S 4.pdf', type: 'tax-document', from: 'germany-residence-office', context: 'personal-finance' },
-
-  // ─── /business/fonnit/corporate/ (3+) ────────────────────────────────
-  { file: '/Users/dfonnegrag/Documents/preuve-fonnit-daniel-fonnegra-garcia-5015-1-transfer-6.pdf', drivePath: '/business/fonnit/corporate/preuve-fonnit-transfer.pdf', type: 'corporate-registration', from: 'fonnit', context: 'business-finance' },
-
-  // ─── /education/certifications/ (1, AWS) ─────────────────────────────
-  { file: '/Users/dfonnegrag/Downloads/108_3_6257541_1726240734_AWS Course Completion Certificate.pdf', drivePath: '/education/certifications/AWS Course Completion Certificate.pdf', type: 'certificate', from: 'aws', context: 'education' },
-
-  // ─── /immigration/visa-applications/usa/ (Form W-8) ─────────────────
-  { file: '/Users/dfonnegrag/Documents/Form W-8.pdf', drivePath: '/immigration/visa-applications/usa/Form W-8.pdf', type: 'tax-document', from: null, context: 'immigration' },
-
-  // ─── /personal/health/ (Boxing fitness records) ─────────────────────
-  // Note: not yet in the structure as a top-level. Skip for partial seed.
-
-  // ─── /travel/{year}/{location}/ — only ones we can date confidently ──
-  // SGArrivalCard contains "180120250828" → date 2025-01-18, location Singapore
-  { file: '/Users/dfonnegrag/Documents/SGArrivalCard_180120250828.pdf', drivePath: '/travel/2025/singapore/SGArrivalCard.pdf', type: 'ticket', from: 'uae-government', context: 'travel' },
-]
-
-/* ─────────────────────────────────────────────────────────────────────── */
-/* Apply                                                                    */
+/* Helpers                                                                  */
 /* ─────────────────────────────────────────────────────────────────────── */
 
 async function sha256(filePath: string): Promise<string> {
@@ -263,22 +91,136 @@ const MIME_BY_EXT: Record<string, string> = {
   '.heic': 'image/heic',
 }
 
-async function main() {
+/* ─────────────────────────────────────────────────────────────────────── */
+/* CLI parsing                                                              */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+const { values: argv } = parseArgs({
+  options: {
+    'dry-run': { type: 'boolean', default: false },
+    seed: {
+      type: 'string',
+      default: '.planning/quick/260427-tlk-base-taxonomy-seed/cortex-seed-v4.json',
+    },
+  },
+})
+
+const isDryRun = argv['dry-run'] === true
+const seedPath = argv.seed!
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Load + validate seed                                                     */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+function loadSeed(path: string): SeedV4 {
+  let raw: string
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch (err) {
+    console.error(`[apply-seed] FATAL: could not read seed file at ${path}`)
+    console.error(err instanceof Error ? err.message : err)
+    process.exit(1)
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (err) {
+    console.error(`[apply-seed] FATAL: seed file at ${path} is not valid JSON`)
+    console.error(err instanceof Error ? err.message : err)
+    process.exit(1)
+  }
+  const result = SeedV4Schema.safeParse(parsed)
+  if (!result.success) {
+    console.error(`[apply-seed] FATAL: seed file at ${path} failed Zod validation:`)
+    console.error(JSON.stringify(result.error.format(), null, 2))
+    process.exit(1)
+  }
+  return result.data
+}
+
+function parentOf(drivePath: string): string {
+  return drivePath.slice(0, drivePath.lastIndexOf('/') + 1)
+}
+
+function printParentSummary(anchors: Anchor[]): void {
+  const byParent = new Map<string, number>()
+  for (const a of anchors) {
+    const parent = parentOf(a.drivePath)
+    byParent.set(parent, (byParent.get(parent) ?? 0) + 1)
+  }
+  const sorted = Array.from(byParent.entries()).sort((a, b) => b[1] - a[1])
+  for (const [p, n] of sorted) {
+    const flag = n >= 3 ? '✓' : '✗ NEEDS MORE'
+    console.log(`  ${flag.padEnd(13)}  ${p.padEnd(60)}  ${n} anchors`)
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Dry-run branch — zero DB writes, zero Prisma import                      */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+async function dryRun(seed: SeedV4): Promise<never> {
+  console.log(`[apply-seed] DRY-RUN`)
+  console.log(`[apply-seed] seed = ${seedPath}`)
+  console.log(`[apply-seed] version = ${seed.version}, generated_at = ${seed.generated_at}`)
+  console.log(`[apply-seed] axes.type (${seed.axes.type.length}): ${seed.axes.type.join(', ')}`)
+  console.log(`[apply-seed] axes.from (${seed.axes.from.length}): ${seed.axes.from.join(', ')}`)
+  console.log()
+
+  const missing: string[] = []
+  for (const a of seed.anchors) {
+    try {
+      const st = statSync(a.file)
+      if (!st.isFile()) missing.push(`${a.file}  (not a regular file)`)
+    } catch {
+      missing.push(a.file)
+    }
+  }
+
+  console.log(`[apply-seed] anchors total:        ${seed.anchors.length}`)
+  console.log(`[apply-seed] anchors missing:      ${missing.length}`)
+  if (missing.length > 0) {
+    console.log(`[apply-seed] missing files:`)
+    for (const m of missing) console.log(`  ✗ ${m}`)
+  }
+
+  const typesUsed = new Set(seed.anchors.map((a) => a.type))
+  const fromsUsed = new Set(seed.anchors.map((a) => a.from).filter((f): f is string => f !== null))
+  console.log(`[apply-seed] distinct types in anchors: ${typesUsed.size} / ${seed.axes.type.length}`)
+  console.log(`[apply-seed] distinct froms in anchors: ${fromsUsed.size} / ${seed.axes.from.length}`)
+  console.log()
+
+  console.log(`[apply-seed] anchor distribution by parent folder:`)
+  printParentSummary(seed.anchors)
+
+  process.exit(missing.length === 0 ? 0 : 1)
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Live-run branch — DB writes via dynamically-imported Prisma              */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+async function liveRun(seed: SeedV4): Promise<void> {
   const userId = process.env.SEED_USER_ID
   if (!userId) {
-    console.error('SEED_USER_ID env var required (e.g. user_xxx Clerk id of the operator)')
+    console.error('[apply-seed] FATAL: SEED_USER_ID env var required for live run')
+    console.error('[apply-seed]        (e.g. user_xxx Clerk id of the operator)')
+    console.error('[apply-seed]        Use --dry-run to validate without writing.')
     process.exit(2)
   }
 
+  // Dynamic import keeps the dry-run branch zero-DB.
+  const { prisma } = await import('../lib/prisma')
+
   console.log(`[apply-seed] target user_id = ${userId}`)
+  console.log(`[apply-seed] seed         = ${seedPath}`)
   console.log()
 
-  // ── 1. TaxonomyLabel — upsert all canonical values
+  // ── 1. TaxonomyLabel — upsert canonical type + from values (NOT context).
   console.log('[apply-seed] writing TaxonomyLabel rows…')
-  const allLabels = [
-    ...TYPE_VALUES.map((v) => ({ axis: 'type', name: v })),
-    ...FROM_VALUES.map((v) => ({ axis: 'from', name: v })),
-    ...CONTEXT_VALUES.map((v) => ({ axis: 'context', name: v })),
+  const allLabels: { axis: string; name: string }[] = [
+    ...seed.axes.type.map((v) => ({ axis: 'type', name: v })),
+    ...seed.axes.from.map((v) => ({ axis: 'from', name: v })),
   ]
   let labelInserted = 0
   for (const l of allLabels) {
@@ -297,11 +239,11 @@ async function main() {
   }
   console.log(`[apply-seed]   ${labelInserted} TaxonomyLabel rows upserted`)
 
-  // ── 2. Items — insert anchors at status='filed'
+  // ── 2. Items — insert anchors at status='filed'.
   console.log('\n[apply-seed] inserting anchor Items…')
   let itemInserted = 0
   let itemSkipped = 0
-  for (const a of ANCHORS) {
+  for (const a of seed.anchors) {
     let st
     try {
       st = statSync(a.file)
@@ -335,10 +277,8 @@ async function main() {
           proposed_drive_path: a.drivePath,
           axis_type: a.type,
           axis_from: a.from,
-          axis_context: a.context,
           axis_type_confidence: 1.0,
           axis_from_confidence: a.from === null ? 0 : 1.0,
-          axis_context_confidence: 1.0,
           filename,
           mime_type: mime,
           size_bytes: st.size,
@@ -360,15 +300,13 @@ async function main() {
           proposed_drive_path: a.drivePath,
           axis_type: a.type,
           axis_from: a.from,
-          axis_context: a.context,
           axis_type_confidence: 1.0,
           axis_from_confidence: a.from === null ? 0 : 1.0,
-          axis_context_confidence: 1.0,
           classification_trace: {
             seed: {
               applied_at: new Date().toISOString(),
-              source: 'partial-seed-v3',
-              note: 'anchor item; see .planning/quick/260427-tlk-base-taxonomy-seed/SEED-v3-architecture.md',
+              source: 'apply-seed-v4',
+              note: 'anchor item; see .planning/quick/260427-tlk-base-taxonomy-seed/SEED-v4-prod.md',
             },
           },
         },
@@ -381,28 +319,27 @@ async function main() {
     `\n[apply-seed]   ${itemInserted} anchors inserted/updated, ${itemSkipped} skipped (missing files)`,
   )
 
-  // ── 3. Summary by parent folder
+  // ── 3. Summary by parent folder.
   console.log('\n[apply-seed] anchor distribution by parent folder:')
-  const byParent = new Map<string, number>()
-  for (const a of ANCHORS) {
-    const parent = a.drivePath.slice(0, a.drivePath.lastIndexOf('/') + 1)
-    byParent.set(parent, (byParent.get(parent) ?? 0) + 1)
-  }
-  const sorted = Array.from(byParent.entries()).sort((a, b) => b[1] - a[1])
-  for (const [p, n] of sorted) {
-    const flag = n >= 3 ? '✓' : '✗ NEEDS MORE'
-    console.log(`  ${flag}  ${p.padEnd(60)}  ${n} anchors`)
-  }
+  printParentSummary(seed.anchors)
 
   await prisma.$disconnect()
 }
 
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Entry point                                                              */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+async function main() {
+  const seed = loadSeed(seedPath)
+  if (isDryRun) {
+    await dryRun(seed)
+  } else {
+    await liveRun(seed)
+  }
+}
+
 main().catch(async (err) => {
   console.error('[apply-seed] FATAL:', err)
-  try {
-    await prisma.$disconnect()
-  } catch {
-    /* */
-  }
   process.exit(1)
 })
