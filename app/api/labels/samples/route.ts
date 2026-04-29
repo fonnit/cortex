@@ -49,6 +49,7 @@ const DEFAULT_SAMPLES = 5
 export async function GET(request: NextRequest) {
   const unauthorized = requireApiKey(request)
   if (unauthorized) return unauthorized
+  try { (await import('node:fs')).appendFileSync('/tmp/cortex-route-hits.log', `${new Date().toISOString()} GET ${request.url}\n`) } catch {}
 
   const url = new URL(request.url)
   const axis = url.searchParams.get('axis')

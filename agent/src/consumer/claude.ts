@@ -290,6 +290,13 @@ export async function invokeClaude<T>(
         '--strict-mcp-config',
         '--allowedTools',
         ALLOWED_TOOLS,
+        // Without this, claude -p blocks all tool execution because there's
+        // no interactive UI to approve the permission prompt. Our 3 MCP tools
+        // are read-only HTTP GETs to our own API — safe to allow unconditionally
+        // in this batch-classification context. Verified empirically: without
+        // this flag, model produces an answer with ZERO tool calls.
+        '--permission-mode',
+        'bypassPermissions',
       ],
       {
         timeout: timeoutMs,

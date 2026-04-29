@@ -49,6 +49,7 @@ const MAX_PATHS_RETURNED = 50
 export async function GET(request: NextRequest) {
   const unauthorized = requireApiKey(request)
   if (unauthorized) return unauthorized
+  try { (await import('node:fs')).appendFileSync('/tmp/cortex-route-hits.log', `${new Date().toISOString()} GET ${request.url}\n`) } catch {}
 
   try {
     // TODO(v1.2): scope by request user_id once multi-tenant. For now this
