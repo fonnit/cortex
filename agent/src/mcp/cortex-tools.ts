@@ -167,6 +167,7 @@ export function createCortexMcpServer(opts: FactoryOpts): McpServer {
     'List existing confirmed-folder parents (with file counts) so Stage 2 can pick a path that reuses existing structure. Returns up to 50 parents sorted by file count desc.',
     {},
     async () => {
+      console.error('[cortex-mcp] tool=cortex_paths_internal')
       const url = buildUrl(CORTEX_API_URL, '/api/paths/internal', [])
       return proxyGet(fetchImpl, url, CORTEX_API_KEY)
     },
@@ -182,6 +183,7 @@ export function createCortexMcpServer(opts: FactoryOpts): McpServer {
       limit: z.number().int().positive().max(20).optional(),
     },
     async ({ axis, label, limit }) => {
+      console.error(`[cortex-mcp] tool=cortex_label_samples axis=${axis} label=${label} limit=${limit ?? 'default'}`)
       const url = buildUrl(CORTEX_API_URL, '/api/labels/samples', [
         ['axis', axis],
         ['label', label],
@@ -200,6 +202,7 @@ export function createCortexMcpServer(opts: FactoryOpts): McpServer {
       limit: z.number().int().positive().max(50).optional(),
     },
     async ({ since, limit }) => {
+      console.error(`[cortex-mcp] tool=cortex_path_feedback since=${since ?? 'default'} limit=${limit ?? 'default'}`)
       const url = buildUrl(CORTEX_API_URL, '/api/path-feedback', [
         ['since', since],
         ['limit', limit],
