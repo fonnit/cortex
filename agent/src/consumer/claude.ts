@@ -177,6 +177,13 @@ const DEFAULT_TIMEOUT_MS = 120_000
 interface InvokeOpts {
   executor?: Executor
   timeoutMs?: number
+  /**
+   * If set, writes the raw `claude -p` stdout (tool-call exchanges + final
+   * assistant JSON) and stderr to `/tmp/cortex-stage2-${itemId}-${ts}.log`
+   * for post-hoc inspection of the agentic loop. Failures to write are
+   * swallowed — observability must never break the worker.
+   */
+  itemId?: string
 }
 
 /**
@@ -267,6 +274,7 @@ export async function invokeClaude<T>(
 ): Promise<ClaudeOutcome<T>> {
   const executor = opts?.executor ?? defaultExecutor
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const itemId = opts?.itemId
 
   const { tmpPath, cleanup } = writeMcpConfigTmpfile()
 
@@ -310,6 +318,26 @@ export async function invokeClaude<T>(
     )
   } finally {
     cleanup()
+  }
+
+  // ── Observability dump (best-effort, never throws) ────────────────
+  // Writes raw stdout (tool-call exchanges + final assistant JSON) plus stderr
+  // to /tmp so we can post-hoc inspect what the agentic loop did. The worker
+  // already keeps stdout in memory; this just persists it.
+  if (itemId) {
+    try {
+      const logPath = join(
+        tmpdir(),
+        `cortex-stage2-${itemId}-${Date.now()}.log`,
+      )
+      writeFileSync(
+        logPath,
+        `# claude -p stdout (exit=${result.exitCode}, duration=${result.durationMs}ms)\n` +
+          `${result.stdout}\n# ---STDERR---\n${result.stderr}\n`,
+      )
+    } catch {
+      /* observability never breaks the worker */
+    }
   }
 
   // ── Timeout path ──────────────────────────────────────────────────

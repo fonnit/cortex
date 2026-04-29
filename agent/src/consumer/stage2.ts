@@ -172,7 +172,7 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
         return
       }
 
-      const outcome = await invokeClaudeFn(prompt, Stage2ResultSchema)
+      const outcome = await invokeClaudeFn(prompt, Stage2ResultSchema, { itemId: item.id })
 
       let payload: ClassifyRequest
       if (outcome.kind === 'ok') {
