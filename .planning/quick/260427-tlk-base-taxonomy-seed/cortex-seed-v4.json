@@ -1,0 +1,270 @@
+{
+  "version": "v4",
+  "generated_at": "2026-04-27T16:37:11.361Z",
+  "source": {
+    "from": "cortex-seed-v2.json",
+    "transformer": "scripts/synthesize-seed-v4.ts",
+    "decisions": "SEED-v4-prod.md"
+  },
+  "axes": {
+    "type": [
+      "bank-statement",
+      "certificate",
+      "civil-registry",
+      "contract",
+      "corporate-registration",
+      "credit-application",
+      "diploma",
+      "employment-contract",
+      "income-proof",
+      "insurance-policy",
+      "invoice",
+      "invoice-outgoing",
+      "national-id",
+      "passport",
+      "payslip",
+      "rent-payment",
+      "rental-contract",
+      "residence-permit",
+      "tax-filing",
+      "ticket",
+      "title-deed",
+      "utility-bill"
+    ],
+    "from": [
+      "accountable",
+      "castlabs",
+      "colombia-government",
+      "dubai-government",
+      "esg-book",
+      "fonnit",
+      "german-tax-authority",
+      "germany-residence-office",
+      "habyt",
+      "n26",
+      "revolut",
+      "s-ray",
+      "terradan",
+      "uae-government",
+      "wio-bank"
+    ]
+  },
+  "anchors": [
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Mietvertrag.pdf",
+      "type": "contract",
+      "from": "habyt",
+      "drivePath": "/real-estate/rental/contracts/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Sublet Agreement.pdf",
+      "type": "contract",
+      "from": null,
+      "drivePath": "/real-estate/rental/contracts/Sublet Agreement.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Mietvertrag.pdf",
+      "type": "rental-contract",
+      "from": "habyt",
+      "drivePath": "/real-estate/rental/contracts/Mietvertrag.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JAIME 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "drivePath": "/family/civil-registry/REGISTRO CIVIL JAIME 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "drivePath": "/family/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": null,
+      "drivePath": "/family/civil-registry/REGISTRO CIVIL ALEJANDRO 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Dubai/Emirates ID Front.pdf",
+      "type": "national-id",
+      "from": "uae-government",
+      "drivePath": "/identity/national-ids/Emirates ID Front.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AUFENTHALTSTITEL.pdf",
+      "type": "national-id",
+      "from": null,
+      "drivePath": "/identity/national-ids/AUFENTHALTSTITEL.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Emirates ID.pdf",
+      "type": "national-id",
+      "from": null,
+      "drivePath": "/identity/national-ids/Emirates ID.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Kreditunterlagen.pdf",
+      "type": "credit-application",
+      "from": null,
+      "drivePath": "/personal/finance/credit-applications/Kreditunterlagen.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Wohnungssuche Unterlagen/Bonitats-auskunft.pdf",
+      "type": "income-proof",
+      "from": null,
+      "drivePath": "/personal/finance/credit-applications/Bonitats-auskunft.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Einkommens-Nachweis.pdf",
+      "type": "income-proof",
+      "from": "s-ray",
+      "drivePath": "/personal/finance/credit-applications/Einkommens-Nachweis.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "drivePath": "/identity/passport/Passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Passport.heic",
+      "type": "passport",
+      "from": "colombia-government",
+      "drivePath": "/identity/passport/Passport.heic"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/danny passport.pdf",
+      "type": "passport",
+      "from": "colombia-government",
+      "drivePath": "/identity/passport/danny passport.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Terradan Colombia/Contrato - Daniel Fonnegra.pdf",
+      "type": "contract",
+      "from": "terradan",
+      "drivePath": "/legal/contracts/Contrato - Daniel Fonnegra.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf",
+      "type": "contract",
+      "from": "s-ray",
+      "drivePath": "/legal/contracts/20220704_S-Ray Germany Offer Letter_Daniel Fonnegra Signed.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel/Employment Contract.pdf",
+      "type": "contract",
+      "from": "s-ray",
+      "drivePath": "/legal/contracts/Employment Contract.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf",
+      "type": "insurance-policy",
+      "from": null,
+      "drivePath": "/personal/finance/insurance/416382638_Ihr Versicherungsvertrag_2025_01_02_4456.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Unfebristete Aufenhaltstitel 2/Krankversicherung.pdf",
+      "type": "insurance-policy",
+      "from": null,
+      "drivePath": "/personal/finance/insurance/Krankversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Unterlagen_Zusatzversicherung.pdf",
+      "type": "insurance-policy",
+      "from": null,
+      "drivePath": "/personal/finance/insurance/Unterlagen_Zusatzversicherung.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/AUFENTHALTSTITEL.pdf",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "drivePath": "/identity/residence-permit/AUFENTHALTSTITEL.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Kreditantrag/Aufenhaltstitel1.jpg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "drivePath": "/identity/residence-permit/Aufenhaltstitel1.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Permanent residence letter.jpeg",
+      "type": "residence-permit",
+      "from": "germany-residence-office",
+      "drivePath": "/identity/residence-permit/Permanent residence letter.jpeg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "drivePath": "/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/REGISTRO CIVIL JENNY 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": "colombia-government",
+      "drivePath": "/identity/civil-registry/REGISTRO CIVIL JENNY 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf",
+      "type": "civil-registry",
+      "from": null,
+      "drivePath": "/identity/civil-registry/REGISTRO CIVIL DANIEL 7 JUL 2025.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "drivePath": "/education/diplomas/DiplomaPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/DiplomaPosgrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "drivePath": "/education/diplomas/DiplomaPosgrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Documents/Visa UAE/CalificacionesPregrado.pdf",
+      "type": "diploma",
+      "from": "colombia-government",
+      "drivePath": "/education/diplomas/CalificacionesPregrado.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/TerradanDubai_License.pdf",
+      "type": "corporate-registration",
+      "from": "terradan",
+      "drivePath": "/business/terradan-dubai/corporate/TerradanDubai_License.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AW REALESTATE 2024 License .pdf",
+      "type": "corporate-registration",
+      "from": "terradan",
+      "drivePath": "/business/terradan-dubai/corporate/AW REALESTATE 2024 License .pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/PBP Trade License 2026.pdf",
+      "type": "corporate-registration",
+      "from": "terradan",
+      "drivePath": "/business/terradan-dubai/corporate/PBP Trade License 2026.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/AWS Certified Solutions Architect - Professional certificate.pdf",
+      "type": "certificate",
+      "from": null,
+      "drivePath": "/education/certificates/AWS Certified Solutions Architect - Professional certificate.pdf"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/Telc-Zertifikat.jpg",
+      "type": "certificate",
+      "from": null,
+      "drivePath": "/education/certificates/Telc-Zertifikat.jpg"
+    },
+    {
+      "file": "/Users/dfonnegrag/Downloads/DiplomaPosgrado-Eng-Stamped.pdf",
+      "type": "certificate",
+      "from": null,
+      "drivePath": "/education/certificates/DiplomaPosgrado-Eng-Stamped.pdf"
+    }
+  ]
+}
