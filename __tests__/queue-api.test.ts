@@ -4,19 +4,27 @@
  * Validates the read/claim endpoint used by Phase 7 consumers.
  * Per CONTEXT decisions:
  * - CORTEX_API_KEY shared-secret Bearer auth (empty 401 body on failure)
- * - Atomic claim via raw SQL (FOR UPDATE SKIP LOCKED) using @neondatabase/serverless
+ * - Atomic claim via raw SQL (FOR UPDATE SKIP LOCKED) routed through
+ *   `prisma.$queryRaw` so the same code runs against PrismaNeon (prod Neon
+ *   URL) or PrismaPg (vanilla localhost Postgres) without changes.
  * - Stale reclaim runs BEFORE claim each call; legacy reclaim folds in too
  * - Response: { items: [...], reclaimed: <number> }; X-Trace-Id on every response
  *
- * The neon() client is mocked here — we record every tagged-template call so we
- * can assert which SQL fired in which order, and what parameters were passed.
+ * `prisma.$queryRaw` is mocked via `@/lib/prisma` — we record every
+ * tagged-template call (template strings reconstructed with `$N` positional
+ * placeholders, plus the values array) so we can assert which SQL fired in
+ * which order, and what parameters were passed. Same recorder mechanism the
+ * tests previously used against neon(); only the mock surface moved.
+ *
  * The actual SQL is exercised against a real Postgres surface in
  * __tests__/queue-claim-sql.integration.test.ts (pg-mem).
  */
 
-// Mock @neondatabase/serverless — we feed in tagged-template responses
-jest.mock('@neondatabase/serverless', () => ({
-  neon: jest.fn(),
+// Mock @/lib/prisma — feed in tagged-template responses via $queryRaw
+jest.mock('../lib/prisma', () => ({
+  prisma: {
+    $queryRaw: jest.fn(),
+  },
 }))
 
 // Mock Langfuse — stable trace.id for X-Trace-Id assertions
@@ -35,19 +43,22 @@ jest.mock('langfuse', () => {
 
 import type { NextRequest } from 'next/server'
 import { GET } from '../app/api/queue/route'
-import { neon } from '@neondatabase/serverless'
+import { prisma } from '../lib/prisma'
 
-const mockNeon = neon as jest.MockedFunction<typeof neon>
+const mockQueryRaw = prisma.$queryRaw as jest.MockedFunction<typeof prisma.$queryRaw>
 
 /**
- * Build a fake `sql` tagged-template function that returns each queued response
- * in order, and records every call (strings + interpolated values) for assertions.
+ * Build a fake `prisma.$queryRaw` implementation that returns each queued
+ * response in order, and records every call (strings + interpolated values)
+ * for assertions. The signature matches Prisma's tagged-template overload:
+ *   $queryRaw<T>(strings: TemplateStringsArray, ...values: unknown[])
  */
 function makeSqlMock(responses: Array<Array<Record<string, unknown>>>) {
   let i = 0
   const calls: Array<{ text: string; values: unknown[] }> = []
-  const fn: any = (strings: TemplateStringsArray, ...values: unknown[]) => {
-    // Reconstruct the rendered SQL the way neon() would — interleave strings + placeholders
+  const impl = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    // Reconstruct the rendered SQL the way prisma.$queryRaw would —
+    // interleave template strings with positional placeholders ($1, $2, ...)
     const text = strings.reduce((acc, str, idx) => {
       return acc + str + (idx < values.length ? `$${idx + 1}` : '')
     }, '')
@@ -55,7 +66,7 @@ function makeSqlMock(responses: Array<Array<Record<string, unknown>>>) {
     const r = responses[i++] ?? []
     return Promise.resolve(r)
   }
-  return { fn, calls }
+  return { impl, calls }
 }
 
 function makeRequest(opts: { url?: string; auth?: string | null } = {}): NextRequest {
@@ -72,6 +83,9 @@ function makeRequest(opts: { url?: string; auth?: string | null } = {}): NextReq
 describe('GET /api/queue', () => {
   beforeEach(() => {
     process.env.CORTEX_API_KEY = 'test-secret'
+    // DATABASE_URL is no longer read by the route directly (prisma is fully
+    // mocked), but lib/prisma may still try to read it at module-evaluation
+    // time. Keep the env stub as defence against hoisting surprises.
     process.env.DATABASE_URL = 'postgres://test'
     jest.clearAllMocks()
   })
@@ -81,8 +95,8 @@ describe('GET /api/queue', () => {
     const res = await GET(req)
     expect(res.status).toBe(401)
     expect(await res.text()).toBe('')
-    // neon() should never be called when auth fails
-    expect(mockNeon).not.toHaveBeenCalled()
+    // prisma.$queryRaw should never be called when auth fails
+    expect(mockQueryRaw).not.toHaveBeenCalled()
   })
 
   it('Test 2: returns 401 with empty body when Bearer token is wrong', async () => {
@@ -90,7 +104,7 @@ describe('GET /api/queue', () => {
     const res = await GET(req)
     expect(res.status).toBe(401)
     expect(await res.text()).toBe('')
-    expect(mockNeon).not.toHaveBeenCalled()
+    expect(mockQueryRaw).not.toHaveBeenCalled()
   })
 
   it('Test 3: returns 400 validation_failed when stage is missing or not 1/2', async () => {
@@ -132,12 +146,12 @@ describe('GET /api/queue', () => {
     const res = await GET(makeRequest({ url: 'http://localhost/api/queue?stage=1&limit=500' }))
     expect(res.status).toBe(400)
     expect((await res.json()).error).toBe('validation_failed')
-    // Cap protects us from a single caller pulling the whole table — neon never called
-    expect(mockNeon).not.toHaveBeenCalled()
+    // Cap protects us from a single caller pulling the whole table — $queryRaw never called
+    expect(mockQueryRaw).not.toHaveBeenCalled()
   })
 
   it('Test 6: stage=1 limit=10 — issues 3 SQL calls (stale, legacy, claim) and returns { items, reclaimed }', async () => {
-    const { fn, calls } = makeSqlMock([
+    const { impl, calls } = makeSqlMock([
       [{ id: 'reclaimed_1' }],                          // stale reclaim → 1 row
       [],                                               // legacy reclaim → 0 rows
       [                                                 // atomic claim → 1 row
@@ -152,7 +166,7 @@ describe('GET /api/queue', () => {
         },
       ],
     ])
-    mockNeon.mockReturnValue(fn)
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest({ url: 'http://localhost/api/queue?stage=1&limit=10' }))
     expect(res.status).toBe(200)
@@ -198,12 +212,12 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 7: stage=2 limit=2 — claim SQL parameterizes pending_stage2/processing_stage2', async () => {
-    const { fn, calls } = makeSqlMock([
+    const { impl, calls } = makeSqlMock([
       [],                          // stale reclaim
       [],                          // legacy reclaim
       [],                          // claim returns nothing
     ])
-    mockNeon.mockReturnValue(fn)
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest({ url: 'http://localhost/api/queue?stage=2&limit=2' }))
     expect(res.status).toBe(200)
@@ -216,7 +230,7 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 8: each item hoists file_path from source_metadata (or null)', async () => {
-    const { fn } = makeSqlMock([
+    const { impl } = makeSqlMock([
       [],
       [],
       [
@@ -240,7 +254,7 @@ describe('GET /api/queue', () => {
         },
       ],
     ])
-    mockNeon.mockReturnValue(fn)
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest())
     const json = await res.json()
@@ -258,8 +272,8 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 9: stale reclaim runs BEFORE claim — call order is stale → legacy → claim', async () => {
-    const { fn, calls } = makeSqlMock([[], [], []])
-    mockNeon.mockReturnValue(fn)
+    const { impl, calls } = makeSqlMock([[], [], []])
+    mockQueryRaw.mockImplementation(impl as never)
 
     await GET(makeRequest())
     expect(calls).toHaveLength(3)
@@ -270,12 +284,12 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 10: reclaimed count = stale_reclaimed + legacy_reclaimed', async () => {
-    const { fn } = makeSqlMock([
+    const { impl } = makeSqlMock([
       [{ id: 'a' }, { id: 'b' }, { id: 'c' }], // 3 stale
       [{ id: 'x' }, { id: 'y' }],              // 2 legacy
       [],                                       // 0 claimed
     ])
-    mockNeon.mockReturnValue(fn)
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest())
     const json = await res.json()
@@ -284,8 +298,8 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 11: response includes header X-Trace-Id with non-empty value', async () => {
-    const { fn } = makeSqlMock([[], [], []])
-    mockNeon.mockReturnValue(fn)
+    const { impl } = makeSqlMock([[], [], []])
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest())
     const tid = res.headers.get('X-Trace-Id')
@@ -294,10 +308,10 @@ describe('GET /api/queue', () => {
     expect((tid as string).length).toBeGreaterThan(0)
   })
 
-  it('Test 12: returns 500 when neon() throws — error logged and X-Trace-Id still set', async () => {
+  it('Test 12: returns 500 when prisma.$queryRaw rejects — error logged and X-Trace-Id still set', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-    const fn: any = () => Promise.reject(new Error('db connection lost'))
-    mockNeon.mockReturnValue(fn)
+    mockQueryRaw.mockImplementation((() =>
+      Promise.reject(new Error('db connection lost'))) as never)
 
     const res = await GET(makeRequest())
     expect(res.status).toBe(500)
@@ -308,8 +322,8 @@ describe('GET /api/queue', () => {
   })
 
   it('Test 13: when claim returns zero rows — HTTP 200 with empty items + reclaimed count', async () => {
-    const { fn } = makeSqlMock([[], [], []])
-    mockNeon.mockReturnValue(fn)
+    const { impl } = makeSqlMock([[], [], []])
+    mockQueryRaw.mockImplementation(impl as never)
 
     const res = await GET(makeRequest())
     expect(res.status).toBe(200)

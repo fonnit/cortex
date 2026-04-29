@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import Langfuse from 'langfuse'
-import { neon } from '@neondatabase/serverless'
+import { prisma } from '@/lib/prisma'
 import { requireApiKey } from '@/lib/api-key'
 import { STALE_CLAIM_TIMEOUT_MS, QUEUE_STATUSES } from '@/lib/queue-config'
 import { buildClaimParams } from '@/lib/queue-sql'
@@ -77,7 +77,6 @@ export async function GET(request: NextRequest) {
       stageNum,
       parsed.data.limit,
     )
-    const sql = neon(process.env.DATABASE_URL!)
 
     const cutoffIso = new Date(Date.now() - STALE_CLAIM_TIMEOUT_MS).toISOString()
 
@@ -85,7 +84,7 @@ export async function GET(request: NextRequest) {
     // If a processing_stage{N} row's last_claim_at is older than the timeout
     // (or absent — fall back to ingested_at), move it back to pending_stage{N}.
     const reclaimSpan = trace.span({ name: 'stale-reclaim', input: { stage: stageNum, cutoffIso } })
-    const staleRows = await sql`
+    const staleRows = await prisma.$queryRaw<{ id: string }[]>`
       UPDATE "Item"
       SET status = ${pendingStatus}
       WHERE status = ${processingStatus}
@@ -101,7 +100,7 @@ export async function GET(request: NextRequest) {
     // Per CONTEXT decision: route to pending_stage2 if stage2 trace exists,
     // else pending_stage1. Folds into every poll — no separate cron.
     const legacySpan = trace.span({ name: 'legacy-reclaim', input: { cutoffIso } })
-    const legacyRows = await sql`
+    const legacyRows = await prisma.$queryRaw<{ id: string }[]>`
       UPDATE "Item"
       SET status = CASE
         WHEN classification_trace ? 'stage2' THEN ${QUEUE_STATUSES.PENDING_STAGE_2}
@@ -118,7 +117,7 @@ export async function GET(request: NextRequest) {
     // never receive the same id. classification_trace.queue.{stageN}.last_claim_at
     // is written in the same statement so stale-detection has a fresh signal.
     const claimSpan = trace.span({ name: 'atomic-claim', input: { stage: stageNum, limit } })
-    const claimedRows = await sql`
+    const claimedRows = await prisma.$queryRaw<ItemRow[]>`
       UPDATE "Item"
       SET status = ${processingStatus},
           classification_trace = jsonb_set(
@@ -143,7 +142,7 @@ export async function GET(request: NextRequest) {
     `
     claimSpan.end({ output: { claimed: claimedRows.length } })
 
-    const items = (claimedRows as ItemRow[]).map((row) => ({
+    const items = claimedRows.map((row) => ({
       id: row.id,
       source: row.source,
       filename: row.filename,
@@ -182,12 +181,14 @@ export async function GET(request: NextRequest) {
 /* ─────────────────────────────────────────────────────────────────────────────
  * Internal SQL helpers — exported only for the pg-mem integration test.
  *
- * The route handler above uses the `neon()` tagged-template form (which neon's
- * client requires for parameter binding). These helpers mirror the SAME SQL
- * with positional ($1, $2, ...) parameters, so the integration test can
- * execute it through pg-mem's pg-Client adapter without re-implementing the
- * SQL string. If the route SQL changes, update the helper below — the
- * integration test will catch any drift at the next run.
+ * The route handler above now uses `prisma.$queryRaw` (tagged-template form)
+ * for production paths against either PrismaNeon (Neon URL) or PrismaPg
+ * (vanilla Postgres). These helpers retain positional ($1, $2, ...) parameter
+ * SQL because pg-mem's pg-Client adapter takes positional params, not Prisma's
+ * tagged-template form. They mirror the SAME SQL the route fires, so the
+ * integration test can execute it without re-implementing the SQL string. If
+ * the route SQL changes, update the helper below — the integration test will
+ * catch any drift at the next run.
  *
  * Underscore-prefixed names mark these as test-only exports; do not import
  * them from production code.

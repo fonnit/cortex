@@ -32,6 +32,13 @@ jest.mock('langfuse', () => ({
 // Mock @neondatabase/serverless too — same reason, the route imports it but
 // these tests never invoke the GET handler.
 jest.mock('@neondatabase/serverless', () => ({ neon: jest.fn() }))
+// Defensive stub for lib/prisma — after the nic refactor the route imports
+// `prisma` from '@/lib/prisma' at top-level. Loading lib/prisma for real in
+// jest pulls in PrismaNeon → @neondatabase/serverless internals that the
+// stubbed module above does not satisfy. This integration test only consumes
+// the route's `_*ForTest` SQL helpers (pure functions), never the GET handler
+// nor the prisma client — so a {} stub is enough to satisfy module-load.
+jest.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { newDb, DataType } from 'pg-mem'
 import {
