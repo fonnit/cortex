@@ -1,7 +1,7 @@
-import { neon } from '@neondatabase/serverless'
 import Anthropic from '@anthropic-ai/sdk'
 import Langfuse from 'langfuse'
 import { z } from 'zod'
+import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { embedTexts } from '@/lib/embed'
 
@@ -51,9 +51,18 @@ export async function POST(request: Request) {
 
     // ANN retrieval — raw SQL required for halfvec <#> operator
     const retrieveSpan = trace.span({ name: 'pgvector-ann', input: { limit: 20 } })
-    const sql = neon(process.env.DATABASE_URL!)
     const vecStr = `[${queryVec.join(',')}]`
-    const rows = await sql`
+    const rows = await prisma.$queryRaw<Array<{
+      id: string
+      filename: string | null
+      axis_type: string | null
+      axis_from: string | null
+      axis_context: string | null
+      confirmed_drive_path: string | null
+      proposed_drive_path: string | null
+      ingested_at: string | Date
+      source_metadata: Record<string, unknown> | null
+    }>>`
       SELECT id, filename, axis_type, axis_from, axis_context,
              confirmed_drive_path, proposed_drive_path, ingested_at,
              source_metadata

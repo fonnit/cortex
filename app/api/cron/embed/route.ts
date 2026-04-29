@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { neon } from '@neondatabase/serverless'
 import Langfuse from 'langfuse'
 import { prisma } from '@/lib/prisma'
 import { embedTexts, buildEmbedText } from '@/lib/embed'
@@ -45,12 +44,15 @@ export async function POST(request: NextRequest) {
     span.end({ output: { embedded: items.length } })
     await lf.flushAsync()
 
-    // Write each embedding via raw SQL — Prisma cannot write halfvec natively
-    const sql = neon(process.env.DATABASE_URL!)
+    // Write each embedding via raw SQL — Prisma's typed client cannot write
+    // halfvec natively. $queryRaw binds the literal as a string and Postgres
+    // applies the ::halfvec cast. We use $queryRaw (not $executeRaw) to mirror
+    // the queue route refactor and keep one Prisma raw-SQL surface across
+    // routes; the UPDATE has no RETURNING so the discarded result is fine.
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
       const vector = vectors[i]
-      await sql`
+      await prisma.$queryRaw`
         UPDATE "Item"
         SET embedding = ${`[${vector.join(',')}]`}::halfvec
         WHERE id = ${item.id}
