@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: ingest-rearchitect
 status: code_complete_pending_acceptance
 stopped_at: v1.1 code-complete (4 phases, 8 plans, 32 requirements). Operator acceptance pending — see .planning/phases/08-operational-acceptance/RUNBOOK.md.
-last_updated: "2026-04-29T22:18:30.554Z"
-last_activity: 2026-04-29 — Completed quick task 260430-0ff: cortex-seed-v4.json + apply-seed.ts JSON refactor with --dry-run. 36 anchors validated; flagged 10 orphan types + 9 orphan froms (consequence of Decision 6 skipping date-bucketed folders) for Daniel's call.
+last_updated: "2026-04-30T00:00:00.000Z"
+last_activity: 2026-04-30 — Completed quick task 260430-g6h: drop axis_context from runtime + UI per SEED-v4-prod.md Decision 1. Schema column preserved; Stage 2 now produces 2-axes contract (type, from) end-to-end across prompt, Zod, all API routes, MCP server, triage UI, and taxonomy page. Plus `fix(test): cap jest parallelism + worker memory` — addresses earlier system-collapse on full-suite runs.
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25 — v1.1 marked shipped)
 Phase: All v1.1 phases complete (5–8)
 Plan: —
 Status: Code-complete; live operator acceptance pending
-Last activity: 2026-04-29 — Completed quick task 260430-0ff: cortex-seed-v4.json + apply-seed.ts JSON refactor with --dry-run. 36 anchors validated; flagged 10 orphan types + 9 orphan froms (consequence of Decision 6 skipping date-bucketed folders) for Daniel's call.
+Last activity: 2026-04-30 — Completed quick task 260430-g6h: drop axis_context from runtime + UI per SEED-v4-prod.md Decision 1. Schema column preserved; Stage 2 now produces 2-axes contract (type, from) end-to-end across prompt, Zod, all API routes, MCP server, triage UI, and taxonomy page.
 
 Progress: [██████████] 100% (v1.1 — 8/8 plans)
 
@@ -83,6 +83,7 @@ v1.1 decisions all marked ✓ Shipped:
 | 260428-lx4 | Stage 2 agentic-loop + MCP endpoint enrichment. New `/api/labels/samples` + `/api/path-feedback` routes; new `cortex-tools` stdio MCP server exposing 3 tools (`cortex_paths_internal`, `cortex_label_samples`, `cortex_path_feedback`). claude.ts wired with `--mcp-config` + `--strict-mcp-config` + `--allowedTools`; Stage 2 prompt restructured for tool-call loop. 120s wall-clock timeout is the sole iteration governor (subscription mode, no per-call budget applies). | 2026-04-28 | fa8ac18, ab647aa, 76e5fc4 | [260428-lx4-stage-2-agentic-loop-endpoint-enrichment](./quick/260428-lx4-stage-2-agentic-loop-endpoint-enrichment/) |
 | 260429-nic | Refactor direct `neon()` tagged-template calls in `/api/{queue,ask,cron/embed}` to `prisma.$queryRaw`. Whole app now portable across Neon (prod, via PrismaNeon adapter) and vanilla Postgres (local docker, via PrismaPg adapter). Pg-mem queue regression suite (35/35) intact. Unblocks end-to-end testing on localhost:5433. | 2026-04-29 | 0097354, 67f2206, 637b8d7 | [260429-nic-refactor-direct-neon-calls-in-app-api-ro](./quick/260429-nic-refactor-direct-neon-calls-in-app-api-ro/) |
 | 260430-0ff | cortex-seed-v4.json (22 types, 15 froms, 36 anchors at 12 stable folders) + apply-seed.ts refactored to consume JSON + new --dry-run flag. SEED-v4-prod.md decisions 1–6 enforced (no axis_context writes, /business/terradan-{dubai,medellin}/ layout, AW Realestate→corporate-registration, no date-bucketed anchors). Zod-strict on axes prevents context regression. | 2026-04-29 | ffd0653, 8cce194 | [260430-0ff-generate-cortex-seed-v4-json-refactor-sc](./quick/260430-0ff-generate-cortex-seed-v4-json-refactor-sc/) |
+| 260430-g6h | Drop `axis_context` from runtime + UI per SEED-v4-prod.md Decision 1. Schema column preserved for old rows; new code stops asking, persisting, displaying. Stripped from prompt, Stage2ResultSchema (Zod), `/api/{classify,triage,labels/samples,taxonomy/*,ask,cron/embed}`, MCP server tool, triage UI (TriageView+ExpandedCard), taxonomy page (Contexts tab gone). Plus jest stability fix (maxWorkers=2, workerIdleMemoryLimit=768MB) preventing system collapse on full-suite runs. | 2026-04-30 | 6efda9b, 1d0196e, 089f344, 40208d9 | [260430-g6h-finish-decision-1-drop-axis-context-thro](./quick/260430-g6h-finish-decision-1-drop-axis-context-thro/) |
 
 ## Session Continuity
 
