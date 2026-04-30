@@ -64,13 +64,12 @@ const GMAIL_ITEM = (id: string): QueueItem => ({
 const TAXONOMY: TaxonomyInternalResponse = {
   type: ['invoice', 'receipt', 'statement'],
   from: ['acme', 'bofa'],
-  context: ['finance', 'tax'],
 }
 
-const EMPTY_TAXONOMY: TaxonomyInternalResponse = { type: [], from: [], context: [] }
+const EMPTY_TAXONOMY: TaxonomyInternalResponse = { type: [], from: [] }
 
 const okStage2Outcome = (): ClaudeOutcome<{
-  axes: { type: { value: string | null; confidence: number }; from: { value: string | null; confidence: number }; context: { value: string | null; confidence: number } }
+  axes: { type: { value: string | null; confidence: number }; from: { value: string | null; confidence: number } }
   proposed_drive_path: string
   decision: 'auto_file' | 'ignore' | 'uncertain'
   path_confidence: number
@@ -80,7 +79,6 @@ const okStage2Outcome = (): ClaudeOutcome<{
     axes: {
       type: { value: 'invoice', confidence: 0.9 },
       from: { value: 'acme', confidence: 0.8 },
-      context: { value: 'finance', confidence: 0.85 },
     },
     proposed_drive_path: '/invoice/acme/finance/x.pdf',
     decision: 'uncertain',
@@ -156,7 +154,7 @@ describe('runStage2Worker', () => {
     }
   })
 
-  it('Test 2: happy path (downloads) — POST stage:2 success with all 3 axes + proposed_drive_path', async () => {
+  it('Test 2: happy path (downloads) — POST stage:2 success with both axes + proposed_drive_path', async () => {
     const item = FILE_ITEM('s2_happy')
     const getQueueImpl = jest
       .fn()
@@ -185,7 +183,6 @@ describe('runStage2Worker', () => {
       axes: {
         type: { value: 'invoice', confidence: 0.9 },
         from: { value: 'acme', confidence: 0.8 },
-        context: { value: 'finance', confidence: 0.85 },
       },
       proposed_drive_path: '/invoice/acme/finance/x.pdf',
       decision: 'uncertain',
@@ -290,7 +287,8 @@ describe('runStage2Worker', () => {
 
     expect(capturedPrompt).toContain('(none yet)')
     const matches = capturedPrompt.match(/\(none yet\)/g) ?? []
-    expect(matches.length).toBeGreaterThanOrEqual(3)
+    // SEED-v4 D1: only Type + From axes render → 2 "(none yet)" markers.
+    expect(matches.length).toBeGreaterThanOrEqual(2)
   })
 
   it('Test 6: getTaxonomyInternal throws → batch SKIPPED (no postClassify), loop continues', async () => {

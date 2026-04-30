@@ -196,16 +196,16 @@ describe('POST /api/triage', () => {
     expect(res.status).toBe(400)
   })
 
-  it('POST confirm with picks writes axis fields and sets status certain', async () => {
+  it('POST confirm with picks writes axis fields and sets status filed', async () => {
     // @ts-ignore
     mockAuth.mockResolvedValue({ userId: 'user_abc' })
     // @ts-ignore
-    mockUpdate.mockResolvedValue({ id: 'item_1', status: 'certain' })
+    mockUpdate.mockResolvedValue({ id: 'item_1', status: 'filed' })
 
     const req = makeRequest({
       itemId: 'item_1',
       type: 'confirm',
-      picks: { Type: 'Financial / Invoice', From: 'Acme Co.', Context: 'FonnIT/Clients' },
+      picks: { Type: 'Financial / Invoice', From: 'Acme Co.' },
     })
     const res = await POST(req)
     expect(res.status).toBe(200)
@@ -214,12 +214,30 @@ describe('POST /api/triage', () => {
       expect.objectContaining({
         where: expect.objectContaining({ id: 'item_1', user_id: 'user_abc' }),
         data: expect.objectContaining({
-          status: 'certain',
+          status: 'filed',
           axis_type: 'Financial / Invoice',
           axis_from: 'Acme Co.',
-          axis_context: 'FonnIT/Clients',
         }),
       })
     )
+  })
+
+  it('POST confirm rejects picks.Context (axis dropped per SEED-v4 Decision 1)', async () => {
+    // @ts-ignore
+    mockAuth.mockResolvedValue({ userId: 'user_abc' })
+
+    // The route's DecisionSchema picks now uses .strict(); an unknown key
+    // 'Context' triggers Zod parse failure → 400 Bad Request before any DB
+    // touch. Belt-and-suspenders: even if the schema accepted the key, the
+    // route's archive/confirm branch never sets data.axis_context.
+    const req = makeRequest({
+      itemId: 'item_1',
+      type: 'confirm',
+      // @ts-ignore Context is no longer part of the picks shape — Zod strict rejects at runtime.
+      picks: { Context: 'FonnIT/Clients' },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

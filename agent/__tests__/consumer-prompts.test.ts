@@ -6,7 +6,8 @@
  *   - Stage 1 file with file_path: null throws Error("downloads item missing file_path").
  *   - Stage 1 gmail: contains Subject:/From:/Preview:/Headers:; no path leakage.
  *   - Both Stage 1 variants: 0.75 confidence threshold present.
- *   - Stage 2: lists allowed types/froms/contexts, empty axes => "(none yet)".
+ *   - Stage 2: lists allowed types/froms, empty axes => "(none yet)".
+ *     SEED-v4-prod.md Decision 1 (260430-g6h) dropped the context axis.
  *   - Stage 2: 0.85 confident-match threshold present.
  *   - prompts.ts source contains zero `fs.` references (static guard).
  *   - 16KB length cap with 200-label synthetic taxonomy.
@@ -49,7 +50,6 @@ const GMAIL_ITEM: QueueItem = {
 const TAXONOMY: TaxonomyContext = {
   type: ['receipt', 'contract', 'statement'],
   from: ['Employer-Acme', 'BankOfAmerica'],
-  context: ['finance-monthly', 'travel'],
 }
 
 // lx4 Task 3: PATHS fixture removed — buildStage2Prompt no longer takes a
@@ -149,11 +149,15 @@ describe('buildStage1Prompt — gmail', () => {
 /* ─────────────────────────────────────────────────────────────────────── */
 
 describe('buildStage2Prompt — file', () => {
-  it('renders all allowed types/froms/contexts joined by ", "', () => {
+  it('renders all allowed types/froms joined by ", "', () => {
     const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
     expect(p).toContain('Type axis: receipt, contract, statement')
     expect(p).toContain('From axis: Employer-Acme, BankOfAmerica')
-    expect(p).toContain('Context axis: finance-monthly, travel')
+  })
+
+  it('does NOT mention the Context axis (SEED-v4 D1 — context dropped)', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
+    expect(p).not.toContain('Context axis')
   })
 
   it('interpolates the file path under "Read"', () => {
@@ -161,12 +165,13 @@ describe('buildStage2Prompt — file', () => {
     expect(p).toContain('Read /Users/d/Downloads/2025-Q1-statement.pdf')
   })
 
-  it('asks for the 3-axis JSON shape with proposed_drive_path', () => {
+  it('asks for the 2-axis JSON shape with proposed_drive_path', () => {
     const p = buildStage2Prompt(FILE_ITEM, TAXONOMY)
     expect(p).toContain('"axes"')
     expect(p).toContain('"type"')
     expect(p).toContain('"from"')
-    expect(p).toContain('"context"')
+    // SEED-v4 D1: context dropped from the JSON shape sentence.
+    expect(p).not.toContain('"context"')
     expect(p).toContain('"value"')
     expect(p).toContain('"confidence"')
     expect(p).toContain('"proposed_drive_path"')
@@ -184,10 +189,9 @@ describe('buildStage2Prompt — file', () => {
   })
 
   it('renders empty taxonomy axes as (none yet)', () => {
-    const p = buildStage2Prompt(FILE_ITEM, { type: [], from: [], context: [] })
+    const p = buildStage2Prompt(FILE_ITEM, { type: [], from: [] })
     expect(p).toContain('Type axis: (none yet)')
     expect(p).toContain('From axis: (none yet)')
-    expect(p).toContain('Context axis: (none yet)')
   })
 
   it('throws on null file_path for downloads source', () => {
@@ -234,7 +238,6 @@ describe('Stage 2 prompt length under heavy taxonomy', () => {
     const huge: TaxonomyContext = {
       type: Array.from({ length: 200 }, (_, i) => `type_${i}`),
       from: Array.from({ length: 200 }, (_, i) => `from_${i}`),
-      context: Array.from({ length: 200 }, (_, i) => `context_${i}`),
     }
     const p = buildStage2Prompt(FILE_ITEM, huge)
     // 16KB cap — generous; current builder produces well under this.

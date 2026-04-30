@@ -89,10 +89,8 @@ function makeItem(overrides: Partial<Record<string, unknown>> = {}) {
     classification_trace: null,
     axis_type: null,
     axis_from: null,
-    axis_context: null,
     axis_type_confidence: null,
     axis_from_confidence: null,
-    axis_context_confidence: null,
     proposed_drive_path: null,
     ...overrides,
   }
@@ -239,7 +237,7 @@ describe('POST /api/classify — success path', () => {
     expect(updateArg.data.status).toBe('uncertain')
   })
 
-  it('Test 8: stage=2 outcome=success all axes confident (>=0.75) → status=certain + axes written', async () => {
+  it('Test 8: stage=2 outcome=success both axes confident (>=0.75) → status=certain + axes written', async () => {
     mockFindUnique.mockResolvedValue(
       makeItem({ status: 'processing_stage2', classification_trace: { stage1: { decision: 'keep' } } }) as never,
     )
@@ -255,7 +253,6 @@ describe('POST /api/classify — success path', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.85 },
-          context: { value: 'work', confidence: 0.8 },
         },
         proposed_drive_path: '/Cortex/Work/Acme/Invoices/2026',
       },
@@ -274,10 +271,8 @@ describe('POST /api/classify — success path', () => {
     expect(updateArg.data.status).toBe('certain')
     expect(updateArg.data.axis_type).toBe('invoice')
     expect(updateArg.data.axis_from).toBe('acme')
-    expect(updateArg.data.axis_context).toBe('work')
     expect(updateArg.data.axis_type_confidence).toBe(0.9)
     expect(updateArg.data.axis_from_confidence).toBe(0.85)
-    expect(updateArg.data.axis_context_confidence).toBe(0.8)
     expect(updateArg.data.proposed_drive_path).toBe('/Cortex/Work/Acme/Invoices/2026')
 
     // Existing stage1 preserved, stage2.axes merged in
@@ -304,8 +299,7 @@ describe('POST /api/classify — success path', () => {
         decision: 'uncertain',
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
-          from: { value: 'acme', confidence: 0.85 },
-          context: { value: null, confidence: 0.4 }, // below 0.75 threshold
+          from: { value: null, confidence: 0.4 }, // below 0.75 threshold
         },
       },
     })
@@ -505,9 +499,9 @@ describe('POST /api/classify — review fix coverage', () => {
   })
 
   // ─── Review fix [1] — Stage 2 partial-axes payload is rejected ─────────────
-  it('Fix [1]: stage=2 success with only `type` axis (omitting from/context) → 400 validation_failed', async () => {
-    // Schema now requires all three axes. The Zod refusal happens BEFORE
-    // findUnique runs, so the DB is never touched.
+  it('Fix [1]: stage=2 success with only `type` axis (omitting from) → 400 validation_failed', async () => {
+    // Schema now requires both axes (type, from). The Zod refusal happens
+    // BEFORE findUnique runs, so the DB is never touched.
     const req = makeRequest({
       body: {
         item_id: 'item_xyz',
@@ -515,8 +509,35 @@ describe('POST /api/classify — review fix coverage', () => {
         outcome: 'success',
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
-          // from + context omitted — silently zeroing those confidences would
-          // be the pre-fix data-loss bug. Schema now rejects it.
+          // from omitted — silently zeroing that confidence would be the
+          // pre-fix data-loss bug. Schema now rejects it.
+        },
+      },
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error).toBe('validation_failed')
+    expect(mockFindUnique).not.toHaveBeenCalled()
+    expect(mockUpdateMany).not.toHaveBeenCalled()
+  })
+
+  // ─── Decision 1 (260430-g6h) — axes.context is rejected at the wire ─────
+  it('SEED-v4 D1: stage=2 success with axes.context present → 400 validation_failed', async () => {
+    // SEED-v4-prod.md Decision 1: the context axis was dropped from runtime.
+    // ClassifyBodySchema's axes uses .strict() so unknown keys (notably
+    // `context`) are rejected as parse_error. Belt-and-suspenders: the DB
+    // is never touched, the agent's strip is enforced at this seam.
+    const req = makeRequest({
+      body: {
+        item_id: 'item_xyz',
+        stage: 2,
+        outcome: 'success',
+        decision: 'uncertain',
+        axes: {
+          type: { value: 'invoice', confidence: 0.9 },
+          from: { value: 'acme', confidence: 0.85 },
+          context: { value: 'work', confidence: 0.8 }, // dropped axis — must reject
         },
       },
     })
@@ -541,7 +562,6 @@ describe('POST /api/classify — review fix coverage', () => {
         axes: {
           type: { value: null, confidence: 0.95 }, // contradiction
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'work', confidence: 0.9 },
         },
       },
     })
@@ -553,8 +573,8 @@ describe('POST /api/classify — review fix coverage', () => {
     expect(mockUpdateMany).not.toHaveBeenCalled()
   })
 
-  it('Fix [2]: stage=2 success with all axes value=null + confidence<0.75 → status=uncertain (not certain)', async () => {
-    // Three null-value axes, all with low confidence — schema accepts this.
+  it('Fix [2]: stage=2 success with both axes value=null + confidence<0.75 → status=uncertain (not certain)', async () => {
+    // Two null-value axes, both with low confidence — schema accepts this.
     // The status MUST be uncertain because no axis is confident.
     mockFindUnique.mockResolvedValue(makeItem({ status: 'processing_stage2' }) as never)
 
@@ -564,14 +584,13 @@ describe('POST /api/classify — review fix coverage', () => {
         stage: 2,
         outcome: 'success',
         // u47: Stage 2 success requires `decision`. Low-confidence ignore
-        // here would NOT trigger auto-ignore (max axis conf 0.3 < 0.85), so
+        // here would NOT trigger auto-ignore (max axis conf 0.2 < 0.85), so
         // the existing 'uncertain' fallback still applies. Use 'uncertain'
         // explicitly to make intent clear.
         decision: 'uncertain',
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.2 },
-          context: { value: null, confidence: 0.3 },
         },
       },
     })
@@ -645,7 +664,6 @@ describe('POST /api/classify — review fix coverage', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'work', confidence: 0.9 },
         },
       },
     })

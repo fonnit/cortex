@@ -79,13 +79,22 @@ describe('GET /api/labels/samples', () => {
     expect(mockFindMany).not.toHaveBeenCalled()
   })
 
-  it('Test 4: 400 when `axis` query param is missing OR not one of type|from|context', async () => {
+  it('Test 4: 400 when `axis` query param is missing OR not one of type|from', async () => {
     const res1 = await GET(makeReq('?label=invoice', AUTH_OK) as never)
     expect(res1.status).toBe(400)
     const res2 = await GET(
       makeReq('?axis=bogus&label=invoice', AUTH_OK) as never,
     )
     expect(res2.status).toBe(400)
+    expect(mockFindMany).not.toHaveBeenCalled()
+  })
+
+  it('SEED-v4 D1: axis=context returns 400 (axis dropped from runtime)', async () => {
+    // SEED-v4-prod.md Decision 1 (260430-g6h): the route's whitelist no
+    // longer includes 'context' — requests for axis=context fail the axis
+    // validation guard with 400 before any DB query runs.
+    const res = await GET(makeReq('?axis=context&label=anything', AUTH_OK) as never)
+    expect(res.status).toBe(400)
     expect(mockFindMany).not.toHaveBeenCalled()
   })
 
@@ -114,12 +123,8 @@ describe('GET /api/labels/samples', () => {
     expect(call.where).toEqual({ status: 'filed', axis_from: 'acme' })
   })
 
-  it('Test 5c: axis=context filters on axis_context', async () => {
-    mockFindMany.mockResolvedValueOnce([] as never)
-    await GET(makeReq('?axis=context&label=tax', AUTH_OK) as never)
-    const call = mockFindMany.mock.calls[0]![0] as { where: Record<string, unknown> }
-    expect(call.where).toEqual({ status: 'filed', axis_context: 'tax' })
-  })
+  // Test 5c (axis=context filters on axis_context) DELETED — the route now
+  // rejects axis=context with 400 (covered by the SEED-v4 D1 test above).
 
   it('Test 6: returns { samples: [...] } in the order Prisma returned', async () => {
     const ingestedA = new Date('2026-04-20T00:00:00Z')
@@ -131,7 +136,6 @@ describe('GET /api/labels/samples', () => {
         confirmed_drive_path: '/x/a.pdf',
         axis_type: 'invoice',
         axis_from: 'acme',
-        axis_context: 'finance',
         ingested_at: ingestedA,
       },
       {
@@ -140,7 +144,6 @@ describe('GET /api/labels/samples', () => {
         confirmed_drive_path: '/x/b.pdf',
         axis_type: 'invoice',
         axis_from: 'beta',
-        axis_context: null,
         ingested_at: ingestedB,
       },
     ] as never)
@@ -156,7 +159,6 @@ describe('GET /api/labels/samples', () => {
           confirmed_drive_path: '/x/a.pdf',
           axis_type: 'invoice',
           axis_from: 'acme',
-          axis_context: 'finance',
           ingested_at: ingestedA.toISOString(),
         },
         {
@@ -165,7 +167,6 @@ describe('GET /api/labels/samples', () => {
           confirmed_drive_path: '/x/b.pdf',
           axis_type: 'invoice',
           axis_from: 'beta',
-          axis_context: null,
           ingested_at: ingestedB.toISOString(),
         },
       ],

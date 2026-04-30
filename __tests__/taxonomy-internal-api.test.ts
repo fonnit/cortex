@@ -3,7 +3,8 @@
  *
  * Validates:
  *   - 401 with empty body when Authorization is missing/wrong (T-07-04).
- *   - 200 + { type, from, context } flat arrays bucketed by axis on success.
+ *   - 200 + { type, from } flat arrays bucketed by axis on success.
+ *     SEED-v4-prod.md Decision 1 (260430-g6h) dropped the context axis.
  *   - Filters out deprecated labels (where: { deprecated: false }).
  *   - Cache-Control: no-store on the response (T-07-09).
  *   - Module exports ONLY GET (T-07-05).
@@ -65,13 +66,14 @@ describe('GET /api/taxonomy/internal', () => {
     expect(mockFindMany).not.toHaveBeenCalled()
   })
 
-  it('returns 200 with bucketed type/from/context arrays on valid auth', async () => {
+  it('returns 200 with bucketed type/from arrays on valid auth', async () => {
+    // SEED-v4-prod.md Decision 1 (260430-g6h): context axis dropped from
+    // runtime — old TaxonomyLabel rows with axis='context' are silently
+    // filtered out (the route's bucket loop only handles type + from).
     mockFindMany.mockResolvedValueOnce([
       { axis: 'type', name: 'receipt' },
       { axis: 'type', name: 'contract' },
       { axis: 'from', name: 'BankOfAmerica' },
-      { axis: 'context', name: 'finance-monthly' },
-      { axis: 'context', name: 'travel' },
     ] as never)
 
     const res = await GET(makeReq({ authorization: 'Bearer sekret-token' }) as never)
@@ -81,8 +83,9 @@ describe('GET /api/taxonomy/internal', () => {
     expect(body).toEqual({
       type: ['receipt', 'contract'],
       from: ['BankOfAmerica'],
-      context: ['finance-monthly', 'travel'],
     })
+    // Response no longer includes a `context` key.
+    expect(body).not.toHaveProperty('context')
   })
 
   it('filters out deprecated labels via where: { deprecated: false }', async () => {
@@ -102,7 +105,7 @@ describe('GET /api/taxonomy/internal', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toEqual({ type: [], from: [], context: [] })
+    expect(body).toEqual({ type: [], from: [] })
   })
 
   it('sets Cache-Control: no-store on the success response', async () => {

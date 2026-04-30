@@ -45,13 +45,11 @@ const FILE_ITEM: QueueItem = {
 const TAXONOMY_CTX: TaxonomyContext = {
   type: ['invoice', 'receipt'],
   from: ['acme'],
-  context: ['paid'],
 }
 
 const TAXONOMY: TaxonomyInternalResponse = {
   type: ['invoice', 'receipt'],
   from: ['acme'],
-  context: ['paid'],
 }
 
 const okClassify: ClassifyOutcome = { kind: 'ok', status: 'filed', retries: 0 }
@@ -67,7 +65,6 @@ const okStage2Outcome = (
     axes: {
       type: { value: string | null; confidence: number }
       from: { value: string | null; confidence: number }
-      context: { value: string | null; confidence: number }
     }
     proposed_drive_path: string
   }>,
@@ -75,7 +72,6 @@ const okStage2Outcome = (
   axes: {
     type: { value: string | null; confidence: number }
     from: { value: string | null; confidence: number }
-    context: { value: string | null; confidence: number }
   }
   proposed_drive_path: string
   decision: 'auto_file' | 'ignore' | 'uncertain'
@@ -87,7 +83,6 @@ const okStage2Outcome = (
     axes: {
       type: { value: string | null; confidence: number }
       from: { value: string | null; confidence: number }
-      context: { value: string | null; confidence: number }
     }
     proposed_drive_path: string
     decision: 'auto_file' | 'ignore' | 'uncertain'
@@ -97,7 +92,6 @@ const okStage2Outcome = (
     axes: override?.axes ?? {
       type: { value: 'invoice', confidence: 0.9 },
       from: { value: 'acme', confidence: 0.9 },
-      context: { value: 'paid', confidence: 0.9 },
     },
     proposed_drive_path: override?.proposed_drive_path ?? '/invoice/acme/paid/x.pdf',
     decision,
@@ -139,7 +133,8 @@ describe('buildStage2Prompt — lx4 Task 3 prompt restructure', () => {
     const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
     expect(p).toContain('Type axis: invoice, receipt')
     expect(p).toContain('From axis: acme')
-    expect(p).toContain('Context axis: paid')
+    // SEED-v4-prod.md Decision 1 (260430-g6h): no Context axis line.
+    expect(p).not.toContain('Context axis')
   })
 
   it('Test P4: prompt instructs that the FINAL message must be the JSON decision object', () => {
@@ -248,6 +243,12 @@ describe('buildStage2Prompt — preserved u47/wgk/h9w invariants', () => {
     const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
     expect(p).not.toContain('<type>/<from>/<context>/<filename>')
   })
+
+  it('SEED-v4 D1: prompt does not mention a context axis or "context" key in the JSON shape', () => {
+    const p = buildStage2Prompt(FILE_ITEM, TAXONOMY_CTX)
+    expect(p).not.toContain('Context axis')
+    expect(p).not.toContain('"context"')
+  })
 })
 
 /* ───────────────────────────────── Schema tests (preserved) ────────────── */
@@ -280,7 +281,6 @@ describe('Stage2ResultSchema (via worker) — decision + path_confidence require
           axes: {
             type: { value: 'invoice', confidence: 0.9 },
             from: { value: 'acme', confidence: 0.9 },
-            context: { value: 'paid', confidence: 0.9 },
           },
           proposed_drive_path: '/x.pdf',
           decision: 'auto_file',
@@ -321,7 +321,6 @@ describe('Stage2ResultSchema (via worker) — decision + path_confidence require
           axes: {
             type: { value: 'invoice', confidence: 0.9 },
             from: { value: 'acme', confidence: 0.9 },
-            context: { value: 'paid', confidence: 0.9 },
           },
           proposed_drive_path: '/x.pdf',
           path_confidence: 0.9,
@@ -362,7 +361,6 @@ describe('Stage2ResultSchema (via worker) — decision + path_confidence require
           axes: {
             type: { value: 'invoice', confidence: 0.9 },
             from: { value: 'acme', confidence: 0.9 },
-            context: { value: 'paid', confidence: 0.9 },
           },
           proposed_drive_path: '/x.pdf',
           decision: 'auto_file',
@@ -403,7 +401,6 @@ describe('Stage2ResultSchema (via worker) — decision + path_confidence require
           axes: {
             type: { value: 'invoice', confidence: 0.9 },
             from: { value: 'acme', confidence: 0.9 },
-            context: { value: 'paid', confidence: 0.9 },
           },
           proposed_drive_path: '/x.pdf',
           decision: 'auto_file',
@@ -484,7 +481,6 @@ describe('runStage2Worker — forwards decision + path_confidence in classify pa
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.1 },
-          context: { value: null, confidence: 0.1 },
         },
         proposed_drive_path: '',
       }),
@@ -509,7 +505,8 @@ describe('runStage2Worker — forwards decision + path_confidence in classify pa
     expect((payload as ClassifyRequest & { decision?: string }).decision).toBe('ignore')
     expect(payload.axes!.type.value).toBeNull()
     expect(payload.axes!.from.value).toBeNull()
-    expect(payload.axes!.context.value).toBeNull()
+    // SEED-v4 D1: axes.context is no longer part of the payload shape.
+    expect(payload.axes).not.toHaveProperty('context')
     expect(payload.axes!.type.confidence).toBe(0.1)
   })
 

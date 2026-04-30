@@ -6,10 +6,10 @@
  * auto-ignore branch from u47-2 (unchanged), and the Stage 1 + TOCTOU
  * regression cases that must keep working.
  *
- * Auto-file gate (post-h9w):
+ * Auto-file gate (post-h9w + post-260430-g6h two-axes contract):
  *   - decision='auto_file'
- *   - All 3 axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
- *   - All 3 axis values are non-null
+ *   - Both axis (type, from) confidences ≥ AUTO_FILE_THRESHOLD (0.85)
+ *   - Both axis values are non-null
  *   - path_confidence is present and ≥ PATH_AUTO_FILE_MIN_CONFIDENCE (0.85)
  *   - Parent of proposed_drive_path has ≥ PATH_AUTO_FILE_MIN_SIBLINGS (3)
  *     confirmed-filed items in the database
@@ -81,10 +81,8 @@ function makeItem(overrides: Partial<Record<string, unknown>> = {}) {
     classification_trace: null,
     axis_type: null,
     axis_from: null,
-    axis_context: null,
     axis_type_confidence: null,
     axis_from_confidence: null,
-    axis_context_confidence: null,
     proposed_drive_path: null,
     confirmed_drive_path: null,
     ...overrides,
@@ -120,7 +118,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -141,7 +138,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
     // Reversibility — axis_* + paths still written so triage can override.
     expect(updateArg.data.axis_type).toBe('invoice')
     expect(updateArg.data.axis_from).toBe('acme')
-    expect(updateArg.data.axis_context).toBe('paid')
     expect(updateArg.data.proposed_drive_path).toBe('/fonnit/invoices/x.pdf')
     expect(updateArg.data.confirmed_drive_path).toBe('/fonnit/invoices/x.pdf')
 
@@ -172,7 +168,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -202,7 +197,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -231,7 +225,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -259,7 +252,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -291,7 +283,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
           // now allowed because the gate was replaced.
           type: { value: 'wholly_new_value', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -319,7 +310,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/?/acme/paid/x.pdf',
       },
@@ -347,7 +337,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.8 }, // below 0.85
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/fonnit/invoices/x.pdf',
       },
@@ -373,7 +362,6 @@ describe('POST /api/classify — auto-file (h9w)', () => {
         axes: {
           type: { value: 'misc', confidence: 0.9 },
           from: { value: 'unknown', confidence: 0.9 },
-          context: { value: 'inbox', confidence: 0.9 },
         },
         proposed_drive_path: '/file.pdf',
       },
@@ -409,7 +397,6 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.1 },
-          context: { value: null, confidence: 0.1 },
         },
         proposed_drive_path: '',
       },
@@ -439,7 +426,6 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.1 },
-          context: { value: null, confidence: 0.1 },
         },
         proposed_drive_path: '',
       },
@@ -464,7 +450,6 @@ describe('POST /api/classify — auto-ignore (u47)', () => {
         axes: {
           type: { value: null, confidence: 0.1 },
           from: { value: null, confidence: 0.1 },
-          context: { value: null, confidence: 0.1 },
         },
         proposed_drive_path: '',
       },
@@ -492,7 +477,6 @@ describe('POST /api/classify — schema + regression', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/invoice/acme/paid/x.pdf',
       },
@@ -517,7 +501,6 @@ describe('POST /api/classify — schema + regression', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
       },
     })
@@ -579,7 +562,6 @@ describe('POST /api/classify — schema + regression', () => {
         axes: {
           type: { value: 'invoice', confidence: 0.9 },
           from: { value: 'acme', confidence: 0.9 },
-          context: { value: 'paid', confidence: 0.9 },
         },
         proposed_drive_path: '/x.pdf',
       },
