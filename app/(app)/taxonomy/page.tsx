@@ -8,7 +8,7 @@ interface MergeProposal {
   evidence: string; suggested_canonical: string; status: string
 }
 interface TaxonomyData {
-  types: TaxonomyRow[]; entities: TaxonomyRow[]; contexts: TaxonomyRow[]
+  types: TaxonomyRow[]; entities: TaxonomyRow[]
   mergeProposals: MergeProposal[]
 }
 
@@ -19,12 +19,12 @@ type ModalState = {
 } | null
 
 export default function TaxonomyPage() {
-  const [tab, setTab] = useState<'types' | 'entities' | 'contexts'>('types')
+  const [tab, setTab] = useState<'types' | 'entities'>('types')
   const { data } = useQuery<TaxonomyData>({
     queryKey: ['taxonomy'],
     queryFn: () => fetch('/api/taxonomy').then(r => r.json()),
     refetchInterval: 30_000,
-    placeholderData: { types: [], entities: [], contexts: [], mergeProposals: [] },
+    placeholderData: { types: [], entities: [], mergeProposals: [] },
   })
 
   // Modal state
@@ -81,16 +81,15 @@ export default function TaxonomyPage() {
   const tabs = [
     { id: 'types' as const, label: 'Types' },
     { id: 'entities' as const, label: 'Entities (from)' },
-    { id: 'contexts' as const, label: 'Contexts' },
   ]
   const list = data?.[tab] ?? []
   const merges = data?.mergeProposals ?? []
 
-  // axis value for API calls: 'types' → 'type', 'entities' → 'from', 'contexts' → 'context'
+  // axis value for API calls: 'types' → 'type', 'entities' → 'from'.
+  // SEED-v4-prod.md Decision 1 (260430-g6h) dropped the 'context' axis.
   const tabAxis: Record<typeof tab, string> = {
     types: 'type',
     entities: 'from',
-    contexts: 'context',
   }
 
   return (

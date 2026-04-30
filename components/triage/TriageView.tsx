@@ -10,7 +10,7 @@ import type { TriageItem, TriageAction } from './ExpandedCard'
 interface TriageDecision {
   itemId: string
   type: 'keep' | 'ignore' | 'archive' | 'confirm' | 'skip'
-  picks?: { Type?: string; From?: string; Context?: string }
+  picks?: { Type?: string; From?: string }
 }
 
 interface ToastState {
@@ -160,7 +160,6 @@ export function TriageView() {
         ? {
             Type: a.picks['Type'],
             From: a.picks['From'],
-            Context: a.picks['Context'],
           }
         : undefined,
     })
@@ -207,19 +206,19 @@ export function TriageView() {
         if (k === 'a') handleAction({ type: 'archive', item })
         else if (k === 'i') handleAction({ type: 'ignore', item })
         else if (k === 's') handleAction({ type: 'skip', item })
-        else if (['1', '2', '3'].includes(k)) {
-          const axes = ['Type', 'From', 'Context']
+        else if (['1', '2'].includes(k)) {
+          const axes = ['Type', 'From']
           const confidentRaw = item.classification_trace?.stage2?.confident ?? []
           const confidentNorm = confidentRaw.map((c) => c[0].toUpperCase() + c.slice(1))
           const unresolved = axes.find((a) => !confidentNorm.includes(a) && !picks[a])
           if (unresolved) {
             const idx = Number(k) - 1
-            const axisKey = unresolved.toLowerCase() as 'type' | 'from' | 'context'
+            const axisKey = unresolved.toLowerCase() as 'type' | 'from'
             const props = item.classification_trace?.stage2?.proposals?.[axisKey]
             if (props && props[idx]) pickAxis(unresolved, props[idx].value)
           }
         } else if (k === 'n') {
-          const axes = ['Type', 'From', 'Context']
+          const axes = ['Type', 'From']
           const confidentRaw = item.classification_trace?.stage2?.confident ?? []
           const confidentNorm = confidentRaw.map((c) => c[0].toUpperCase() + c.slice(1))
           const unresolved = axes.find((a) => !confidentNorm.includes(a) && !picks[a])

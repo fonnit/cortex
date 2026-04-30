@@ -20,7 +20,6 @@ export interface TriageItem {
       proposals?: {
         type?: Array<{ value: string; conf: number }>
         from?: Array<{ value: string; conf: number }>
-        context?: Array<{ value: string; conf: number }>
       }
       confident?: string[]
     }
@@ -62,7 +61,7 @@ export function ExpandedCard({
   identities = [],
 }: ExpandedCardProps) {
   const isLabel = item.stage === 'label'
-  const axes = isLabel ? ['Type', 'From', 'Context'] : []
+  const axes = isLabel ? ['Type', 'From'] : []
 
   const [identitySuggest, setIdentitySuggest] = useState<{ name: string; type: string; email: string } | null>(null)
   const [identityBusy, setIdentityBusy] = useState(false)
