@@ -7,8 +7,8 @@
  *   - Fetches taxonomy via getTaxonomyInternal at the START of each
  *     non-empty batch (D-no-cache-taxonomy — never cached across cycles)
  *   - Builds Stage 2 prompts via buildStage2Prompt(item, taxonomy)
- *   - POSTs all-three-axes classify success bodies. The Phase 5 schema
- *     rejects partial axes — we never construct a partial body; if
+ *   - POSTs two-axes (type, from) classify success bodies. The Phase 5
+ *     schema rejects partial axes — we never construct a partial body; if
  *     invokeClaude returns a payload that fails Stage2ResultSchema we
  *     POST `outcome:'error'` instead.
  *   - getTaxonomyInternal failure → SKIP the entire batch. Items stay in
@@ -62,8 +62,9 @@ const AxisSchema = z.object({
 })
 
 /**
- * Stage 2 result — type/from/context all required (matches the Phase 5
- * /api/classify all-three-axes contract). If invokeClaude returns a payload
+ * Stage 2 result — type/from required (matches the Phase 5 /api/classify
+ * two-axes contract; the context axis was dropped per SEED-v4-prod.md
+ * Decision 1, quick task 260430-g6h). If invokeClaude returns a payload
  * missing any axis, we treat it as parse_error and POST outcome:'error'.
  *
  * Per quick task 260426-u47 (D-auto-file, D-auto-ignore): the schema now
@@ -81,8 +82,8 @@ const AxisSchema = z.object({
  * boundary so Claude cannot bypass the threshold by emitting `9999`).
  */
 const Stage2ResultSchema = z.object({
-  // All-3-axes contract enforced inline so a static grep can pin it.
-  axes: z.object({ type: AxisSchema, from: AxisSchema, context: AxisSchema }),
+  // Two-axes contract enforced inline so a static grep can pin it.
+  axes: z.object({ type: AxisSchema, from: AxisSchema }),
   proposed_drive_path: z.string(),
   decision: z.enum(['auto_file', 'ignore', 'uncertain']),
   path_confidence: z.number().min(0).max(1),
@@ -160,7 +161,6 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
         prompt = buildStage2Prompt(item, {
           type: taxonomy.type,
           from: taxonomy.from,
-          context: taxonomy.context,
         })
       } catch (err) {
         await safePostClassify(postClassifyFn, lf, {
@@ -191,10 +191,6 @@ export function runStage2Worker(deps: Stage2Deps): Stage2Worker {
           from: {
             value: outcome.value.axes.from.value ?? null,
             confidence: outcome.value.axes.from.confidence,
-          },
-          context: {
-            value: outcome.value.axes.context.value ?? null,
-            confidence: outcome.value.axes.context.confidence,
           },
         }
         payload = {

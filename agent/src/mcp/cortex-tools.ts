@@ -176,9 +176,9 @@ export function createCortexMcpServer(opts: FactoryOpts): McpServer {
   // 2) cortex_label_samples — axis (enum), label (string), limit (optional number).
   server.tool(
     'cortex_label_samples',
-    "Sample up to N most-recent confirmed items carrying a particular axis label, so Claude can ground a placement decision in real prior items. axis must be one of 'type'|'from'|'context'.",
+    "Sample up to N most-recent confirmed items carrying a particular axis label, so Claude can ground a placement decision in real prior items. axis must be one of 'type'|'from'.",
     {
-      axis: z.enum(['type', 'from', 'context']),
+      axis: z.enum(['type', 'from']),
       label: z.string().min(1),
       limit: z.number().int().positive().max(20).optional(),
     },

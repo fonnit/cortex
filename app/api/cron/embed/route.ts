@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
         filename: true,
         axis_type: true,
         axis_from: true,
-        axis_context: true,
         source_metadata: true,
       },
     })

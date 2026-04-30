@@ -9,7 +9,8 @@
  *   - GET only — no POST/PATCH/DELETE/PUT.
  *   - requireApiKey at the very top, 401 with EMPTY body.
  *   - Filters: { status: 'filed', axis_<axis>: <label> } where axis is one of
- *     'type' | 'from' | 'context'. Other axes are NOT supported.
+ *     'type' | 'from'. SEED-v4-prod.md Decision 1 (260430-g6h) dropped the
+ *     'context' axis from runtime — requests for axis=context return 400.
  *   - 400 (plain "Bad Request") when `axis` or `label` is missing/invalid.
  *   - Token-budget cap: limit ≤ 20 (default 5). Mirrors paths-internal's
  *     MAX_PATHS_RETURNED=50 — samples are higher-fan-out per call so the cap
@@ -20,7 +21,7 @@
  * Response shape:
  *   { samples: Array<{
  *       id, filename, confirmed_drive_path,
- *       axis_type, axis_from, axis_context,
+ *       axis_type, axis_from,
  *       ingested_at
  *     }> }
  *
@@ -34,7 +35,7 @@ import { prisma } from '@/lib/prisma'
 import { QUEUE_STATUSES } from '@/lib/queue-config'
 
 /** Axis whitelist — Prisma's typed `where` won't accept dynamic key access. */
-const ALLOWED_AXES = ['type', 'from', 'context'] as const
+const ALLOWED_AXES = ['type', 'from'] as const
 type AllowedAxis = (typeof ALLOWED_AXES)[number]
 
 /**
@@ -82,8 +83,6 @@ export async function GET(request: NextRequest) {
           return { status: QUEUE_STATUSES.FILED, axis_type: label }
         case 'from':
           return { status: QUEUE_STATUSES.FILED, axis_from: label }
-        case 'context':
-          return { status: QUEUE_STATUSES.FILED, axis_context: label }
       }
     })()
 
@@ -97,7 +96,6 @@ export async function GET(request: NextRequest) {
         confirmed_drive_path: true,
         axis_type: true,
         axis_from: true,
-        axis_context: true,
         ingested_at: true,
       },
     })

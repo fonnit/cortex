@@ -22,10 +22,8 @@ function buildProposals(item: {
   classification_trace: unknown
   axis_type: string | null
   axis_from: string | null
-  axis_context: string | null
   axis_type_confidence: number | null
   axis_from_confidence: number | null
-  axis_context_confidence: number | null
 }) {
   const trace = item.classification_trace as Record<string, unknown> | null
   const stage2 = trace?.stage2 as Record<string, unknown> | undefined
@@ -73,8 +71,20 @@ export async function GET() {
           }
         }
 
+        // SEED-v4-prod.md Decision 1 (260430-g6h): the axis_context /
+        // axis_context_confidence columns stay in the schema for old rows
+        // but are not part of the wire contract anymore — strip them from
+        // the response so the UI never sees them.
+        const {
+          axis_context: _axis_context,
+          axis_context_confidence: _axis_context_confidence,
+          ...rest
+        } = item
+        void _axis_context
+        void _axis_context_confidence
+
         return {
-          ...item,
+          ...rest,
           classification_trace: normalizedTrace,
           stage,
         }
@@ -94,8 +104,8 @@ const DecisionSchema = z.object({
     .object({
       Type: z.string().optional(),
       From: z.string().optional(),
-      Context: z.string().optional(),
     })
+    .strict()
     .optional(),
 })
 
@@ -183,7 +193,8 @@ export async function POST(request: Request) {
       const data: Record<string, unknown> = { status: 'filed' }
       if (picks?.Type) data.axis_type = picks.Type
       if (picks?.From) data.axis_from = picks.From
-      if (picks?.Context) data.axis_context = picks.Context
+      // SEED-v4-prod.md Decision 1 (260430-g6h): axis_context column stays
+      // but is never written from runtime; new rows keep their null value.
       // Carry path forward unless triage explicitly cleared it. The h9w gate
       // counts items where status='filed' AND confirmed_drive_path IS NOT NULL.
       if (!item.confirmed_drive_path && item.proposed_drive_path) {
@@ -215,7 +226,6 @@ export async function POST(request: Request) {
         })
       if (picks?.Type) labelOps.push(upsertLabel('type', picks.Type))
       if (picks?.From) labelOps.push(upsertLabel('from', picks.From))
-      if (picks?.Context) labelOps.push(upsertLabel('context', picks.Context))
 
       await Promise.all([
         prisma.item.update({ where: { id: itemId, user_id: userId }, data }),

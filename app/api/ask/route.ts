@@ -57,13 +57,12 @@ export async function POST(request: Request) {
       filename: string | null
       axis_type: string | null
       axis_from: string | null
-      axis_context: string | null
       confirmed_drive_path: string | null
       proposed_drive_path: string | null
       ingested_at: string | Date
       source_metadata: Record<string, unknown> | null
     }>>`
-      SELECT id, filename, axis_type, axis_from, axis_context,
+      SELECT id, filename, axis_type, axis_from,
              confirmed_drive_path, proposed_drive_path, ingested_at,
              source_metadata
       FROM "Item"

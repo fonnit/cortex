@@ -42,7 +42,6 @@ import type { QueueItem } from '../http/types'
 export interface TaxonomyContext {
   type: string[]
   from: string[]
-  context: string[]
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -111,9 +110,8 @@ export function buildStage2Prompt(
     'Existing taxonomy:',
     `Type axis: ${listOrNoneYet(taxonomy.type)}`,
     `From axis: ${listOrNoneYet(taxonomy.from)}`,
-    `Context axis: ${listOrNoneYet(taxonomy.context)}`,
     '',
-    'Propose 3-axis labels. If an existing label from the lists above is a confident match (confidence ≥ 0.85), use it. If no existing label fits, you may propose a new label name on that axis — pick a short lowercased name (hyphen- or underscore-separated) following the style of the existing labels — but mark it with confidence below 0.85 so a human can review and approve the new label before it is added to the taxonomy. If you have no plausible label for an axis, value may be null with low confidence.',
+    'Propose 2-axis labels (type, from). If an existing label from the lists above is a confident match (confidence ≥ 0.85), use it. If no existing label fits, you may propose a new label name on that axis — pick a short lowercased name (hyphen- or underscore-separated) following the style of the existing labels — but mark it with confidence below 0.85 so a human can review and approve the new label before it is added to the taxonomy. If you have no plausible label for an axis, value may be null with low confidence.',
     '',
     'MANDATORY tool calls — the taxonomy snapshot above and any DB state are stale; you cannot know what the system actually contains without asking. Before producing the final JSON you MUST:',
     '  1. Call cortex_paths_internal once to list existing confirmed-folder parents with file counts. Use the result to decide whether to reuse a parent or branch a new one.',
@@ -133,13 +131,13 @@ export function buildStage2Prompt(
     'Return path_confidence (0..1) proportional to how sure you are about the placement.',
     '',
     'Decide one of:',
-    '- auto_file: you are confident across all 3 axes ≥ 0.85 AND confident the path placement is correct (path_confidence ≥ 0.85). The route will only file when the chosen parent already has 3+ confirmed siblings.',
+    '- auto_file: you are confident across both axes ≥ 0.85 AND confident the path placement is correct (path_confidence ≥ 0.85). The route will only file when the chosen parent already has 3+ confirmed siblings.',
     '- ignore: junk that does not deserve a label — spam, marketing emails, automated security alerts, installer files, etc. (we will mark it ignored without human review).',
     '- uncertain: anything else (a human will triage).',
     'If decision="ignore", axes may be null with low confidence — we trust the ignore signal.',
     '',
     'Your FINAL message must be ONLY the JSON object — no prose around it. Earlier turns may include tool calls and reasoning; only the final assistant message is parsed.',
-    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}, "context":{...}}, "proposed_drive_path":string, "path_confidence":0..1, "decision":"auto_file"|"ignore"|"uncertain"}.',
+    'Respond JSON: {"axes": {"type":{"value":string|null,"confidence":0..1}, "from":{...}}, "proposed_drive_path":string, "path_confidence":0..1, "decision":"auto_file"|"ignore"|"uncertain"}.',
   ].join('\n')
 }
 

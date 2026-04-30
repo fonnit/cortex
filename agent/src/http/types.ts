@@ -105,10 +105,11 @@ export interface ClassifyAxis {
  *     by the route).
  *   - Stage 2 success: 'auto_file' | 'ignore' | 'uncertain' (terminal action;
  *     required by the route per D-auto-file / D-auto-ignore). When 'auto_file'
- *     fires AND all 3 axes are ≥ AUTO_FILE_THRESHOLD AND `path_confidence`
- *     ≥ 0.85 AND the parent of `proposed_drive_path` already has ≥3 confirmed-
- *     filed siblings, the route transitions status='filed'. When 'ignore'
- *     fires AND confidence ≥ AUTO_IGNORE_THRESHOLD, status='ignored'.
+ *     fires AND both axes (type, from) are ≥ AUTO_FILE_THRESHOLD AND
+ *     `path_confidence` ≥ 0.85 AND the parent of `proposed_drive_path` already
+ *     has ≥3 confirmed-filed siblings, the route transitions status='filed'.
+ *     When 'ignore' fires AND confidence ≥ AUTO_IGNORE_THRESHOLD,
+ *     status='ignored'.
  *
  * `confidence` (optional, top-level): Stage 2 may emit it explicitly for the
  * ignore path so the route doesn't have to fall back to max(axis confidences).
@@ -129,7 +130,6 @@ export type ClassifyRequest =
       axes?: {
         type: ClassifyAxis
         from: ClassifyAxis
-        context: ClassifyAxis
       }
       confidence?: number
       reason?: string
@@ -174,7 +174,6 @@ export type ClassifyOutcome =
 export interface TaxonomyInternalResponse {
   type: string[]
   from: string[]
-  context: string[]
 }
 
 /**

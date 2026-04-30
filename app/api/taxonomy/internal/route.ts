@@ -33,10 +33,11 @@ export async function GET(request: NextRequest) {
 
     const type = labels.filter((l) => l.axis === 'type').map((l) => l.name)
     const from = labels.filter((l) => l.axis === 'from').map((l) => l.name)
-    const context = labels.filter((l) => l.axis === 'context').map((l) => l.name)
 
+    // SEED-v4-prod.md Decision 1 (260430-g6h): no `context` array — Stage 2
+    // worker fetches taxonomy with shape { type, from } only.
     return Response.json(
-      { type, from, context },
+      { type, from },
       { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (err) {

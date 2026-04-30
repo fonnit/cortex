@@ -42,11 +42,13 @@ const AxisSchema = z
  * POST /api/classify body — discriminated union on outcome so success-only and
  * error-only fields cannot be mixed at the type level.
  *
- * Stage 2 success requires ALL THREE axes (type, from, context) per review
- * finding [1]: a partial axes object would cause confidence columns for
+ * Stage 2 success requires BOTH axes (type, from) per review finding [1] and
+ * SEED-v4-prod.md Decision 1 (quick task 260430-g6h, dropping axis_context
+ * from runtime): a partial axes object would cause confidence columns for
  * omitted axes to be silently overwritten with 0, drifting them out of sync
- * with the (still-present) value columns. The contract is "all three axes
- * or none" — runtime validators with sparse axes should fail at this seam.
+ * with the (still-present) value columns. The contract is "both axes or
+ * none" — runtime validators with sparse axes should fail at this seam.
+ * Bodies carrying `axes.context` are rejected as parse_error (Zod strict).
  *
  * Per quick task 260426-u47:
  *   - Stage 1 success: `decision` enum is {keep, ignore, uncertain} (relevance
@@ -72,8 +74,8 @@ const ClassifyBodySchema = z.discriminatedUnion('outcome', [
         .object({
           type: AxisSchema,
           from: AxisSchema,
-          context: AxisSchema,
         })
+        .strict()
         .optional(),
       confidence: z.number().min(0).max(1).optional(),
       reason: z.string().optional(),
@@ -114,7 +116,7 @@ const ClassifyBodySchema = z.discriminatedUnion('outcome', [
  *
  * AUTO_IGNORE_THRESHOLD: minimum confidence on the ignore signal (either
  *   the explicit top-level `confidence` field or, when absent, the max of
- *   the 3 axis confidences) before status='ignored'.
+ *   the 2 axis confidences) before status='ignored'.
  * ───────────────────────────────────────────────────────────────────────── */
 
 const AUTO_FILE_THRESHOLD = 0.85
@@ -258,25 +260,22 @@ export async function POST(request: NextRequest) {
           await lf.flushAsync()
           return res
         }
-        // All three axes are guaranteed present by the Zod schema (review fix [1]).
+        // Both axes are guaranteed present by the Zod schema (review fix [1]).
         // The AxisSchema refinement guarantees value=null implies confidence < 0.75
         // (review fix [2]), so a null-value axis can never count as confident here.
         const tAxis = data.axes.type
         const fAxis = data.axes.from
-        const cAxis = data.axes.context
         const tConf = tAxis.confidence
         const fConf = fAxis.confidence
-        const cConf = cAxis.confidence
         const allConfident =
           tConf >= CONFIDENCE_THRESHOLD &&
-          fConf >= CONFIDENCE_THRESHOLD &&
-          cConf >= CONFIDENCE_THRESHOLD
+          fConf >= CONFIDENCE_THRESHOLD
 
         // ─── AUTO-FILE BRANCH (quick task 260427-h9w, replaces u47-3) ─────
         // Preconditions (ALL must hold):
         //   - decision === 'auto_file'
-        //   - All 3 axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
-        //   - All 3 axis values are non-null
+        //   - Both axis confidences ≥ AUTO_FILE_THRESHOLD (0.85)
+        //   - Both axis values are non-null
         //   - path_confidence is present and ≥ PATH_AUTO_FILE_MIN_CONFIDENCE (0.85)
         //   - The PARENT of proposed_drive_path already contains
         //     ≥ PATH_AUTO_FILE_MIN_SIBLINGS (3) confirmed-filed items.
@@ -296,10 +295,9 @@ export async function POST(request: NextRequest) {
         // accepted because the user can trivially undo via triage.
         const allHighConf =
           tConf >= AUTO_FILE_THRESHOLD &&
-          fConf >= AUTO_FILE_THRESHOLD &&
-          cConf >= AUTO_FILE_THRESHOLD
+          fConf >= AUTO_FILE_THRESHOLD
         const allValuesPresent =
-          tAxis.value !== null && fAxis.value !== null && cAxis.value !== null
+          tAxis.value !== null && fAxis.value !== null
 
         const proposedPath = data.proposed_drive_path
         const parent =
@@ -350,7 +348,7 @@ export async function POST(request: NextRequest) {
         // and decision==='ignore', status='ignored' (terminal) — cold-start
         // guard does NOT apply because no labels are committed.
         const ignoreConfidence =
-          data.confidence ?? Math.max(tConf, fConf, cConf)
+          data.confidence ?? Math.max(tConf, fConf)
         const canAutoIgnore =
           data.decision === 'ignore' && ignoreConfidence >= AUTO_IGNORE_THRESHOLD
 
@@ -416,12 +414,13 @@ export async function POST(request: NextRequest) {
           // Intentionally omit axis_*, proposed_drive_path, confirmed_drive_path.
           // status='ignored' is terminal; no further data is needed.
         } else {
+          // SEED-v4-prod.md Decision 1 (260430-g6h): axis_context column
+          // stays in the schema but is NEVER written from runtime — new rows
+          // get null on insert / unchanged on update.
           if (tAxis.value) updateData.axis_type = tAxis.value
           if (fAxis.value) updateData.axis_from = fAxis.value
-          if (cAxis.value) updateData.axis_context = cAxis.value
           updateData.axis_type_confidence = tConf
           updateData.axis_from_confidence = fConf
-          updateData.axis_context_confidence = cConf
           if (data.proposed_drive_path) updateData.proposed_drive_path = data.proposed_drive_path
           // Auto-file confirms the proposed path — commit it as confirmed
           // so downstream code (Drive sync, UI badges) treats it as final.

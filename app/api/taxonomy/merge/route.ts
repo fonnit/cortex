@@ -3,21 +3,28 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const MergeBody = z.object({
-  axis: z.enum(['type', 'from', 'context']),
+  axis: z.enum(['type', 'from']),
   sources: z.array(z.string().min(1)).min(1),
   canonical: z.string().min(1),
 })
 
-const AXIS_COL: Record<string, 'axis_type' | 'axis_from' | 'axis_context'> = {
+// SEED-v4-prod.md Decision 1 (260430-g6h): 'context' axis dropped from runtime.
+const AXIS_COL: Record<string, 'axis_type' | 'axis_from'> = {
   type: 'axis_type',
   from: 'axis_from',
-  context: 'axis_context',
 }
 
 export async function POST(req: Request) {
   try {
     const userId = await requireAuth()
-    const { axis, sources, canonical } = MergeBody.parse(await req.json())
+    const parsed = MergeBody.safeParse(await req.json())
+    if (!parsed.success) {
+      return Response.json(
+        { error: 'validation_failed', issues: parsed.error.issues },
+        { status: 400 },
+      )
+    }
+    const { axis, sources, canonical } = parsed.data
 
     const axisCol = AXIS_COL[axis]
 

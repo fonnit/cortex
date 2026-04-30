@@ -25,12 +25,11 @@ export async function GET() {
       .filter(l => l.axis === 'from')
       .map(l => ({ name: l.name, count: l.item_count, lastUsed: l.last_used?.toISOString() ?? null }))
 
-    const contexts = labels
-      .filter(l => l.axis === 'context')
-      .map(l => ({ name: l.name, count: l.item_count, lastUsed: l.last_used?.toISOString() ?? null }))
-
+    // SEED-v4-prod.md Decision 1 (260430-g6h): no `contexts` array — the
+    // context axis was dropped from runtime; only TaxonomyLabel rows from
+    // before the strip would appear and we no longer surface them.
     return Response.json(
-      { types, entities, contexts, mergeProposals },
+      { types, entities, mergeProposals },
       { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (err) {
@@ -43,10 +42,17 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const userId = await requireAuth()
-    const { axis, name } = z.object({
-      axis: z.enum(['type', 'from', 'context']),
+    const parsed = z.object({
+      axis: z.enum(['type', 'from']),
       name: z.string().min(1).max(200),
-    }).parse(await req.json())
+    }).safeParse(await req.json())
+    if (!parsed.success) {
+      return Response.json(
+        { error: 'validation_failed', issues: parsed.error.issues },
+        { status: 400 },
+      )
+    }
+    const { axis, name } = parsed.data
     await prisma.taxonomyLabel.create({
       data: { user_id: userId, axis, name, item_count: 0 },
     })

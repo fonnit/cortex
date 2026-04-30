@@ -7,10 +7,11 @@ const PatchBody = z.discriminatedUnion('op', [
   z.object({ op: z.literal('deprecate') }),
 ])
 
-const AXIS_COL: Record<string, 'axis_type' | 'axis_from' | 'axis_context'> = {
+// SEED-v4-prod.md Decision 1 (260430-g6h): only 'type' and 'from' are valid;
+// 'context' was dropped from runtime — the !axisCol guard 400s for it.
+const AXIS_COL: Record<string, 'axis_type' | 'axis_from'> = {
   type: 'axis_type',
   from: 'axis_from',
-  context: 'axis_context',
 }
 
 export async function PATCH(

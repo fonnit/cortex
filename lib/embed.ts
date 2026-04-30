@@ -19,7 +19,6 @@ interface EmbedItem {
   filename?: string | null
   axis_type?: string | null
   axis_from?: string | null
-  axis_context?: string | null
   source_metadata?: unknown
 }
 
@@ -27,6 +26,10 @@ interface EmbedItem {
  * Build a text string for embedding from item fields.
  * Concatenates non-null fields with ' | ' separator.
  * Falls back to filename or 'untitled' when all fields are null.
+ *
+ * SEED-v4-prod.md Decision 1 (260430-g6h): axis_context dropped from the
+ * embed text — historical embeddings keep their old composition; new
+ * embeddings compose from filename + axis_type + axis_from + subject.
  */
 export function buildEmbedText(item: EmbedItem): string {
   const subject = extractSubject(item.source_metadata)
@@ -34,7 +37,6 @@ export function buildEmbedText(item: EmbedItem): string {
     item.filename,
     item.axis_type,
     item.axis_from,
-    item.axis_context,
     subject,
   ].filter((v): v is string => typeof v === 'string' && v.length > 0)
 
