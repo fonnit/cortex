@@ -241,6 +241,8 @@ export async function GET(request: NextRequest) {
 
     const res = Response.json({ items, reclaimed })
     res.headers.set('X-Trace-Id', trace.id)
+    res.headers.set('X-Debug-Transport', isNeon ? 'neon-http' : 'prisma')
+    res.headers.set('X-Debug-Url-Hint', dbUrl.split('@')[1]?.split('/')[0] ?? 'no-url')
     await lf.flushAsync()
     return res
   } catch (err) {
