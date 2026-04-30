@@ -118,8 +118,10 @@ export async function GET(request: NextRequest) {
     let legacyRows: { id: string }[]
     let claimedRows: ItemRow[]
 
+    let t0 = 0, t1 = 0, t2 = 0, t3 = 0
     if (isNeon) {
       const sql = neon(dbUrl)
+      t0 = Date.now()
       // ─── 1) STALE RECLAIM (current stage) ──────────────────────────────────
       staleRows = (await sql`
         UPDATE "Item"
@@ -131,6 +133,7 @@ export async function GET(request: NextRequest) {
               ) < ${cutoffIso}::timestamptz
         RETURNING id
       `) as { id: string }[]
+      t1 = Date.now()
       // ─── 2) LEGACY RECLAIM (v1.0 plain `processing`) ───────────────────────
       legacyRows = (await sql`
         UPDATE "Item"
@@ -142,6 +145,7 @@ export async function GET(request: NextRequest) {
           AND ingested_at < ${cutoffIso}::timestamptz
         RETURNING id
       `) as { id: string }[]
+      t2 = Date.now()
       // ─── 3) ATOMIC CLAIM ────────────────────────────────────────────────────
       claimedRows = (await sql`
         UPDATE "Item"
@@ -166,6 +170,7 @@ export async function GET(request: NextRequest) {
         )
         RETURNING id, source, filename, mime_type, size_bytes, content_hash, source_metadata
       `) as ItemRow[]
+      t3 = Date.now()
     } else {
       // Local / non-Neon path — prisma.$transaction shares one connection
       // across all 3 statements. PrismaPg adapter is fast against docker pg.
@@ -243,6 +248,9 @@ export async function GET(request: NextRequest) {
     res.headers.set('X-Trace-Id', trace.id)
     res.headers.set('X-Debug-Transport', isNeon ? 'neon-http' : 'prisma')
     res.headers.set('X-Debug-Url-Hint', dbUrl.split('@')[1]?.split('/')[0] ?? 'no-url')
+    if (isNeon) {
+      res.headers.set('X-Debug-Timing', `stale=${t1-t0}ms legacy=${t2-t1}ms claim=${t3-t2}ms total=${t3-t0}ms`)
+    }
     await lf.flushAsync()
     return res
   } catch (err) {
