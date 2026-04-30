@@ -46,11 +46,15 @@ type ItemRow = {
 }
 
 export async function GET(request: NextRequest) {
+  const tStart = Date.now()
   const unauthorized = requireApiKey(request)
   if (unauthorized) return unauthorized
+  const tAfterAuth = Date.now()
 
   const lf = new Langfuse()
+  const tAfterLfNew = Date.now()
   const trace = lf.trace({ name: 'api-queue' })
+  const tAfterTrace = Date.now()
 
   try {
     const url = new URL(request.url)
@@ -244,6 +248,7 @@ export async function GET(request: NextRequest) {
 
     const reclaimed = staleRows.length + legacyRows.length
 
+    const tAfterSql = Date.now()
     const res = Response.json({ items, reclaimed })
     res.headers.set('X-Trace-Id', trace.id)
     res.headers.set('X-Debug-Transport', isNeon ? 'neon-http' : 'prisma')
@@ -251,7 +256,16 @@ export async function GET(request: NextRequest) {
     if (isNeon) {
       res.headers.set('X-Debug-Timing', `stale=${t1-t0}ms legacy=${t2-t1}ms claim=${t3-t2}ms total=${t3-t0}ms`)
     }
-    await lf.flushAsync()
+    const tBeforeFlush = Date.now()
+    // Skip awaiting flushAsync — fire-and-forget. The Langfuse trace is sent
+    // best-effort; we don't need to block the response on it. This was the
+    // ~9s tax on /api/queue: flushAsync awaits an HTTP POST to Langfuse cloud
+    // which can be slow or hung under cold-start conditions. Other endpoints
+    // (paths/internal etc.) appeared "fast" but were paying the same tax —
+    // they're just less hot-path so it didn't matter.
+    void lf.flushAsync().catch(() => { /* best-effort */ })
+    const tAfterFlush = Date.now()
+    res.headers.set('X-Debug-Pipeline', `auth=${tAfterAuth-tStart}ms lfNew=${tAfterLfNew-tAfterAuth}ms lfTrace=${tAfterTrace-tAfterLfNew}ms toSql=${t0-tAfterTrace}ms sql=${tAfterSql-t0}ms flush=${tAfterFlush-tBeforeFlush}ms`)
     return res
   } catch (err) {
     console.error('[api/queue] error:', err)
