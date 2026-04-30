@@ -21,6 +21,15 @@ const config = {
   // against pre-h9w source.
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/.claude/worktrees/'],
   modulePathIgnorePatterns: ['/.claude/worktrees/'],
+  // Resource caps — without these jest defaults to N-1 workers (≈7-11 on this
+  // machine), and each worker loads PrismaClient+OpenAI+ws+pg-mem at module
+  // init. Combined with the running docker Postgres + Next.js dev server,
+  // running the full suite peaks RAM on a 16GB Mac and triggers swap thrash
+  // ("computer collapses"). 2 workers + 768MB ceiling keeps the run inside a
+  // safe envelope without making test wallclock dramatically worse.
+  maxWorkers: 2,
+  workerIdleMemoryLimit: '768MB',
+  testTimeout: 30_000,
 }
 
 module.exports = config
