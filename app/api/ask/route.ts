@@ -137,14 +137,14 @@ export async function POST(request: Request) {
     const latencyMs = Date.now() - t0
 
     trace.update({ output: { citations: top5.length, latencyMs } })
-    await lf.flushAsync()
+    void lf.flushAsync().catch(() => { /* best-effort */ })
 
     const response: AskResponse = { answer, sources, latencyMs }
     return Response.json(response)
   } catch (err) {
     console.error('[/api/ask] error:', err)
     trace.update({ output: { error: String(err) } })
-    await lf.flushAsync()
+    void lf.flushAsync().catch(() => { /* best-effort */ })
     return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

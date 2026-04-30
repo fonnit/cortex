@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import Langfuse from 'langfuse'
-import { neon } from '@neondatabase/serverless'
 import { prisma } from '@/lib/prisma'
 import { requireApiKey } from '@/lib/api-key'
 import { STALE_CLAIM_TIMEOUT_MS, QUEUE_STATUSES } from '@/lib/queue-config'
@@ -26,6 +25,11 @@ import { buildClaimParams } from '@/lib/queue-sql'
  * Auth: CORTEX_API_KEY shared-secret Bearer (mirrors /api/ingest, /api/classify).
  * Tracing: Langfuse trace `api-queue` with named spans on each step. The
  * X-Trace-Id header is set on every response so consumers can chain spans.
+ *
+ * Performance note: Langfuse `flushAsync()` is fire-and-forget (not awaited).
+ * Awaiting it was adding ~9s to every response on Vercel cold-start because the
+ * Langfuse cloud POST hangs on first call per function instance. Trace data
+ * still ships best-effort; we just don't block the response on it.
  */
 
 const QuerySchema = z.object({
@@ -46,15 +50,11 @@ type ItemRow = {
 }
 
 export async function GET(request: NextRequest) {
-  const tStart = Date.now()
   const unauthorized = requireApiKey(request)
   if (unauthorized) return unauthorized
-  const tAfterAuth = Date.now()
 
   const lf = new Langfuse()
-  const tAfterLfNew = Date.now()
   const trace = lf.trace({ name: 'api-queue' })
-  const tAfterTrace = Date.now()
 
   try {
     const url = new URL(request.url)
@@ -68,16 +68,11 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       )
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
     const stageNum: 1 | 2 = parsed.data.stage === '1' ? 1 : 2
-    // Single source of derivation for status strings, stageKey, and nowIso
-    // (review fix [6]): the route used to recompute pendingStatus/
-    // processingStatus/stageKey inline AND call buildClaimParams just for
-    // nowIso. Now everything routes through the helper so a future rename
-    // of QUEUE_STATUSES reaches one site, not two.
     const { pendingStatus, processingStatus, stageKey, limit, nowIso } = buildClaimParams(
       stageNum,
       parsed.data.limit,
@@ -85,49 +80,20 @@ export async function GET(request: NextRequest) {
 
     const cutoffIso = new Date(Date.now() - STALE_CLAIM_TIMEOUT_MS).toISOString()
 
-    // Transport choice: when DATABASE_URL points at Neon, use the neon()
-    // HTTP adapter directly — each tagged-template call is a single HTTP
-    // POST (~100ms). When it points at vanilla Postgres (local docker),
-    // fall back to prisma.$transaction with the standard adapter.
-    //
-    // Why the split: the queue route runs on a hot polling loop (Mac agent
-    // hits it every 5s). Empirically, prisma.$queryRaw with PrismaNeon's
-    // WebSocket transport takes ~3s per call on Vercel — even inside a
-    // $transaction — because the WS handshake fires per statement. With 3
-    // statements that's ~9.5s, fast enough to saturate the agent's poll
-    // cadence indefinitely. neon() HTTP brings the same 3 statements down
-    // to ~500ms total in prod. The behavior locally is unchanged
-    // (prisma.$transaction was already ~120ms warm against docker pg).
-    //
-    // Why not always use neon() HTTP: it requires Neon's specific HTTP API
-    // and won't connect to a vanilla Postgres URL. The conditional keeps
-    // local docker testing portable while making prod fast.
-    //
-    // Correctness: both branches preserve the original 3-statement order
-    // (stale-reclaim → legacy-reclaim → atomic-claim). The atomic-claim's
-    // FOR UPDATE SKIP LOCKED works under either transport — neon()
-    // implicitly wraps each statement in a transaction; prisma.$transaction
-    // makes the wrap explicit.
-    const dbUrl = process.env.DATABASE_URL ?? ''
-    const isNeon =
-      dbUrl.includes('neon.tech') ||
-      dbUrl.includes('.neon.') ||
-      dbUrl.includes('pooler.')
-
     const reclaimSpan = trace.span({ name: 'stale-reclaim', input: { stage: stageNum, cutoffIso } })
     const legacySpan = trace.span({ name: 'legacy-reclaim', input: { cutoffIso } })
     const claimSpan = trace.span({ name: 'atomic-claim', input: { stage: stageNum, limit } })
 
-    let staleRows: { id: string }[]
-    let legacyRows: { id: string }[]
-    let claimedRows: ItemRow[]
-
-    let t0 = 0, t1 = 0, t2 = 0, t3 = 0
-    if (isNeon) {
-      const sql = neon(dbUrl)
-      t0 = Date.now()
+    // Batch all 3 statements into one $transaction so they share a single
+    // database connection. The `FOR UPDATE SKIP LOCKED` in statement #3
+    // requires transactional context to hold row locks — wrapping the whole
+    // pipeline in $transaction makes that context explicit instead of leaning
+    // on the driver's per-statement implicit BEGIN/COMMIT.
+    const [staleRows, legacyRows, claimedRows] = await prisma.$transaction([
       // ─── 1) STALE RECLAIM (current stage) ──────────────────────────────────
-      staleRows = (await sql`
+      // If a processing_stage{N} row's last_claim_at is older than the timeout
+      // (or absent — fall back to ingested_at), move it back to pending_stage{N}.
+      prisma.$queryRaw<{ id: string }[]>`
         UPDATE "Item"
         SET status = ${pendingStatus}
         WHERE status = ${processingStatus}
@@ -136,10 +102,11 @@ export async function GET(request: NextRequest) {
                 ingested_at
               ) < ${cutoffIso}::timestamptz
         RETURNING id
-      `) as { id: string }[]
-      t1 = Date.now()
+      `,
       // ─── 2) LEGACY RECLAIM (v1.0 plain `processing`) ───────────────────────
-      legacyRows = (await sql`
+      // Per CONTEXT decision: route to pending_stage2 if stage2 trace exists,
+      // else pending_stage1. Folds into every poll — no separate cron.
+      prisma.$queryRaw<{ id: string }[]>`
         UPDATE "Item"
         SET status = CASE
           WHEN classification_trace ? 'stage2' THEN ${QUEUE_STATUSES.PENDING_STAGE_2}
@@ -148,10 +115,12 @@ export async function GET(request: NextRequest) {
         WHERE status = ${QUEUE_STATUSES.LEGACY_PROCESSING}
           AND ingested_at < ${cutoffIso}::timestamptz
         RETURNING id
-      `) as { id: string }[]
-      t2 = Date.now()
+      `,
       // ─── 3) ATOMIC CLAIM ────────────────────────────────────────────────────
-      claimedRows = (await sql`
+      // FOR UPDATE SKIP LOCKED ensures parallel callers never receive the same
+      // id. classification_trace.queue.{stageN}.last_claim_at is written in the
+      // same statement so stale-detection has a fresh signal.
+      prisma.$queryRaw<ItemRow[]>`
         UPDATE "Item"
         SET status = ${processingStatus},
             classification_trace = jsonb_set(
@@ -173,57 +142,8 @@ export async function GET(request: NextRequest) {
           FOR UPDATE SKIP LOCKED
         )
         RETURNING id, source, filename, mime_type, size_bytes, content_hash, source_metadata
-      `) as ItemRow[]
-      t3 = Date.now()
-    } else {
-      // Local / non-Neon path — prisma.$transaction shares one connection
-      // across all 3 statements. PrismaPg adapter is fast against docker pg.
-      ;[staleRows, legacyRows, claimedRows] = await prisma.$transaction([
-        prisma.$queryRaw<{ id: string }[]>`
-          UPDATE "Item"
-          SET status = ${pendingStatus}
-          WHERE status = ${processingStatus}
-            AND COALESCE(
-                  (classification_trace #>> ARRAY['queue', ${stageKey}, 'last_claim_at'])::timestamptz,
-                  ingested_at
-                ) < ${cutoffIso}::timestamptz
-          RETURNING id
-        `,
-        prisma.$queryRaw<{ id: string }[]>`
-          UPDATE "Item"
-          SET status = CASE
-            WHEN classification_trace ? 'stage2' THEN ${QUEUE_STATUSES.PENDING_STAGE_2}
-            ELSE ${QUEUE_STATUSES.PENDING_STAGE_1}
-          END
-          WHERE status = ${QUEUE_STATUSES.LEGACY_PROCESSING}
-            AND ingested_at < ${cutoffIso}::timestamptz
-          RETURNING id
-        `,
-        prisma.$queryRaw<ItemRow[]>`
-          UPDATE "Item"
-          SET status = ${processingStatus},
-              classification_trace = jsonb_set(
-                jsonb_set(
-                  COALESCE(classification_trace, '{}'::jsonb),
-                  '{queue}',
-                  COALESCE(classification_trace->'queue', '{}'::jsonb),
-                  true
-                ),
-                ARRAY['queue', ${stageKey}, 'last_claim_at'],
-                to_jsonb(${nowIso}::text),
-                true
-              )
-          WHERE id IN (
-            SELECT id FROM "Item"
-            WHERE status = ${pendingStatus}
-            ORDER BY ingested_at ASC
-            LIMIT ${limit}
-            FOR UPDATE SKIP LOCKED
-          )
-          RETURNING id, source, filename, mime_type, size_bytes, content_hash, source_metadata
-        `,
-      ])
-    }
+      `,
+    ])
 
     reclaimSpan.end({ output: { reclaimed: staleRows.length } })
     legacySpan.end({ output: { reclaimed: legacyRows.length } })
@@ -248,32 +168,13 @@ export async function GET(request: NextRequest) {
 
     const reclaimed = staleRows.length + legacyRows.length
 
-    const tAfterSql = Date.now()
     const res = Response.json({ items, reclaimed })
     res.headers.set('X-Trace-Id', trace.id)
-    res.headers.set('X-Debug-Transport', isNeon ? 'neon-http' : 'prisma')
-    res.headers.set('X-Debug-Url-Hint', dbUrl.split('@')[1]?.split('/')[0] ?? 'no-url')
-    if (isNeon) {
-      res.headers.set('X-Debug-Timing', `stale=${t1-t0}ms legacy=${t2-t1}ms claim=${t3-t2}ms total=${t3-t0}ms`)
-    }
-    const tBeforeFlush = Date.now()
-    // Skip awaiting flushAsync — fire-and-forget. The Langfuse trace is sent
-    // best-effort; we don't need to block the response on it. This was the
-    // ~9s tax on /api/queue: flushAsync awaits an HTTP POST to Langfuse cloud
-    // which can be slow or hung under cold-start conditions. Other endpoints
-    // (paths/internal etc.) appeared "fast" but were paying the same tax —
-    // they're just less hot-path so it didn't matter.
     void lf.flushAsync().catch(() => { /* best-effort */ })
-    const tAfterFlush = Date.now()
-    res.headers.set('X-Debug-Pipeline', `auth=${tAfterAuth-tStart}ms lfNew=${tAfterLfNew-tAfterAuth}ms lfTrace=${tAfterTrace-tAfterLfNew}ms toSql=${t0-tAfterTrace}ms sql=${tAfterSql-t0}ms flush=${tAfterFlush-tBeforeFlush}ms`)
     return res
   } catch (err) {
     console.error('[api/queue] error:', err)
-    try {
-      await lf.flushAsync()
-    } catch {
-      /* noop — never let flush errors mask the original error */
-    }
+    void lf.flushAsync().catch(() => { /* best-effort */ })
     const res = new Response('Internal Server Error', { status: 500 })
     res.headers.set('X-Trace-Id', trace.id)
     return res
@@ -283,14 +184,13 @@ export async function GET(request: NextRequest) {
 /* ─────────────────────────────────────────────────────────────────────────────
  * Internal SQL helpers — exported only for the pg-mem integration test.
  *
- * The route handler above now uses `prisma.$queryRaw` (tagged-template form)
- * for production paths against either PrismaNeon (Neon URL) or PrismaPg
- * (vanilla Postgres). These helpers retain positional ($1, $2, ...) parameter
- * SQL because pg-mem's pg-Client adapter takes positional params, not Prisma's
- * tagged-template form. They mirror the SAME SQL the route fires, so the
- * integration test can execute it without re-implementing the SQL string. If
- * the route SQL changes, update the helper below — the integration test will
- * catch any drift at the next run.
+ * The route handler above uses `prisma.$queryRaw` (tagged-template form). These
+ * helpers retain positional ($1, $2, ...) parameter SQL because pg-mem's
+ * pg-Client adapter takes positional params, not Prisma's tagged-template
+ * form. They mirror the SAME SQL the route fires, so the integration test can
+ * execute it without re-implementing the SQL string. If the route SQL changes,
+ * update the helper below — the integration test will catch any drift at the
+ * next run.
  *
  * Underscore-prefixed names mark these as test-only exports; do not import
  * them from production code.
@@ -301,8 +201,6 @@ export function _atomicClaimSqlForTest(
   limit: number,
   nowIso: string,
 ): { text: string; values: unknown[] } {
-  // Resolve status strings from QUEUE_STATUSES (review fix [5]) so a future
-  // rename of any literal forces a recompile here, not a silent test drift.
   const stageKey = stage === 1 ? 'stage1' : 'stage2'
   const pendingStatus =
     stage === 1 ? QUEUE_STATUSES.PENDING_STAGE_1 : QUEUE_STATUSES.PENDING_STAGE_2
@@ -361,10 +259,6 @@ export function _staleReclaimSqlForTest(
 }
 
 export function _legacyReclaimSqlForTest(cutoffIso: string): { text: string; values: unknown[] } {
-  // The CASE branches are interpolated from QUEUE_STATUSES so a rename of
-  // PENDING_STAGE_1 / PENDING_STAGE_2 / LEGACY_PROCESSING reaches the test
-  // helper. The values are constants from a `as const` map, so this is a
-  // build-time string concat — no SQL injection surface.
   return {
     text: `
       UPDATE "Item"

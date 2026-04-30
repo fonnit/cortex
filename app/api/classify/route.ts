@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     if (!item) {
       const res = Response.json({ error: 'item_not_found' }, { status: 404 })
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       )
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
           res.headers.set('X-Trace-Id', trace.id)
-          await lf.flushAsync()
+          void lf.flushAsync().catch(() => { /* best-effort */ })
           return res
         }
         // Build stage1 patch conditionally so omitted optional fields don't
@@ -257,7 +257,7 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           )
           res.headers.set('X-Trace-Id', trace.id)
-          await lf.flushAsync()
+          void lf.flushAsync().catch(() => { /* best-effort */ })
           return res
         }
         // Both axes are guaranteed present by the Zod schema (review fix [1]).
@@ -457,13 +457,13 @@ export async function POST(request: NextRequest) {
           { status: 409 },
         )
         res.headers.set('X-Trace-Id', trace.id)
-        await lf.flushAsync()
+        void lf.flushAsync().catch(() => { /* best-effort */ })
         return res
       }
 
       const res = Response.json({ ok: true, status: newStatus, retries: 0 })
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -511,18 +511,18 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       )
       res.headers.set('X-Trace-Id', trace.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
     const res = Response.json({ ok: true, status: newStatus, retries: newRetries })
     res.headers.set('X-Trace-Id', trace.id)
-    await lf.flushAsync()
+    void lf.flushAsync().catch(() => { /* best-effort */ })
     return res
   } catch (err) {
     console.error('[api/classify] error:', err)
     try {
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
     } catch {
       /* noop — never let flush errors mask the original error */
     }

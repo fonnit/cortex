@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const vectors = await embedTexts(texts)
 
     span.end({ output: { embedded: items.length } })
-    await lf.flushAsync()
+    void lf.flushAsync().catch(() => { /* best-effort */ })
 
     // Write each embedding via raw SQL — Prisma's typed client cannot write
     // halfvec natively. $queryRaw binds the literal as a string and Postgres

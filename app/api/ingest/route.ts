@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
       res.headers.set('X-Trace-Id', t.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
       res.headers.set('X-Trace-Id', t.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       // Dedup hit — return existing id, NEVER call prisma.item.create
       const res = Response.json({ id: existing.id, deduped: true })
       res.headers.set('X-Trace-Id', t.id)
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
       return res
     }
 
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
 
     const res = Response.json({ id: created.id, deduped: false })
     res.headers.set('X-Trace-Id', t.id)
-    await lf.flushAsync()
+    void lf.flushAsync().catch(() => { /* best-effort */ })
     return res
   } catch (err) {
     console.error('[api/ingest] error:', err)
@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
     // (matches the pre-Plan-06-01 behaviour: every error path carries a trace id).
     const t = ensureTrace()
     try {
-      await lf.flushAsync()
+      void lf.flushAsync().catch(() => { /* best-effort */ })
     } catch {
       /* noop — never let flush errors mask the original error */
     }
