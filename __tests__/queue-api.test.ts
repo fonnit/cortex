@@ -20,10 +20,22 @@
  * __tests__/queue-claim-sql.integration.test.ts (pg-mem).
  */
 
-// Mock @/lib/prisma — feed in tagged-template responses via $queryRaw
+// Mock @/lib/prisma — feed in tagged-template responses via $queryRaw.
+// $transaction([...]) is the route's actual call site; default impl awaits all
+// promises via allSettled then re-throws the first rejection (mirrors prisma's
+// sequential-array semantics AND keeps node from logging "unhandled rejection"
+// when an error test rejects all 3 mocked $queryRaw calls).
 jest.mock('../lib/prisma', () => ({
   prisma: {
     $queryRaw: jest.fn(),
+    $transaction: jest.fn(async (arr: Promise<unknown>[]) => {
+      const results = await Promise.allSettled(arr)
+      const firstReject = results.find((r) => r.status === 'rejected')
+      if (firstReject && firstReject.status === 'rejected') {
+        throw firstReject.reason
+      }
+      return results.map((r) => (r as PromiseFulfilledResult<unknown>).value)
+    }),
   },
 }))
 
