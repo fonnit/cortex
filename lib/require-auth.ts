@@ -1,48 +1,57 @@
-// Auth boundary helper. Returns identity kind + canonical User.id for the
-// caller. Browser sessions return kind='user'; Clerk API Keys (Bearer `ak_...`
-// sent by the Mac worker) return kind='machine'.
+// Auth boundary helper. Two identity kinds:
+//   - User session (browser) — Clerk's auth() resolves clerkId → User row.
+//   - Machine (worker) — Authorization: Bearer mt_... is verified via
+//     clerkClient.m2m.verify() with this app's CLERK_MACHINE_SECRET_KEY.
 //
 // Each route declares which kinds it accepts via requireAuth(['user'|'machine']).
-//
-// For v1: machine-token routes resolve to the single owner User row (the User
-// with the lowest createdAt). Multi-owner setups would map the API key's
-// `subject` claim to a specific User.
 
 import { auth } from '@clerk/nextjs/server'
+import { createClerkClient } from '@clerk/backend'
+import { headers as nextHeaders } from 'next/headers'
 import { prisma } from './prisma'
 import { HttpError } from './http-error'
 
 export type Identity =
   | { kind: 'user'; userId: string; clerkId: string }
-  | { kind: 'machine'; userId: string; machineId: string }
+  | { kind: 'machine'; userId: string; machineId: string; tokenId: string }
 
 export type AllowedKind = 'user' | 'machine'
 
-export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
-  const a = await auth()
-
-  // Clerk machine-token shape:
-  //   { tokenType: 'api_key' | 'm2m_token' | 'oauth_token',
-  //     id: string,          // the token id, e.g. ak_xxx
-  //     subject: string,     // the user/machine this token is bound to
-  //     scopes: string[],
-  //     isAuthenticated: true }
-  const ax = a as unknown as {
-    tokenType?: string
-    id?: string
-    subject?: string
-    isAuthenticated?: boolean
+// Cache the Clerk client across requests (one per process).
+let _clerk: ReturnType<typeof createClerkClient> | null = null
+function clerkBackend() {
+  if (_clerk) return _clerk
+  const secret = process.env.CLERK_MACHINE_SECRET_KEY
+  if (!secret) {
+    throw new HttpError(
+      500,
+      'CLERK_MACHINE_SECRET_KEY not set on the backend. Add the backend machine\'s ak_ secret to Vercel env.',
+    )
   }
+  _clerk = createClerkClient({ secretKey: secret })
+  return _clerk
+}
 
-  const isMachine = ax.tokenType === 'api_key'
-    || ax.tokenType === 'm2m_token'
-    || ax.tokenType === 'oauth_token'
+async function tryMachineAuth(): Promise<Identity | null> {
+  const h = await nextHeaders()
+  const authHeader = h.get('authorization') ?? h.get('Authorization')
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
 
-  if (isMachine) {
-    if (!allowed.includes('machine')) {
-      throw new HttpError(403, 'Machine token not accepted on this route')
-    }
-    // v1: single owner. Resolve to the oldest User row.
+  const token = authHeader.slice('Bearer '.length).trim()
+  // M2M opaque tokens start with mt_. JWT-format M2M tokens are also accepted by verify().
+  if (!token.startsWith('mt_') && !token.includes('.')) return null
+
+  const secret = process.env.CLERK_MACHINE_SECRET_KEY
+  if (!secret) return null  // backend machine secret not configured; can't verify
+
+  try {
+    const result = await clerkBackend().m2m.verify({ token, machineSecretKey: secret })
+    // result shape: { id, subject, scopes, claims }
+    const r = result as { id?: string; subject?: string }
+    const tokenId = r.id ?? 'unknown'
+    const subject = r.subject ?? 'unknown'
+
+    // v1: single-owner. Resolve to the oldest User row.
     const owner = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } })
     if (!owner) {
       throw new HttpError(
@@ -50,9 +59,25 @@ export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
         'No User row in DB — sign in to the web app once before using the worker',
       )
     }
-    return { kind: 'machine', userId: owner.id, machineId: ax.id ?? 'unknown' }
+    return { kind: 'machine', userId: owner.id, machineId: subject, tokenId }
+  } catch (e) {
+    if (e instanceof HttpError) throw e
+    return null  // verification failed; fall through to user-session check
+  }
+}
+
+export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
+  // 1) Try machine auth first (presence of a Bearer header is the signal).
+  const machineId = await tryMachineAuth()
+  if (machineId) {
+    if (!allowed.includes('machine')) {
+      throw new HttpError(403, 'Machine token not accepted on this route')
+    }
+    return machineId
   }
 
+  // 2) Try user session via Clerk.
+  const a = await auth()
   const clerkId = a.userId
   if (!clerkId) throw new HttpError(401, 'Unauthorized')
   if (!allowed.includes('user')) {

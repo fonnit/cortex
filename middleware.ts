@@ -2,16 +2,16 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
 // Cortex v1 auth boundary.
 //
-// Every /api/* route passes through Clerk. There are two identity kinds:
-//   - User session (browser) — has clerkId; resolves to User row.
-//   - Machine Token (Mac worker) — has machineId; resolves to a User row by
-//     convention (single owner). See lib/require-auth.ts.
+// Two identity kinds:
+//   - User session (browser) — clerkMiddleware's auth.protect() handles this.
+//   - Machine (Mac worker) — sends Authorization: Bearer mt_... (Clerk M2M
+//     token). The route handler verifies via lib/require-auth.ts using the
+//     backend's CLERK_MACHINE_SECRET_KEY.
 //
-// Worker routes accept Clerk Machine Tokens (Bearer header with the `ak_...`
-// secret directly — no /oauth/token exchange). The middleware lets these
-// through; per-route handlers further restrict via requireAuth(['user'|'machine']).
-//
-// Public routes (no auth) below are sign-in only.
+// Worker routes are NOT auth.protect()'d here, because Clerk's default
+// middleware only accepts user sessions. Per-route requireAuth(['machine'])
+// enforces the worker identity. The /triage UI routes are session-protected
+// as normal.
 
 const isPublicRoute = createRouteMatcher(['/sign-in(.*)'])
 
@@ -23,16 +23,15 @@ const isWorkerRoute = createRouteMatcher([
   '/api/items/(.*)/move-failed',
   '/api/items/(.*)/source-missing',
   '/api/items/(.*)/unsupported',
-  '/api/taxonomy',  // worker reads taxonomy too; also used by browser
+  '/api/taxonomy',  // worker reads taxonomy; also reachable from the browser
 ])
 
 export default clerkMiddleware(async (auth, request) => {
   if (isPublicRoute(request)) return
   if (isWorkerRoute(request)) {
-    // Worker routes accept Clerk API Keys (the `ak_` prefix token Daniel got
-    // from the dashboard) in addition to user sessions. The per-route handler
-    // further restricts via requireAuth(['user'|'machine']).
-    await auth.protect({ token: ['session_token', 'api_key'] })
+    // Worker routes verify their own auth via lib/require-auth.ts (Clerk M2M
+    // tokens are not validated by clerkMiddleware). User sessions can also
+    // hit these routes; the route handler decides whether to accept them.
     return
   }
   await auth.protect()

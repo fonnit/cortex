@@ -31,35 +31,53 @@ worker (next poll):
 
 ## Phase 0 setup (one-time)
 
-### 1. Clerk Machine Token (worker auth)
+### 1. Clerk M2M (TWO machines, TWO secrets)
 
-In your Clerk dashboard → **Machines** (or **Applications → Machine Tokens**), create a Machine named `Cortex worker`. Copy the `client_id` and `client_secret`. They're shown once.
+Clerk's M2M model gives one Machine entity per service. Cortex has two:
 
-### 2. Local worker env
+- **cortex-worker** (your Mac) — has its own `ak_...` secret; lives in `agent/.env.daemon`
+- **cortex-backend** (Vercel) — has a different `ak_...` secret; lives in Vercel env
 
-Edit `agent/.env.daemon` (or whichever file your launchd plist loads) with:
+In the Clerk dashboard:
+1. **Machines → Add machine**, name it `cortex-worker`.
+2. **Add machine** again, name it `cortex-backend`.
+3. Open `cortex-worker` → **Scopes** → add `cortex-backend` as an allowed target.
+4. View each machine's secret (**... menu → View machine secret**). You get two distinct `ak_...` values.
+
+Runtime flow:
+- Worker loads its `ak_...` secret. Per request, it calls `clerkClient.m2m.createToken()` to mint a short-lived `mt_...` token from that secret.
+- Worker sends `Authorization: Bearer mt_...` to the backend.
+- Backend route extracts `mt_...`, calls `clerkClient.m2m.verify()` with its own `ak_...` secret. Verification only succeeds if the dashboard scope `cortex-worker → cortex-backend` exists.
+
+The `ak_...` secrets never transit the network — only `mt_...` tokens do.
+
+### 2. Local worker env (`agent/.env.daemon`)
 
 ```env
-CLERK_DOMAIN=https://your-clerk-instance.clerk.accounts.dev
-CORTEX_CLIENT_ID=<from Clerk dashboard>
-CORTEX_CLIENT_SECRET=<from Clerk dashboard>
+CLERK_MACHINE_SECRET_KEY=ak_<cortex-worker's secret>
 CORTEX_API_BASE_URL=https://cortex.fonnit.com
-ANTHROPIC_API_KEY=<from console.anthropic.com — bills against your Max $100/mo credit pool>
+ANTHROPIC_API_KEY=sk-ant-<your Anthropic key>
 ```
 
-Optional override:
+Optional overrides:
 ```env
-CORTEX_ARCHIVE_ROOT=/Users/dfonnegrag/Documents/CortexArchive   # override resolved root
-CORTEX_CLASSIFY_MODEL=claude-haiku-4-6                          # default
+CORTEX_ARCHIVE_ROOT=/Users/dfonnegrag/Documents/CortexArchive
+CORTEX_CLASSIFY_MODEL=claude-haiku-4-6
 ```
 
-### 3. iCloud Documents toggle (already verified)
+### 3. Vercel env (backend, ONE new var)
 
-You confirmed "Desktop & Documents Folders" is ON in iCloud settings. The worker resolves the archive root to `~/Documents/CortexArchive/` (which macOS transparently syncs to iCloud). No code change needed.
+Add this to Vercel → Project → Settings → Environment Variables (Production):
 
-### 4. Vercel env
+```
+CLERK_MACHINE_SECRET_KEY = ak_<cortex-backend's secret>
+```
 
-Already configured: `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. No new env vars needed on Vercel for v1 — Clerk handles both user sessions and machine tokens through the same SDK.
+The existing `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `DATABASE_URL` stay as-is.
+
+### 4. iCloud Documents toggle (already verified)
+
+"Desktop & Documents Folders" is ON in iCloud settings. The worker resolves the archive root to `~/Documents/CortexArchive/` (which macOS syncs to iCloud transparently). No code change needed.
 
 ### 5. Seed (one-time, already run)
 
@@ -230,7 +248,7 @@ At 10-20 items/day, you'll use $1-5/month of credit. Well inside the pool.
 
 Set the env in `.env.daemon` or pass it inline:
 ```bash
-CORTEX_API_BASE_URL=https://cortex.fonnit.com CLERK_DOMAIN=... CORTEX_CLIENT_ID=... CORTEX_CLIENT_SECRET=... ANTHROPIC_API_KEY=... npm run worker
+CORTEX_API_BASE_URL=https://cortex.fonnit.com CLERK_MACHINE_SECRET_KEY=ak_... ANTHROPIC_API_KEY=... npm run worker
 ```
 
 ### Worker returns 401 on every claim
