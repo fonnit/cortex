@@ -51,15 +51,24 @@ async function tryMachineAuth(): Promise<Identity | null> {
     const tokenId = r.id ?? 'unknown'
     const subject = r.subject ?? 'unknown'
 
-    // v1: single-owner. Resolve to the oldest User row.
-    const owner = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } })
-    if (!owner) {
+    // Cortex is single-operator by design. Resolve the machine identity to
+    // the one User row. Refuse to guess if there's 0 or 2+.
+    const users = await prisma.user.findMany({ take: 2, select: { id: true, clerkId: true } })
+    if (users.length === 0) {
       throw new HttpError(
         500,
         'No User row in DB — sign in to the web app once before using the worker',
       )
     }
-    return { kind: 'machine', userId: owner.id, machineId: subject, tokenId }
+    if (users.length > 1) {
+      throw new HttpError(
+        500,
+        `Cortex v1 is single-owner but found ${users.length} User rows. ` +
+        `Either delete the extras or upgrade machine→user mapping. ` +
+        `clerkIds: ${users.map((u) => u.clerkId).join(', ')}`,
+      )
+    }
+    return { kind: 'machine', userId: users[0].id, machineId: subject, tokenId }
   } catch (e) {
     if (e instanceof HttpError) throw e
     return null  // verification failed; fall through to user-session check

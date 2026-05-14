@@ -49,9 +49,11 @@ function collectFolderPaths(anchors: Anchor[]): string[] {
   return Array.from(set).sort()
 }
 
-async function ensureOwnerUser(): Promise<string> {
-  // Use CORTEX_SEED_USER_CLERK_ID env if provided, else look up the only User row,
-  // else create a placeholder. Sign-in will reconcile clerkId on first login.
+async function getOwnerUserId(): Promise<string> {
+  // Cortex is single-operator. The User row is created lazily when the owner
+  // signs in via Clerk (lib/require-auth.ts upserts on first session). The
+  // seed refuses to create a placeholder — it just attaches Folders to the
+  // one existing User.
   const clerkId = process.env.CORTEX_SEED_USER_CLERK_ID
   if (clerkId) {
     const u = await prisma.user.upsert({
@@ -62,22 +64,27 @@ async function ensureOwnerUser(): Promise<string> {
     return u.id
   }
 
-  const existing = await prisma.user.findFirst()
-  if (existing) return existing.id
-
-  const placeholder = await prisma.user.create({
-    data: { clerkId: 'seed-placeholder-' + Date.now() },
-  })
-  console.log(`[seed] created placeholder User ${placeholder.id} (clerkId=${placeholder.clerkId})`)
-  console.log('[seed] set CORTEX_SEED_USER_CLERK_ID before next seed for the right owner')
-  return placeholder.id
+  const users = await prisma.user.findMany({ take: 2, select: { id: true, clerkId: true } })
+  if (users.length === 0) {
+    console.error('[seed] no User row in DB.')
+    console.error('[seed] sign in to the web app once (creates your User row), then re-run the seed.')
+    process.exit(1)
+  }
+  if (users.length > 1) {
+    console.error(`[seed] found ${users.length} User rows; Cortex v1 is single-owner.`)
+    console.error('[seed] resolve by setting CORTEX_SEED_USER_CLERK_ID=user_xxx to disambiguate.')
+    console.error(`[seed] clerkIds: ${users.map((u) => u.clerkId).join(', ')}`)
+    process.exit(1)
+  }
+  console.log(`[seed] attaching folders to existing User (clerkId=${users[0].clerkId})`)
+  return users[0].id
 }
 
 async function main() {
   const seed = loadSeed()
   console.log(`[seed] taxonomy ${seed.version}: ${seed.anchors.length} anchors`)
 
-  const userId = await ensureOwnerUser()
+  const userId = await getOwnerUserId()
   const paths = collectFolderPaths(seed.anchors)
   console.log(`[seed] ${paths.length} folder paths to ensure`)
 
