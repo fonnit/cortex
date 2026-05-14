@@ -12,7 +12,7 @@ import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import type { ExtractResult } from './text-extract.js'
 
-const MODEL = process.env.CORTEX_CLASSIFY_MODEL || 'claude-haiku-4-6'
+const MODEL = process.env.CORTEX_CLASSIFY_MODEL || 'claude-haiku-4-5'
 
 const FolderEntry = z.object({
   id: z.string(),

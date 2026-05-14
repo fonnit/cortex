@@ -62,7 +62,7 @@ ANTHROPIC_API_KEY=sk-ant-<your Anthropic key>
 Optional overrides:
 ```env
 CORTEX_ARCHIVE_ROOT=/Users/dfonnegrag/Documents/CortexArchive
-CORTEX_CLASSIFY_MODEL=claude-haiku-4-6
+CORTEX_CLASSIFY_MODEL=claude-haiku-4-5
 ```
 
 ### 3. Vercel env (backend, ONE new var)
