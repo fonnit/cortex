@@ -2,7 +2,7 @@
 //   - user (browser Clerk session)
 //   - machine (worker Clerk M2M token)
 // No User table, no userId resolution — Cortex is single-operator and the
-// middleware's CORTEX_OWNER_CLERK_ID gate filters out anyone else.
+// Clerk dashboard restricts sign-ups so any authenticated session is the owner.
 
 import { auth } from '@clerk/nextjs/server'
 import { createClerkClient } from '@clerk/backend'
@@ -67,14 +67,6 @@ export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
   if (!clerkId) throw new HttpError(401, 'Unauthorized')
   if (!allowed.includes('user')) {
     throw new HttpError(403, 'User session not accepted on this route')
-  }
-
-  // Owner gate. If CORTEX_OWNER_CLERK_ID is set, only that user may proceed.
-  // (The middleware also enforces this; defense-in-depth in case middleware
-  // is bypassed via custom routing.)
-  const owner = process.env.CORTEX_OWNER_CLERK_ID
-  if (owner && clerkId !== owner) {
-    throw new HttpError(403, 'You are not the Cortex owner')
   }
 
   return { kind: 'user', clerkId }
