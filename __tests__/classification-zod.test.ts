@@ -1,58 +1,67 @@
-// Unit: the ClassificationSchema accepts good shapes and rejects bad ones.
+// Unit: the ClassificationRawSchema accepts good shapes and rejects bad ones.
 
-import { ClassificationSchema } from '@/agent/src/classify'
+import { ClassificationRawSchema } from '@/agent/src/classify'
 
-describe('ClassificationSchema', () => {
-  it('accepts a single proposal at high confidence', () => {
-    const v = ClassificationSchema.parse({
-      proposals: [{ folderId: 'fld_a', confidence: 0.95 }],
-      proposedNewFolder: null,
+describe('ClassificationRawSchema', () => {
+  it('accepts a single existing proposal at high confidence', () => {
+    const v = ClassificationRawSchema.parse({
+      proposals: [{ kind: 'existing', path: '/Finance', confidence: 0.95 }],
     })
     expect(v.proposals).toHaveLength(1)
   })
 
-  it('accepts up to 5 ranked proposals', () => {
-    const v = ClassificationSchema.parse({
+  it('accepts a mix of existing and new proposals', () => {
+    const v = ClassificationRawSchema.parse({
       proposals: [
-        { folderId: 'a', confidence: 0.9 },
-        { folderId: 'b', confidence: 0.7 },
-        { folderId: 'c', confidence: 0.5 },
-        { folderId: 'd', confidence: 0.3 },
-        { folderId: 'e', confidence: 0.1 },
+        { kind: 'existing', path: '/Finance/Banking', confidence: 0.85 },
+        { kind: 'new', path: '/Finance/Insurance/Auto', confidence: 0.62 },
+        { kind: 'existing', path: '/Personal', confidence: 0.30 },
       ],
+    })
+    expect(v.proposals).toHaveLength(3)
+    expect(v.proposals[1].kind).toBe('new')
+  })
+
+  it('accepts up to 5 ranked proposals', () => {
+    const v = ClassificationRawSchema.parse({
+      proposals: Array.from({ length: 5 }, (_, i) => ({
+        kind: 'existing' as const,
+        path: '/p' + i,
+        confidence: 0.9 - i * 0.1,
+      })),
     })
     expect(v.proposals).toHaveLength(5)
   })
 
   it('rejects an empty proposals array', () => {
-    expect(() => ClassificationSchema.parse({ proposals: [] })).toThrow()
+    expect(() => ClassificationRawSchema.parse({ proposals: [] })).toThrow()
   })
 
   it('rejects > 5 proposals', () => {
     expect(() =>
-      ClassificationSchema.parse({
-        proposals: Array.from({ length: 6 }, (_, i) => ({ folderId: `f${i}`, confidence: 0.5 })),
+      ClassificationRawSchema.parse({
+        proposals: Array.from({ length: 6 }, (_, i) => ({
+          kind: 'existing' as const,
+          path: '/p' + i,
+          confidence: 0.5,
+        })),
       }),
     ).toThrow()
   })
 
   it('rejects confidence > 1', () => {
     expect(() =>
-      ClassificationSchema.parse({ proposals: [{ folderId: 'a', confidence: 1.5 }] }),
+      ClassificationRawSchema.parse({
+        proposals: [{ kind: 'existing', path: '/a', confidence: 1.5 }],
+      }),
     ).toThrow()
   })
 
-  it('accepts null proposedNewFolder and missing proposedNewFolder', () => {
+  it('rejects an unknown kind', () => {
     expect(() =>
-      ClassificationSchema.parse({
-        proposals: [{ folderId: 'a', confidence: 0.5 }],
-        proposedNewFolder: null,
+      ClassificationRawSchema.parse({
+        proposals: [{ kind: 'maybe', path: '/a', confidence: 0.5 }],
       }),
-    ).not.toThrow()
-    expect(() =>
-      ClassificationSchema.parse({
-        proposals: [{ folderId: 'a', confidence: 0.5 }],
-      }),
-    ).not.toThrow()
+    ).toThrow()
   })
 })

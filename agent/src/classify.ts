@@ -1,11 +1,11 @@
-// Anthropic SDK + Claude Haiku 4.5 classification.
+// Anthropic SDK + Claude Haiku classification.
 //
-// Multimodal: text mode embeds the document in the prompt body; image/pdf_native
-// modes pass the file as a multimodal content block.
+// Output shape: 1-5 ranked proposals, each EITHER an existing folder path or
+// a new folder path. The worker maps existing paths → folderIds against its
+// cached taxonomy after parse; the server re-validates.
 //
-// Output is JSON-validated with Zod. The model is instructed to pick from the
-// known folder tree IDs only; a strict-retry suffix is NOT added (per Architecture
-// finding 1C — single attempt per worker pickup, sweep handles retry).
+// Multimodal: text mode embeds the document in the prompt body; image and
+// pdf_native modes pass the file as a multimodal content block.
 
 import Anthropic from '@anthropic-ai/sdk'
 import { readFile } from 'node:fs/promises'
@@ -14,53 +14,83 @@ import type { ExtractResult } from './text-extract.js'
 
 const MODEL = process.env.CORTEX_CLASSIFY_MODEL || 'claude-haiku-4-5'
 
-const FolderEntry = z.object({
+export const FolderEntrySchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
   name: z.string(),
   path: z.string(),
   isSeed: z.boolean(),
 })
-export type FolderEntry = z.infer<typeof FolderEntry>
+export type FolderEntry = z.infer<typeof FolderEntrySchema>
 
-export const ClassificationSchema = z.object({
-  proposals: z
-    .array(z.object({ folderId: z.string(), confidence: z.number().min(0).max(1) }))
-    .min(1)
-    .max(5),
-  proposedNewFolder: z.string().nullable().optional(),
+// Model output (raw): paths only, no folderIds. Worker resolves paths after.
+const ProposalRawSchema = z.object({
+  kind: z.enum(['existing', 'new']),
+  path: z.string().min(1),
+  confidence: z.number().min(0).max(1),
 })
-export type Classification = z.infer<typeof ClassificationSchema>
 
-const TIMEOUT_MS = 300_000  // 5 min per plan finding 1C
+export const ClassificationRawSchema = z.object({
+  proposals: z.array(ProposalRawSchema).min(1).max(5),
+})
+export type ClassificationRaw = z.infer<typeof ClassificationRawSchema>
+
+// Final shape after the worker resolves paths against the cached folder tree:
+//   - existing: folderId resolved from path
+//   - new: path is kept as-is; folder will be created at approve time
+export type ResolvedProposal =
+  | { kind: 'existing'; folderId: string; path: string; confidence: number }
+  | { kind: 'new'; path: string; confidence: number }
+
+export type ResolvedClassification = {
+  proposals: ResolvedProposal[]
+}
+
+const TIMEOUT_MS = 300_000
 
 function buildSystemPrompt(folders: FolderEntry[]): string {
-  const tree = folders.map((f) => `  - ${f.id}\t${f.path}`).join('\n')
+  const tree = folders.map((f) => `  ${f.path}`).join('\n')
   return [
     `You are a personal archive classifier for a user named Daniel Fonnegra.`,
-    `Your job: given a document, pick the best-fit folder(s) for it.`,
+    `Your job: given a document, propose up to 5 ranked folders to file it under.`,
     ``,
     `Output STRICTLY a JSON object matching this schema:`,
     `{`,
-    `  "proposals": [{"folderId": <STRING from the FOLDER TREE>, "confidence": <0.0..1.0>}, ...],`,
-    `  "proposedNewFolder": <STRING | null>`,
+    `  "proposals": [`,
+    `    { "kind": "existing" | "new", "path": "<folder path>", "confidence": <0.0..1.0> },`,
+    `    ...`,
+    `  ]`,
     `}`,
     ``,
     `Rules:`,
-    `- proposals MUST be an array of length 1..5, strictly descending by confidence.`,
+    `- 1 to 5 proposals, strictly descending by confidence.`,
     `- If you are highly confident (>= 0.9) about the top pick, you MAY return only one entry.`,
-    `- Otherwise, return 2-5 ranked alternatives. The user will pick.`,
-    `- Every proposals[N].folderId MUST be one of the IDs from the FOLDER TREE below.`,
-    `- If you think a new folder would be a better fit, set proposedNewFolder to the suggested name`,
-    `  (single segment, snake-or-kebab-case, e.g. "auto-insurance"). Otherwise null.`,
-    `- Do NOT invent folder IDs. Do NOT add commentary. Output ONLY the JSON object.`,
+    `- Otherwise return 2-5 ranked alternatives across both kinds.`,
     ``,
-    `FOLDER TREE (id\tpath):`,
+    `- "existing": path MUST match one of the EXISTING FOLDERS below verbatim.`,
+    `- "new": path is a folder path you'd create. It can extend an existing parent`,
+    `  (e.g. "/Finance/Insurance/Auto" when only "/Finance/Insurance" exists) or be`,
+    `  entirely new (e.g. "/Vehicles/Registrations").`,
+    ``,
+    `Path rules for new folders:`,
+    `- ASCII letters, digits, spaces, hyphens, underscores only in each segment.`,
+    `- Each segment is at most 60 characters.`,
+    `- Use Title-Case, hyphenated lowercase, or snake_case — be consistent with siblings.`,
+    `- Don't propose a new folder identical to an existing one — use "existing" for that.`,
+    ``,
+    `- Do NOT add commentary. Output ONLY the JSON object.`,
+    ``,
+    `EXISTING FOLDERS:`,
     tree,
   ].join('\n')
 }
 
-function buildUserContentText(extracted: Extract<ExtractResult, { kind: 'text' }>, meta: FileMeta): Anthropic.MessageParam['content'] {
+type FileMeta = { basename: string; mimeType: string | null; sizeBytes: number }
+
+function buildUserContentText(
+  extracted: Extract<ExtractResult, { kind: 'text' }>,
+  meta: FileMeta,
+): Anthropic.MessageParam['content'] {
   return [
     {
       type: 'text',
@@ -128,17 +158,11 @@ function guessImageMediaType(p: string): 'image/png' | 'image/jpeg' | 'image/web
   return 'image/jpeg'
 }
 
-export type FileMeta = {
-  basename: string
-  mimeType: string | null
-  sizeBytes: number
-}
-
 export async function classify(
   extracted: ExtractResult,
   folders: FolderEntry[],
   meta: FileMeta,
-): Promise<Classification> {
+): Promise<ResolvedClassification> {
   if (extracted.kind === 'unsupported') {
     throw new Error(`classify() called on unsupported extraction: ${extracted.reason}`)
   }
@@ -165,14 +189,34 @@ export async function classify(
     | undefined
   if (!textBlock) throw new Error('Claude returned no text block')
 
-  // Strip code fences if any
   const raw = textBlock.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '')
   const json = JSON.parse(raw)
-  const parsed = ClassificationSchema.parse(json)
-
-  // Validate proposals are descending by confidence (the prompt asks for it but
-  // models sometimes drift; sort if needed rather than reject)
+  const parsed = ClassificationRawSchema.parse(json)
   parsed.proposals.sort((a, b) => b.confidence - a.confidence)
 
-  return parsed
+  // Resolve existing-kind paths → folderIds against the worker's cached tree.
+  // If the model claimed 'existing' for a path that doesn't exist, downgrade
+  // to 'new' (graceful — the server will accept and create on approve).
+  const pathToId = new Map(folders.map((f) => [f.path, f.id]))
+  const resolved: ResolvedProposal[] = parsed.proposals.map((p) => {
+    const cleanPath = normalizePath(p.path)
+    if (p.kind === 'existing') {
+      const id = pathToId.get(cleanPath)
+      if (id) return { kind: 'existing', folderId: id, path: cleanPath, confidence: p.confidence }
+      // Model claimed existing but path isn't in the tree → treat as new.
+      return { kind: 'new', path: cleanPath, confidence: p.confidence }
+    }
+    // Model said new — but if the path actually exists, prefer existing.
+    const id = pathToId.get(cleanPath)
+    if (id) return { kind: 'existing', folderId: id, path: cleanPath, confidence: p.confidence }
+    return { kind: 'new', path: cleanPath, confidence: p.confidence }
+  })
+
+  return { proposals: resolved }
+}
+
+function normalizePath(p: string): string {
+  // Trim, collapse internal whitespace, ensure single leading slash, no trailing slash.
+  const cleaned = p.trim().replace(/\s+/g, ' ').replace(/\/{2,}/g, '/').replace(/\/+$/, '')
+  return cleaned.startsWith('/') ? cleaned : '/' + cleaned
 }

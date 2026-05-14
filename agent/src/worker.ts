@@ -117,7 +117,6 @@ async function classifyItem(item: ClaimedItem): Promise<'worked' | 'error'> {
     method: 'POST',
     json: {
       proposalCandidates: result.proposals,
-      proposedNewFolder: result.proposedNewFolder ?? null,
       extractionKind: extracted.kind,
       extractionMs: extracted.ms,
       extractedCharCount: extracted.kind === 'text' ? extracted.extractedCharCount : null,

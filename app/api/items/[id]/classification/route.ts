@@ -1,36 +1,56 @@
 // POST /api/items/[id]/classification — worker posts classification result.
 //
-// Body: {
-//   proposalCandidates: Array<{folderId, confidence}> length 1-5 desc,
-//   proposedNewFolder?: string | null,
-//   extractionKind: 'text' | 'image' | 'pdf_native',
-//   extractionMs: number,
-//   extractedCharCount: number | null,
-// }
+// Body:
+//   {
+//     proposalCandidates: Array<
+//       | { kind: 'existing', folderId, path, confidence }
+//       | { kind: 'new', path, confidence }
+//     >,
+//     extractionKind, extractionMs, extractedCharCount
+//   }
 //
 // Status transition: pending_classification → pending_review.
-// If the item moved out of pending_classification while we were classifying
-// (e.g. user retried), return 409 — the worker discards this result.
-// If extraction returned unsupported, the worker calls /unsupported instead.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/require-auth'
-import { HttpError, isHttpError } from '@/lib/http-error'
+import { isHttpError } from '@/lib/http-error'
 
 export const runtime = 'nodejs'
 
+const FolderNameSegment = /^[\w\s-]+$/u
+
+const ExistingProposal = z.object({
+  kind: z.literal('existing'),
+  folderId: z.string(),
+  path: z.string().min(1),
+  confidence: z.number().min(0).max(1),
+})
+
+const NewProposal = z.object({
+  kind: z.literal('new'),
+  path: z.string().min(1).refine((p) => isValidNewPath(p), {
+    message: 'invalid path — each segment must match /^[\\w\\s-]+$/ and be ≤ 60 chars',
+  }),
+  confidence: z.number().min(0).max(1),
+})
+
+const Proposal = z.discriminatedUnion('kind', [ExistingProposal, NewProposal])
+
 const Body = z.object({
-  proposalCandidates: z
-    .array(z.object({ folderId: z.string(), confidence: z.number().min(0).max(1) }))
-    .min(1)
-    .max(5),
-  proposedNewFolder: z.string().nullable().optional(),
+  proposalCandidates: z.array(Proposal).min(1).max(5),
   extractionKind: z.enum(['text', 'image', 'pdf_native']),
   extractionMs: z.number().int().nonnegative(),
   extractedCharCount: z.number().int().nonnegative().nullable(),
 })
+
+function isValidNewPath(p: string): boolean {
+  if (!p.startsWith('/')) return false
+  const segs = p.slice(1).split('/')
+  if (segs.some((s) => s.length === 0)) return false
+  return segs.every((s) => FolderNameSegment.test(s) && s.length <= 60)
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -38,20 +58,50 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
-    // Validate proposal folderIds exist for this user
-    const folderIds = body.proposalCandidates.map((p) => p.folderId)
-    const folders = await prisma.folder.findMany({
-      where: { id: { in: folderIds }, userId: identity.userId },
-      select: { id: true },
-    })
-    const known = new Set(folders.map((f) => f.id))
-    const bad = folderIds.filter((id) => !known.has(id))
-    if (bad.length > 0) {
-      return NextResponse.json(
-        { error: 'unknown folderIds', folderIds: bad },
-        { status: 400 },
-      )
+    // Verify all existing-kind folderIds resolve for this user
+    const existingIds = body.proposalCandidates
+      .filter((p): p is z.infer<typeof ExistingProposal> => p.kind === 'existing')
+      .map((p) => p.folderId)
+
+    if (existingIds.length > 0) {
+      const folders = await prisma.folder.findMany({
+        where: { id: { in: existingIds }, userId: identity.userId },
+        select: { id: true },
+      })
+      const known = new Set(folders.map((f) => f.id))
+      const bad = existingIds.filter((id) => !known.has(id))
+      if (bad.length > 0) {
+        return NextResponse.json(
+          { error: 'unknown folderIds', folderIds: bad },
+          { status: 400 },
+        )
+      }
     }
+
+    // Reject new-kind proposals whose path actually exists (worker should have
+    // converted them to existing; defensive check).
+    const newPaths = body.proposalCandidates
+      .filter((p): p is z.infer<typeof NewProposal> => p.kind === 'new')
+      .map((p) => p.path)
+    if (newPaths.length > 0) {
+      const existingAtPath = await prisma.folder.findMany({
+        where: { path: { in: newPaths }, userId: identity.userId },
+        select: { path: true },
+      })
+      if (existingAtPath.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'new-kind proposals collide with existing folders',
+            paths: existingAtPath.map((f) => f.path),
+          },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Top pick: convenience column for queries. Null if top is new.
+    const top = body.proposalCandidates[0]
+    const topProposedFolderId = top.kind === 'existing' ? top.folderId : null
 
     const updated = await prisma.item.updateMany({
       where: {
@@ -62,9 +112,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       data: {
         status: 'pending_review',
         proposalCandidates: body.proposalCandidates,
-        proposedFolderId: body.proposalCandidates[0].folderId,
-        proposedNewFolder: body.proposedNewFolder ?? null,
-        confidence: body.proposalCandidates[0].confidence,
+        proposedFolderId: topProposedFolderId,
+        confidence: top.confidence,
         classifiedAt: new Date(),
         extractionKind: body.extractionKind,
         extractionMs: body.extractionMs,
@@ -74,7 +123,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     })
 
     if (updated.count === 0) {
-      // Either the item doesn't exist for this user or it was already moved
       const exists = await prisma.item.findFirst({
         where: { id, userId: identity.userId },
         select: { status: true },

@@ -8,7 +8,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { basename as pathBasename } from './path'
 import { SourceBadge } from './SourceBadge'
 
-type Proposal = { folderId: string; confidence: number }
+type Proposal =
+  | { kind: 'existing'; folderId: string; path: string; confidence: number }
+  | { kind: 'new'; path: string; confidence: number }
 type FolderRow = { id: string; name: string; path: string; parentId: string | null; isSeed: boolean }
 
 type PendingItem = {
@@ -19,7 +21,6 @@ type PendingItem = {
   capturedAt: string
   proposalCandidates: Proposal[] | null
   proposedFolderId: string | null
-  proposedNewFolder: string | null
   confidence: number | null
   extractionKind: 'text' | 'image' | 'pdf_native' | 'unsupported' | null
 }
@@ -79,11 +80,11 @@ export function TriageView() {
   }
 
   const approve = useMutation({
-    mutationFn: ({ itemId, folderId, rank }: { itemId: string; folderId: string; rank: number }) =>
+    mutationFn: ({ itemId, rank }: { itemId: string; rank: number }) =>
       fetch(`/api/items/${itemId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId, chosenProposalRank: rank }),
+        body: JSON.stringify({ chosenProposalRank: rank }),
       }).then(async (r) => {
         if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
       }),
@@ -157,8 +158,7 @@ export function TriageView() {
       if (!first || !first.proposalCandidates) return
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < first.proposalCandidates.length) {
-        const p = first.proposalCandidates[idx]
-        approve.mutate({ itemId: first.id, folderId: p.folderId, rank: idx + 1 })
+        approve.mutate({ itemId: first.id, rank: idx + 1 })
       } else if (e.key.toLowerCase() === 'r') {
         reject.mutate(first.id)
       } else if (e.key.toLowerCase() === 'n') {
@@ -206,7 +206,6 @@ export function TriageView() {
             const isActive = i === 0
             const candidates = (it.proposalCandidates ?? []).slice(0, 5)
             const top = candidates[0]
-            const topFolder = top ? folderById[top.folderId] : null
             return (
               <li key={it.id} className={'cx-card ' + (isActive ? 'is-active' : 'is-collapsed')}>
                 <div className="cx-card-rail">
@@ -236,7 +235,7 @@ export function TriageView() {
                     </div>
                   </div>
 
-                  {isActive && top && topFolder && (
+                  {isActive && top && (
                     <div className="cx-axes">
                       <div className="cx-axis">
                         <div className="cx-axis-head">
@@ -248,9 +247,12 @@ export function TriageView() {
                         <div className="cx-axis-body">
                           <button
                             className="cx-action cx-action-primary"
-                            onClick={() => approve.mutate({ itemId: it.id, folderId: top.folderId, rank: 1 })}
+                            onClick={() => approve.mutate({ itemId: it.id, rank: 1 })}
                           >
-                            <Kbd>1</Kbd> Approve into <span className="cx-mono">{topFolder.path}</span>
+                            <Kbd>1</Kbd>{' '}
+                            {top.kind === 'existing'
+                              ? <>Approve into <span className="cx-mono">{top.path}</span></>
+                              : <>Create + file in <span className="cx-mono">{top.path}</span></>}
                           </button>
                         </div>
                       </div>
@@ -262,16 +264,17 @@ export function TriageView() {
                           </div>
                           <div className="cx-axis-body">
                             {candidates.slice(1).map((c, idx) => {
-                              const f = folderById[c.folderId]
-                              if (!f) return null
                               const rank = idx + 2
+                              const key = c.kind === 'existing' ? c.folderId : `new-${c.path}`
                               return (
                                 <button
-                                  key={c.folderId}
+                                  key={key}
                                   className="cx-action cx-action-sm cx-action-ghost"
-                                  onClick={() => approve.mutate({ itemId: it.id, folderId: c.folderId, rank })}
+                                  onClick={() => approve.mutate({ itemId: it.id, rank })}
                                 >
-                                  <Kbd>{rank}</Kbd> {f.path} · <span className="cx-mono cx-muted">{(c.confidence * 100).toFixed(0)}%</span>
+                                  <Kbd>{rank}</Kbd>{' '}
+                                  {c.kind === 'new' && <span className="cx-mono cx-muted">[new] </span>}
+                                  {c.path} · <span className="cx-mono cx-muted">{(c.confidence * 100).toFixed(0)}%</span>
                                 </button>
                               )
                             })}
