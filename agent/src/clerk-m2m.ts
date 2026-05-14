@@ -1,48 +1,20 @@
-// Clerk Machine Token client. Caches the access_token in memory until 60s
-// before expiry. Auto-refreshes on demand. The worker imports getAccessToken()
-// and uses it as the Bearer for every API call.
+// Clerk Machine Token client.
+//
+// Clerk's newer Machine Tokens (2024+) give you a single secret in the dashboard
+// — you send it directly as `Authorization: Bearer <secret>`. No /oauth/token
+// exchange. The Next.js server verifies via @clerk/nextjs's auth() helper.
+//
+// The worker imports apiFetch() and uses it for every API call.
 
-type CachedToken = { value: string; expiresAt: number }
-let cached: CachedToken | null = null
-
-export async function getAccessToken(): Promise<string> {
-  if (cached && Date.now() < cached.expiresAt - 60_000) {
-    return cached.value
+function getMachineSecret(): string {
+  const secret = process.env.CORTEX_MACHINE_SECRET
+  if (!secret) {
+    throw new Error('Missing CORTEX_MACHINE_SECRET — set it in agent/.env.daemon')
   }
-
-  const domain = process.env.CLERK_DOMAIN
-  const clientId = process.env.CORTEX_CLIENT_ID
-  const clientSecret = process.env.CORTEX_CLIENT_SECRET
-  if (!domain || !clientId || !clientSecret) {
-    throw new Error(
-      'Missing one of: CLERK_DOMAIN, CORTEX_CLIENT_ID, CORTEX_CLIENT_SECRET',
-    )
-  }
-
-  const res = await fetch(`${domain.replace(/\/$/, '')}/oauth/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: clientId,
-      client_secret: clientSecret,
-    }),
-  })
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Clerk token exchange failed: ${res.status} ${body.slice(0, 200)}`)
-  }
-
-  const data = (await res.json()) as { access_token: string; expires_in: number }
-  cached = {
-    value: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  }
-  return cached.value
+  return secret
 }
 
-// Convenience: POST/GET against the Cortex API with Bearer attached + JSON body.
+// Convenience: GET/POST against the Cortex API with Bearer attached + JSON body.
 export async function apiFetch(
   pathOrUrl: string,
   init: RequestInit & { json?: unknown } = {},
@@ -51,9 +23,8 @@ export async function apiFetch(
   if (!base) throw new Error('CORTEX_API_BASE_URL not set')
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${base}${pathOrUrl}`
 
-  const token = await getAccessToken()
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${getMachineSecret()}`,
     ...(init.headers as Record<string, string> | undefined),
   }
   let body = init.body

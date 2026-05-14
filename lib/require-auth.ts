@@ -1,11 +1,12 @@
 // Auth boundary helper. Returns identity kind + canonical User.id for the
-// caller. Browser sessions return kind='user'; Clerk Machine Tokens (worker)
-// return kind='machine'. Each route declares which kinds it accepts.
+// caller. Browser sessions return kind='user'; Clerk API Keys (Bearer `ak_...`
+// sent by the Mac worker) return kind='machine'.
 //
-// Maps Clerk's session claims onto Cortex's User row by clerkId. For machine
-// tokens, the User row is the User this Machine was registered against in the
-// Clerk dashboard (machine tokens carry an associated user via the userId
-// claim, or fall back to a single-owner User if not present).
+// Each route declares which kinds it accepts via requireAuth(['user'|'machine']).
+//
+// For v1: machine-token routes resolve to the single owner User row (the User
+// with the lowest createdAt). Multi-owner setups would map the API key's
+// `subject` claim to a specific User.
 
 import { auth } from '@clerk/nextjs/server'
 import { prisma } from './prisma'
@@ -17,29 +18,39 @@ export type Identity =
 
 export type AllowedKind = 'user' | 'machine'
 
-// Resolves Clerk auth() → Cortex User.id. Throws 401 if unauthenticated,
-// 403 if the caller's identity kind isn't in `allowed`.
 export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
   const a = await auth()
 
-  // Clerk Machine Tokens: a.machineId / a.tokenType === 'machine_token' (Clerk 7+)
-  // Different Clerk versions expose this differently; check both shapes.
-  const ax = a as unknown as { machineId?: string; tokenType?: string; sessionClaims?: { sub?: string; userId?: string } }
-  const machineId = ax.machineId
-    ?? (ax.tokenType === 'machine_token' ? ax.sessionClaims?.sub : undefined)
+  // Clerk machine-token shape:
+  //   { tokenType: 'api_key' | 'm2m_token' | 'oauth_token',
+  //     id: string,          // the token id, e.g. ak_xxx
+  //     subject: string,     // the user/machine this token is bound to
+  //     scopes: string[],
+  //     isAuthenticated: true }
+  const ax = a as unknown as {
+    tokenType?: string
+    id?: string
+    subject?: string
+    isAuthenticated?: boolean
+  }
 
-  if (machineId) {
+  const isMachine = ax.tokenType === 'api_key'
+    || ax.tokenType === 'm2m_token'
+    || ax.tokenType === 'oauth_token'
+
+  if (isMachine) {
     if (!allowed.includes('machine')) {
       throw new HttpError(403, 'Machine token not accepted on this route')
     }
-    // Machine tokens are bound to a User in Clerk dashboard; we accept the
-    // single owner User by convention for v1. Multi-machine setups would
-    // store machineId → User.id mapping here.
+    // v1: single owner. Resolve to the oldest User row.
     const owner = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } })
     if (!owner) {
-      throw new HttpError(500, 'No User row in DB — sign in once before using the worker')
+      throw new HttpError(
+        500,
+        'No User row in DB — sign in to the web app once before using the worker',
+      )
     }
-    return { kind: 'machine', userId: owner.id, machineId }
+    return { kind: 'machine', userId: owner.id, machineId: ax.id ?? 'unknown' }
   }
 
   const clerkId = a.userId
@@ -48,7 +59,7 @@ export async function requireAuth(allowed: AllowedKind[]): Promise<Identity> {
     throw new HttpError(403, 'User session not accepted on this route')
   }
 
-  // Upsert User row on first auth (lazy creation).
+  // Upsert User row on first sign-in (lazy creation).
   const user = await prisma.user.upsert({
     where: { clerkId },
     create: { clerkId },
