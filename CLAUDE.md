@@ -1,135 +1,114 @@
-<!-- GSD:project-start source:PROJECT.md -->
-## Project
+# Cortex
 
-**Cortex**
+A personal AI-native information system that captures everything Daniel receives across Downloads and (later) Gmail, learns his filing system from how he reacts to items, and answers anything in plain English from any device. Single-operator tool, not a product — internal-first with tenancy-ready schema.
 
-A personal AI-native information system that captures everything Daniel receives across Downloads and Gmail, learns his filing system from how he reacts to items, and answers anything in plain English from any device. Single-operator tool, not a product — internal-first with tenancy-ready schema.
+**Core value:** the triage feedback loop compounds fast enough that weekly triage load trends down, not flat or up — Cortex learns to file so Daniel doesn't have to.
 
-**Core Value:** The triage feedback loop compounds fast enough that weekly triage load trends down, not flat or up — Cortex learns to file so Daniel doesn't have to.
+## v1 scope (current)
 
-### Constraints
+Manual `cortex add <file>` → server-side classify (Claude Haiku 4.5 via Anthropic SDK) → human approves in triage UI → file moved into `~/Documents/CortexArchive/<folder>/` (iCloud-synced).
 
-- **Storage**: Neon Postgres only — no SQLite, no in-memory stores
-- **Migrations**: Prisma through Vercel build, never locally
-- **Auth**: Clerk with MFA; Google OAuth for Drive/Gmail scopes handled by Mac agent
-- **Embeddings**: OpenAI text-embedding-3-small, 512 dims, halfvec in pgvector
-- **Retrieval**: Claude Haiku for Q&A synthesis
-- **Classification**: Claude via Mac agent CLI
-- **Blob store**: Google Drive (two-phase lifecycle)
-- **Observability**: Langfuse traces on every classify/chunk/embed/ask call
-- **Compliance**: Don't escalate spec constraints into MVP-blocking gates
-<!-- GSD:project-end -->
+**Out of v1:** Gmail ingest, Drive blob store, embeddings, Q&A, OCR, chokidar watcher, MCP server, model-driven folder-proposal UI, ItemFact / structured extraction, Langfuse / observability.
 
-<!-- GSD:stack-start source:research/STACK.md -->
-## Technology Stack
+The running spec lives in the plan file at `~/.claude/plans/compressed-wobbling-treehouse.md` and the design doc at `~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md`. Read those before changing core architecture.
 
-## Recommended Stack
-### Web App (Vercel / Next.js)
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| next | 16.2.4 | Web framework | Current stable. Turbopack stable, React Compiler stable. App Router is the right target — RSC + Server Actions remove most client-state complexity for a triage UI. |
-| react | 19.2.5 | UI runtime | Ships with Next 16. React Compiler eliminates manual memo/callback overhead. |
-| typescript | 6.0.3 | Type safety | Required. Prisma generates typed client; Zod schema narrowing depends on it. |
-| tailwindcss | 4.2.4 | Styling | v4 drops the config file; uses CSS-first theming. Correct for the warm ivory/ink design system. |
-| @tanstack/react-query | 5.100.1 | Server-state cache | Triage queue needs optimistic updates and background refetch. React Query v5 has first-class RSC support. |
-| zod | 4.3.6 | Runtime validation | Schema validation for API routes, rule predicates, taxonomy ops. Pairs with React Hook Form. |
-### Auth
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| @clerk/nextjs | 7.2.5 | Auth + MFA | Constraint from PROJECT.md. Clerk 7 is fully App Router native. Google OAuth scopes for Drive/Gmail are NOT handled by Clerk — Clerk handles user identity only. Mac agent handles Google OAuth separately via service-account or user-delegated credentials stored in the agent keychain. |
-### Database
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| prisma | 7.8.0 | ORM + migrations | Constraint from PROJECT.md: "migrations through Vercel build, never locally." Prisma 7 is the current stable with edge-runtime support via the Neon adapter — the binary issue that made Drizzle preferable in serverless is resolved. |
-| @prisma/adapter-neon | 7.8.0 | Neon HTTP driver | Enables Prisma over Neon's serverless HTTP transport instead of TCP. Required for Vercel Functions. |
-| @neondatabase/serverless | 1.1.0 | Neon driver | Underlying transport for the Prisma adapter. Also used directly for raw SQL on vector queries where Prisma's pgvector support is insufficient. |
-### Observability
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| langfuse | 3.38.20 | LLM tracing | Constraint from PROJECT.md. The `langfuse` npm package is the JS/TS SDK. v3 is current stable cloud-compatible version (v4/v5 target self-hosted Langfuse platform ≥ 3.95.0 — cloud users stay on v3 unless Langfuse cloud has upgraded). Wrap every classify/chunk/embed/ask call with a Langfuse span. |
-### Mac Agent (launchd daemon)
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Node.js | 22 LTS | Runtime | chokidar v5 requires Node ≥ 20. Node 22 is current LTS. The daemon runs as a persistent process under launchd with `KeepAlive = true`. |
-| chokidar | 5.0.0 | File watching | v5 is ESM-only, uses native FSEvents on macOS via the darwin kernel API. Zero polling. Correct for Downloads directory watching. v4 is the CJS fallback if ESM is problematic in the launchd context. |
-| googleapis | 171.4.0 | Gmail + Drive API | Official Google client. Uses `users.history.list` with stored `historyId` for incremental Gmail sync. Drive v3 for uploads. OAuth2 credentials stored in macOS Keychain via `keytar` or as a local JSON file under `~/.config/cortex/`. |
-| @anthropic-ai/sdk | 0.91.0 | Claude classification | Direct API calls from the agent process. Two-stage pipeline: relevance gate (Claude Haiku, low cost) → label classifier (Claude Haiku or Sonnet depending on confidence threshold). |
-| openai | 6.34.0 | Embeddings | text-embedding-3-small with `dimensions: 512`. Called after classification confirms an item is relevant. |
-### API Layer
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Next.js Route Handlers | — | REST endpoints | App Router Route Handlers are the right surface for triage actions, taxonomy ops, and the MCP search tool endpoint. No separate Express/Fastify server. |
-| Vercel AI SDK | — | Streaming Q&A | If streaming is needed for the Claude Haiku retrieval synthesis surface. Optional — evaluate at implementation. |
-## Alternatives Considered
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| ORM | Prisma 7 | Drizzle 0.45 | PROJECT.md constrains migrations to Prisma through Vercel build. Drizzle is otherwise competitive but would contradict the stated constraint. |
-| File watcher | chokidar 5 | raw fsevents npm | chokidar adds debounce, glob filtering, and error recovery that the raw fsevents binding does not provide. |
-| Vector index | hnsw | ivfflat | ivfflat requires `VACUUM` after bulk inserts and needs row count at index creation. HNSW builds incrementally and is the correct choice for a growing personal archive. |
-| Embedding dims | halfvec(512) | vector(1536) | 50% storage + 50% index size. OpenAI explicitly supports 512-dim output from text-embedding-3-small. No recall regression at this scale. |
-| Auth Google scopes | Mac agent OAuth | Clerk Google OAuth | Clerk's Google OAuth only grants identity scopes (email, profile). Drive and Gmail API scopes require a separate OAuth2 flow that stores tokens outside Clerk. |
-| Observability | Langfuse | LangSmith / Helicone | PROJECT.md constraint. Langfuse is also open-source and self-hostable if needed. |
-## Installation
-# Web app
-# Mac agent
-## Critical Constraints (from PROJECT.md)
-## Open Questions
-- **Langfuse cloud platform version:** Verify whether Langfuse cloud has reached platform ≥ 3.95.0 before upgrading SDK to v4. If not, stay on `langfuse@3.x`.
-- **Mac agent ESM:** chokidar v5 is ESM-only. Confirm the agent package is set to `"type": "module"` or use chokidar v4 (`^4.0.1`) if CJS is required by any dependency.
-- **Google OAuth token storage on Mac:** `keytar` (native Keychain) vs encrypted JSON file. Decision has security implications — needs explicit choice before Mac agent implementation phase.
-- **Vercel AI SDK:** Evaluate at Q&A implementation phase. Only add if streaming UX is needed for the Claude Haiku retrieval synthesis response.
-## Sources
-- Next.js 16 release: https://nextjs.org/blog/next-16
-- Next.js 16.1: https://nextjs.org/blog/next-16-1
-- Neon halfvec guide: https://neon.com/blog/dont-use-vector-use-halvec-instead-and-save-50-of-your-storage-cost
-- Neon pgvector docs: https://neon.com/docs/extensions/pgvector
-- Prisma 6 release: https://www.prisma.io/blog/prisma-6-better-performance-more-flexibility-and-type-safe-sql
-- Prisma + Neon docs: https://neon.com/docs/guides/prisma
-- Langfuse JS SDK: https://github.com/langfuse/langfuse-js
-- Langfuse v3→v4 upgrade: https://langfuse.com/docs/observability/sdk/upgrade-path/js-v3-to-v4
-- chokidar v5: https://github.com/paulmillr/chokidar
-- Gmail incremental sync: https://developers.google.com/workspace/gmail/api/guides/sync
-- OpenAI embeddings dimensions: https://developers.openai.com/api/docs/guides/embeddings
-- Clerk Next.js: https://clerk.com/docs/nextjs/reference/components/authentication/sign-in
-- All versions: npm registry (verified 2026-04-24)
-<!-- GSD:stack-end -->
+## Constraints
 
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
-## Conventions
+- **Storage:** Neon Postgres only — no SQLite, no in-memory stores.
+- **Migrations:** Prisma 7 through Vercel build, never locally. v1 wipes existing data (no backfill).
+- **Auth:** Clerk with MFA for browser routes; Clerk Machine Tokens (M2M, client-credentials grant) for the worker.
+- **Worker boundary:** the Mac worker uses the HTTP API only. It does NOT have `DATABASE_URL`. All DB access goes through backend routes.
+- **Move target:** `~/Documents/CortexArchive/<folder.path>/<basename>`. iCloud-synced via the macOS "Desktop & Documents Folders" toggle; backup is automatic.
+- **Classification:** Claude Haiku 4.5 via `@anthropic-ai/sdk` directly. Multimodal content blocks for image and native-PDF input. After 2026-06-15 Claude CLI subscription billing ends; Max subscribers get $100/mo API credits which covers Cortex spend (~$5-50/year) many times over.
+- **Embeddings (v2):** OpenAI text-embedding-3-small, 512 dims, halfvec in pgvector. v2 migration creates the `ItemChunk` table AND enables the pgvector extension in the same migration.
+- **Observability:** `lib/trace.ts` is a noop wrapper in v1. LangSmith plug if observability surfaces a need (TODO in `TODOS.md`).
 
-Conventions not yet established. Will populate as patterns emerge during development.
-<!-- GSD:conventions-end -->
+## Stack
 
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-## Architecture
+| Layer | Package | Version | Notes |
+|---|---|---|---|
+| Web framework | next | 16.2.4 | App Router. RSC + Server Actions for the triage UI. |
+| UI runtime | react | 19.2.5 | React Compiler stable; no manual memo/callback noise. |
+| Types | typescript | 6.0.3 | Prisma client + Zod schema narrowing. |
+| Styling | tailwindcss | 4.2.4 | CSS-first theming. |
+| Server-state | @tanstack/react-query | 5.100.1 | Optimistic updates in triage. |
+| Validation | zod | 4.3.6 | API bodies, classifier output, folder names. |
+| Auth | @clerk/nextjs | 7.2.5 | User session + Machine Tokens (worker). |
+| ORM | prisma | 7.8.0 | Edge-runtime via Neon adapter. |
+| DB driver | @prisma/adapter-neon | 7.8.0 | HTTP transport for Vercel Functions. |
+| DB driver (raw) | @neondatabase/serverless | 1.1.0 | Used directly for `prisma.$queryRaw` on hot paths and for the SELECT FOR UPDATE SKIP LOCKED claim. |
+| LLM | @anthropic-ai/sdk | 0.91.0 | Direct SDK calls in `agent/classify.ts`. No subprocess. |
+| File watcher | chokidar | — | v2 only (v1 uses manual `cortex add`). |
+| Worker runtime | Node.js | 22 LTS | Mac launchd, KeepAlive=true. |
+| Text extract | pdf-parse, mammoth | latest | PDF (text layer) + DOCX. `.heic` via macOS `sips`. |
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
-<!-- GSD:architecture-end -->
+## Engineering patterns to honor
 
-<!-- GSD:skills-start source:skills/ -->
-## Project Skills
+These were earned the hard way in recent commits. Don't regress them.
 
-No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, or `.github/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
+- **Prisma over Neon HTTP transport, not WebSocket.** Use `prisma.$queryRaw` for hot paths (vector queries, claim route, sweep). Multi-statement `$transaction` blocks over HTTP are problematic; keep transactions single-statement where possible. See commits `9ea82bf`, `67f2206`, `de7822e` for the pattern.
+- **No Langfuse fire-and-forget pitfalls** — Langfuse is dropped from v1. `lib/trace.ts` is a noop wrapper for future provider swap. Don't reintroduce Langfuse without explicit decision.
+- **Worker token via Clerk Machine Token, not bespoke bearer.** Worker calls `POST /oauth/token` with `client_credentials`, caches the access_token until expiry, sends `Authorization: Bearer <token>` on every API call. Server uses `auth()` from `@clerk/nextjs/server`.
+- **All worker DB access goes through API routes.** No DATABASE_URL on the worker. Worker reads taxonomy via `GET /api/taxonomy` (ETag-cached), claims items via `POST /api/items/claim` (server-side SELECT FOR UPDATE SKIP LOCKED + UPDATE returning), posts classification via `POST /api/items/[id]/classification`, posts file-move completion via `POST /api/items/[id]/moved`.
+- **Status transitions through `lib/transition-item.ts`.** The four human mutation routes (approve, move, reject, create-folder) share one helper that runs `$transaction → check allowed-from-state → write Decision row → update Item`. Don't duplicate this logic in route handlers.
 
-<!-- GSD:workflow-start source:GSD defaults -->
-## GSD Workflow Enforcement
+## File layout
 
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+```
+/agent                                       # Mac worker process
+  worker.ts                                  # two stateless poll loops (classify + move)
+  cortex-add.ts                              # CLI
+  classify.ts                                # Anthropic SDK + Haiku, Zod-validated
+  clerk-m2m.ts                               # client-credentials token caching
+  text-extract.ts                            # dispatcher by extension
+/app
+  /triage/page.tsx                           # triage UI (rewired)
+  /api/items/route.ts                        # POST: enqueue from CLI
+  /api/items/claim/route.ts                  # POST: worker claim (SELECT FOR UPDATE SKIP LOCKED)
+  /api/items/[id]/classification/route.ts    # POST: worker posts classification
+  /api/items/[id]/moved/route.ts             # POST: worker reports file moved
+  /api/items/[id]/approve/route.ts           # POST: triage approve (Clerk)
+  /api/items/[id]/move/route.ts              # POST: triage move (Clerk)
+  /api/items/[id]/reject/route.ts            # POST: triage reject (Clerk)
+  /api/items/[id]/create-folder/route.ts     # POST: triage create+file (Clerk)
+  /api/taxonomy/route.ts                     # GET: folder tree (ETag-cached)
+/lib
+  prisma.ts                                  # existing, do not regress
+  trace.ts                                   # v1 noop; swap LangSmith later
+  taxonomy.ts                                # seed loader + Folder.path maintenance
+  transition-item.ts                         # shared mutation helper
+  require-auth.ts                            # Clerk user vs machine identity helper
+/prisma
+  schema.prisma
+  seed.ts                                    # taxonomy v4 → Folder rows
+/__tests__                                   # Jest + docker-compose.local.yml for integration
+```
 
-Use these entry points:
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
+## Skill routing
 
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
+When the user's request matches a skill, invoke it via the Skill tool. When in doubt, invoke the skill.
 
+- Product ideas / brainstorming → `/office-hours`
+- Strategy / scope / rethink the wedge → `/plan-ceo-review`
+- Architecture / data flow / engineering review → `/plan-eng-review`
+- Design system / plan-mode design review → `/design-consultation` or `/plan-design-review`
+- Full review pipeline → `/autoplan`
+- Bugs / errors / "why is this broken" → `/investigate`
+- QA / test the site / verify a deploy → `/qa` or `/qa-only`
+- Code review / diff check → `/review`
+- Visual polish on a live site → `/design-review`
+- Ship / deploy / PR → `/ship` or `/land-and-deploy`
+- Save / resume working context → `/context-save` / `/context-restore`
 
+## Performance Patterns (must not regress)
 
-<!-- GSD:profile-start -->
-## Developer Profile
+Recent prod incidents (commits `de7822e`, `10657c5`, `9ea82bf`, `69be824`) established two non-obvious patterns:
 
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
+1. **`prisma.$queryRaw` over the Neon HTTP transport for hot paths.** Don't reach for `prisma.findMany` + Prisma ORM on routes that handle vector queries, the worker claim, or the sweep. The HTTP transport rewards single-statement SQL.
+2. **Async cleanup is fire-and-forget.** Awaiting cleanup work in route handlers (e.g. trace flushes, log sinks) added a 9.5s tax in production. Trace and log cleanup must be called WITHOUT `await` at the end of the handler.
+
+## Operational notes
+
+- **Local Postgres for tests:** `docker-compose.local.yml` provides a real Postgres for integration tests. Use it for `__tests__/api/*` and `__tests__/lib/*`.
+- **Project memory ("CORTEX_OWNER_USER_ID gotcha"):** the v0 bug where the agent wrote `Item.user_id` from env and the triage UI filtered by Clerk userId. In v1 this is structurally impossible — the agent doesn't have direct DB access; `userId` on `Item` is set server-side from the Clerk Machine Token identity. Memory note can retire after v1 ships.
+- **Anthropic API key after 2026-06-15:** the old project memory about "never pass ANTHROPIC_API_KEY to claude -p" becomes obsolete after that date when the Claude CLI subscription billing ends. The new v1 worker uses the SDK directly and SETS `ANTHROPIC_API_KEY` intentionally.

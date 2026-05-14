@@ -18,6 +18,13 @@ out/
 
 # TypeScript compiled output
 agent/dist/
+tsconfig.tsbuildinfo
+
+# gstack tooling
+skills-lock.json
+
+# Playwright MCP cache
+.playwright-mcp/
 
 # macOS
 .DS_Store
