@@ -1,5 +1,4 @@
-// POST /api/items/[id]/source-missing — worker reports source file missing at
-// classify time. Transitions pending_classification → source_missing.
+// POST /api/items/[id]/source-missing — worker reports source gone at classify time.
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -10,10 +9,10 @@ export const runtime = 'nodejs'
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['machine'])
+    await requireAuth(['machine'])
     const { id } = await ctx.params
     const updated = await prisma.item.updateMany({
-      where: { id, userId: identity.userId, status: 'pending_classification' },
+      where: { id, status: 'pending_classification' },
       data: { status: 'source_missing', leasedAt: null },
     })
     if (updated.count === 0) return NextResponse.json({ error: 'not found or wrong status' }, { status: 409 })

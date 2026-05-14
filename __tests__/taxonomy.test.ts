@@ -1,10 +1,9 @@
 // Unit: computeFolderPath produces correct materialized paths.
-// Uses jest.mock to stub the prisma client.
 
 jest.mock('@/lib/prisma', () => ({
   prisma: {
     folder: {
-      findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
   },
 }))
@@ -12,38 +11,34 @@ jest.mock('@/lib/prisma', () => ({
 import { prisma } from '@/lib/prisma'
 import { computeFolderPath } from '@/lib/taxonomy'
 
-const findFirst = prisma.folder.findFirst as jest.Mock
+const findUnique = prisma.folder.findUnique as jest.Mock
 
 describe('computeFolderPath', () => {
   beforeEach(() => {
-    findFirst.mockReset()
+    findUnique.mockReset()
   })
 
   it('returns / + name for a top-level folder', async () => {
-    const result = await computeFolderPath('u1', null, 'Finance')
+    const result = await computeFolderPath(null, 'Finance')
     expect(result).toBe('/Finance')
-    expect(findFirst).not.toHaveBeenCalled()
+    expect(findUnique).not.toHaveBeenCalled()
   })
 
   it('appends to parent path', async () => {
-    findFirst.mockResolvedValueOnce({ path: '/Finance' })
-    const result = await computeFolderPath('u1', 'parent-id', 'Taxes')
+    findUnique.mockResolvedValueOnce({ path: '/Finance' })
+    const result = await computeFolderPath('parent-id', 'Taxes')
     expect(result).toBe('/Finance/Taxes')
-    expect(findFirst).toHaveBeenCalledWith({
-      where: { id: 'parent-id', userId: 'u1' },
-      select: { path: true },
-    })
   })
 
   it('handles deeply nested paths', async () => {
-    findFirst.mockResolvedValueOnce({ path: '/Finance/Taxes' })
-    const result = await computeFolderPath('u1', 'parent-id', '2025')
+    findUnique.mockResolvedValueOnce({ path: '/Finance/Taxes' })
+    const result = await computeFolderPath('parent-id', '2025')
     expect(result).toBe('/Finance/Taxes/2025')
   })
 
-  it('throws 404 when parent missing for that user', async () => {
-    findFirst.mockResolvedValueOnce(null)
-    await expect(computeFolderPath('u1', 'unknown-parent', 'foo')).rejects.toMatchObject({
+  it('throws 404 when parent missing', async () => {
+    findUnique.mockResolvedValueOnce(null)
+    await expect(computeFolderPath('unknown-parent', 'foo')).rejects.toMatchObject({
       status: 404,
     })
   })

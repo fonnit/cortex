@@ -1,12 +1,11 @@
-// POST /api/items — worker-token endpoint (cortex add enqueues a file).
-// Body: { sourcePath: string, sha256: string, mimeType?: string, sizeBytes: number }
-// Response: 200 { item: { id, status } } | 409 if SHA256 dup for this user.
+// POST /api/items — worker enqueues a file (cortex add).
+// Body: { sourcePath, sha256, mimeType?, sizeBytes }
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/require-auth'
-import { HttpError, isHttpError } from '@/lib/http-error'
+import { isHttpError } from '@/lib/http-error'
 
 export const runtime = 'nodejs'
 
@@ -19,13 +18,12 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   try {
-    const identity = await requireAuth(['machine'])
+    await requireAuth(['machine'])
     const body = Body.parse(await req.json())
 
     try {
       const item = await prisma.item.create({
         data: {
-          userId: identity.userId,
           sourcePath: body.sourcePath,
           sha256: body.sha256,
           mimeType: body.mimeType ?? null,
@@ -36,16 +34,12 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ item }, { status: 200 })
     } catch (e) {
-      // Prisma unique constraint code P2002
       if ((e as { code?: string }).code === 'P2002') {
         const existing = await prisma.item.findUnique({
-          where: { userId_sha256: { userId: identity.userId, sha256: body.sha256 } },
+          where: { sha256: body.sha256 },
           select: { id: true, status: true },
         })
-        return NextResponse.json(
-          { error: 'duplicate', item: existing },
-          { status: 409 },
-        )
+        return NextResponse.json({ error: 'duplicate', item: existing }, { status: 409 })
       }
       throw e
     }
@@ -54,7 +48,7 @@ export async function POST(req: Request) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid body', issues: e.issues }, { status: 400 })
     }
-    console.error('[POST /api/items] error', e)
+    console.error('[POST /api/items]', e)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

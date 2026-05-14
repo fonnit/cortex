@@ -1,8 +1,5 @@
-// POST /api/items/[id]/move — human picks a different existing folder (not from
-// the ranked proposals).
-// Body: { folderId: string }
-// Status transition: pending_review → approved_pending_move. fromFolderId on
-// the Decision row is the previously-proposed top folder.
+// POST /api/items/[id]/move — human picks a different existing folder.
+// Body: { folderId }
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -17,34 +14,30 @@ const Body = z.object({ folderId: z.string().min(1) })
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['user'])
+    await requireAuth(['user'])
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
-    const folder = await prisma.folder.findFirst({
-      where: { id: body.folderId, userId: identity.userId },
+    const folder = await prisma.folder.findUnique({
+      where: { id: body.folderId },
       select: { id: true },
     })
     if (!folder) return NextResponse.json({ error: 'folder not found' }, { status: 404 })
 
-    const current = await prisma.item.findFirst({
-      where: { id, userId: identity.userId },
+    const current = await prisma.item.findUnique({
+      where: { id },
       select: { proposedFolderId: true },
     })
 
     const item = await transitionItem({
       itemId: id,
-      userId: identity.userId,
       allowedFrom: 'pending_review',
       decision: {
         action: 'move',
         fromFolderId: current?.proposedFolderId ?? null,
         toFolderId: body.folderId,
       },
-      itemUpdate: {
-        status: 'approved_pending_move',
-        folderId: body.folderId,
-      },
+      itemUpdate: { status: 'approved_pending_move', folderId: body.folderId },
     })
 
     return NextResponse.json({ item }, { status: 200 })

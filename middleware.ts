@@ -34,7 +34,16 @@ export default clerkMiddleware(async (auth, request) => {
     // hit these routes; the route handler decides whether to accept them.
     return
   }
-  await auth.protect()
+
+  // Browser routes: require a signed-in Clerk session AND (if configured)
+  // restrict to the single owner clerkId. Cortex is a single-operator tool;
+  // CORTEX_OWNER_CLERK_ID prevents any other Clerk user that signs up at
+  // the same app from seeing the archive.
+  const a = await auth.protect()
+  const owner = process.env.CORTEX_OWNER_CLERK_ID
+  if (owner && a.userId !== owner) {
+    return new Response('Forbidden', { status: 403 })
+  }
 })
 
 export const config = {

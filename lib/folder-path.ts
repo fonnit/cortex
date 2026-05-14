@@ -15,18 +15,12 @@ export function isValidNewPath(p: string): boolean {
 
 export type EnsureResult = {
   leafFolderId: string
-  createdFolderIds: string[]  // empty if the whole path already existed
+  createdFolderIds: string[]
   fullPath: string
 }
 
-// Walks `path` (e.g. '/Finance/Insurance/Auto') under `userId`, creating
-// missing segments under the existing prefix in order. Returns the leaf id.
-//
-// Validates each segment matches the same rules as create-folder Zod.
-// Sibling-uniqueness is enforced by the unique(userId, path) constraint.
 export async function ensureFolderPath(
   tx: Prisma.TransactionClient,
-  userId: string,
   path: string,
 ): Promise<EnsureResult> {
   if (!isValidNewPath(path)) {
@@ -34,14 +28,13 @@ export async function ensureFolderPath(
   }
   const segments = path.slice(1).split('/')
 
-  // Find the longest existing prefix
   let parentId: string | null = null
   let parentPath = ''
   let i = 0
   for (; i < segments.length; i++) {
     const tryPath = parentPath + '/' + segments[i]
-    const existing = await tx.folder.findFirst({
-      where: { userId, path: tryPath },
+    const existing = await tx.folder.findUnique({
+      where: { path: tryPath },
       select: { id: true },
     })
     if (!existing) break
@@ -50,23 +43,15 @@ export async function ensureFolderPath(
   }
 
   if (i === segments.length) {
-    // Whole path already exists
     return { leafFolderId: parentId!, createdFolderIds: [], fullPath: path }
   }
 
-  // Create the missing segments [i..end]
   const created: string[] = []
   for (let j = i; j < segments.length; j++) {
     const name = segments[j]
     const newPath = parentPath + '/' + name
     const inserted = await tx.folder.create({
-      data: {
-        userId,
-        parentId,
-        name,
-        path: newPath,
-        isSeed: false,
-      },
+      data: { parentId, name, path: newPath, isSeed: false },
       select: { id: true },
     })
     parentId = inserted.id

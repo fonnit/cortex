@@ -3,8 +3,7 @@
 // Reads prisma/seeds/taxonomy-v4.json and synthesizes a hierarchical folder
 // tree from the unique drivePath dirnames of the anchor list.
 //
-// Idempotent: existing seeded folders (isSeed=true) are skipped on re-seed.
-// To re-seed for a different user, set CORTEX_SEED_USER_CLERK_ID before running.
+// Idempotent: existing folders (matched by global path) are skipped.
 
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
@@ -14,8 +13,6 @@ import ws from 'ws'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// Match lib/prisma.ts adapter selection so the seed works against both
-// Neon (prod via DATABASE_URL) and a local docker Postgres.
 neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket
 const url = process.env.DATABASE_URL ?? ''
 if (!url) {
@@ -49,53 +46,21 @@ function collectFolderPaths(anchors: Anchor[]): string[] {
   return Array.from(set).sort()
 }
 
-async function getOwnerUserId(): Promise<string> {
-  // Cortex is single-operator. The User row is created lazily when the owner
-  // signs in via Clerk (lib/require-auth.ts upserts on first session). The
-  // seed refuses to create a placeholder — it just attaches Folders to the
-  // one existing User.
-  const clerkId = process.env.CORTEX_SEED_USER_CLERK_ID
-  if (clerkId) {
-    const u = await prisma.user.upsert({
-      where: { clerkId },
-      create: { clerkId },
-      update: {},
-    })
-    return u.id
-  }
-
-  const users = await prisma.user.findMany({ take: 2, select: { id: true, clerkId: true } })
-  if (users.length === 0) {
-    console.error('[seed] no User row in DB.')
-    console.error('[seed] sign in to the web app once (creates your User row), then re-run the seed.')
-    process.exit(1)
-  }
-  if (users.length > 1) {
-    console.error(`[seed] found ${users.length} User rows; Cortex v1 is single-owner.`)
-    console.error('[seed] resolve by setting CORTEX_SEED_USER_CLERK_ID=user_xxx to disambiguate.')
-    console.error(`[seed] clerkIds: ${users.map((u) => u.clerkId).join(', ')}`)
-    process.exit(1)
-  }
-  console.log(`[seed] attaching folders to existing User (clerkId=${users[0].clerkId})`)
-  return users[0].id
-}
-
 async function main() {
   const seed = loadSeed()
   console.log(`[seed] taxonomy ${seed.version}: ${seed.anchors.length} anchors`)
 
-  const userId = await getOwnerUserId()
   const paths = collectFolderPaths(seed.anchors)
   console.log(`[seed] ${paths.length} folder paths to ensure`)
 
-  // Build folders in path-length order so parents exist before children
+  // Insert in path-length order so parents exist before children.
   const sorted = [...paths].sort((a, b) => a.split('/').length - b.split('/').length)
 
   let created = 0
   let skipped = 0
 
   for (const path of sorted) {
-    const existing = await prisma.folder.findFirst({ where: { userId, path } })
+    const existing = await prisma.folder.findUnique({ where: { path } })
     if (existing) {
       skipped++
       continue
@@ -107,16 +72,14 @@ async function main() {
 
     let parentId: string | null = null
     if (parentPath) {
-      const parent = await prisma.folder.findFirst({ where: { userId, path: parentPath } })
+      const parent = await prisma.folder.findUnique({ where: { path: parentPath } })
       if (!parent) {
         throw new Error(`Parent folder not found for ${path} (expected ${parentPath})`)
       }
       parentId = parent.id
     }
 
-    await prisma.folder.create({
-      data: { userId, parentId, name, path, isSeed: true },
-    })
+    await prisma.folder.create({ data: { parentId, name, path, isSeed: true } })
     created++
   }
 

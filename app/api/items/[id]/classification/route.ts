@@ -1,15 +1,4 @@
 // POST /api/items/[id]/classification — worker posts classification result.
-//
-// Body:
-//   {
-//     proposalCandidates: Array<
-//       | { kind: 'existing', folderId, path, confidence }
-//       | { kind: 'new', path, confidence }
-//     >,
-//     extractionKind, extractionMs, extractedCharCount
-//   }
-//
-// Status transition: pending_classification → pending_review.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -54,61 +43,47 @@ function isValidNewPath(p: string): boolean {
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['machine'])
+    await requireAuth(['machine'])
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
-    // Verify all existing-kind folderIds resolve for this user
     const existingIds = body.proposalCandidates
       .filter((p): p is z.infer<typeof ExistingProposal> => p.kind === 'existing')
       .map((p) => p.folderId)
 
     if (existingIds.length > 0) {
       const folders = await prisma.folder.findMany({
-        where: { id: { in: existingIds }, userId: identity.userId },
+        where: { id: { in: existingIds } },
         select: { id: true },
       })
       const known = new Set(folders.map((f) => f.id))
       const bad = existingIds.filter((id) => !known.has(id))
       if (bad.length > 0) {
-        return NextResponse.json(
-          { error: 'unknown folderIds', folderIds: bad },
-          { status: 400 },
-        )
+        return NextResponse.json({ error: 'unknown folderIds', folderIds: bad }, { status: 400 })
       }
     }
 
-    // Reject new-kind proposals whose path actually exists (worker should have
-    // converted them to existing; defensive check).
     const newPaths = body.proposalCandidates
       .filter((p): p is z.infer<typeof NewProposal> => p.kind === 'new')
       .map((p) => p.path)
     if (newPaths.length > 0) {
       const existingAtPath = await prisma.folder.findMany({
-        where: { path: { in: newPaths }, userId: identity.userId },
+        where: { path: { in: newPaths } },
         select: { path: true },
       })
       if (existingAtPath.length > 0) {
         return NextResponse.json(
-          {
-            error: 'new-kind proposals collide with existing folders',
-            paths: existingAtPath.map((f) => f.path),
-          },
+          { error: 'new-kind proposals collide with existing folders', paths: existingAtPath.map((f) => f.path) },
           { status: 400 },
         )
       }
     }
 
-    // Top pick: convenience column for queries. Null if top is new.
     const top = body.proposalCandidates[0]
     const topProposedFolderId = top.kind === 'existing' ? top.folderId : null
 
     const updated = await prisma.item.updateMany({
-      where: {
-        id,
-        userId: identity.userId,
-        status: 'pending_classification',
-      },
+      where: { id, status: 'pending_classification' },
       data: {
         status: 'pending_review',
         proposalCandidates: body.proposalCandidates,
@@ -123,15 +98,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     })
 
     if (updated.count === 0) {
-      const exists = await prisma.item.findFirst({
-        where: { id, userId: identity.userId },
-        select: { status: true },
-      })
+      const exists = await prisma.item.findUnique({ where: { id }, select: { status: true } })
       if (!exists) return NextResponse.json({ error: 'not found' }, { status: 404 })
-      return NextResponse.json(
-        { error: 'wrong status', status: exists.status },
-        { status: 409 },
-      )
+      return NextResponse.json({ error: 'wrong status', status: exists.status }, { status: 409 })
     }
 
     return NextResponse.json({ ok: true }, { status: 200 })
@@ -140,7 +109,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid body', issues: e.issues }, { status: 400 })
     }
-    console.error('[POST /api/items/[id]/classification] error', e)
+    console.error('[POST /api/items/[id]/classification]', e)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

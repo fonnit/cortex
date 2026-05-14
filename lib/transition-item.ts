@@ -1,18 +1,13 @@
-// Shared mutation helper for the four human-triggered triage routes (approve,
-// move, reject, create-folder) and the Failed-tab actions (retry, readd,
-// delete_record). Centralizes the state-transition contract so each route is
-// ~15 LOC.
+// Shared mutation helper for triage routes (approve, move, reject,
+// create-folder) and Failed-tab actions (retry, readd, delete_record).
 //
-// Runs inside a single $transaction:
-//   1) SELECT Item by id (+ userId scope)
+// Runs inside one $transaction:
+//   1) SELECT Item by id
 //   2) Verify status ∈ allowedFrom
 //   3) Write Decision row
 //   4) Update Item (status + optional folderId/finalPath/etc.)
 //
-// Concurrency: status check + update are inside the same transaction so a
-// double-submit gets 409 not duplicate Decisions. Conway boundary: the API
-// (this helper) IS the data boundary — workers and the UI go through this
-// path, never around it.
+// No userId scoping — Cortex v1 is single-operator.
 
 import type { ItemStatus, DecisionAction, Prisma } from '@prisma/client'
 import { prisma } from './prisma'
@@ -20,7 +15,6 @@ import { HttpError } from './http-error'
 
 export type TransitionInput = {
   itemId: string
-  userId: string
   allowedFrom: ItemStatus | ItemStatus[]
 
   decision: {
@@ -46,8 +40,8 @@ export async function transitionItem(input: TransitionInput) {
   const allowed = Array.isArray(input.allowedFrom) ? input.allowedFrom : [input.allowedFrom]
 
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const item = await tx.item.findFirst({
-      where: { id: input.itemId, userId: input.userId },
+    const item = await tx.item.findUnique({
+      where: { id: input.itemId },
       select: { status: true },
     })
 
@@ -63,7 +57,6 @@ export async function transitionItem(input: TransitionInput) {
     await tx.decision.create({
       data: {
         itemId: input.itemId,
-        userId: input.userId,
         action: input.decision.action,
         fromFolderId: input.decision.fromFolderId ?? null,
         toFolderId: input.decision.toFolderId ?? null,

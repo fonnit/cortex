@@ -1,12 +1,8 @@
-// GET /api/taxonomy — folder tree for the current user.
-// Accepts user (browser triage picker) AND machine (worker classify prompt).
-// Returns ETag header; supports If-None-Match for 304 (worker caches).
-//
-// ETag is sha1(JSON.stringify(folders)) — fine for v1 scale (≤100 folders).
+// GET /api/taxonomy — folder tree. Accepts user or machine. ETag-cached.
 
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
-import { getFolderTreeForUser } from '@/lib/taxonomy'
+import { getFolderTree } from '@/lib/taxonomy'
 import { requireAuth } from '@/lib/require-auth'
 import { isHttpError } from '@/lib/http-error'
 
@@ -14,8 +10,8 @@ export const runtime = 'nodejs'
 
 export async function GET(req: Request) {
   try {
-    const identity = await requireAuth(['user', 'machine'])
-    const folders = await getFolderTreeForUser(identity.userId)
+    await requireAuth(['user', 'machine'])
+    const folders = await getFolderTree()
     const body = JSON.stringify({ folders })
     const etag = '"' + crypto.createHash('sha1').update(body).digest('hex') + '"'
 
@@ -30,7 +26,7 @@ export async function GET(req: Request) {
     })
   } catch (e) {
     if (isHttpError(e)) return NextResponse.json({ error: e.message }, { status: e.status })
-    console.error('[GET /api/taxonomy] error', e)
+    console.error('[GET /api/taxonomy]', e)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

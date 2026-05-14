@@ -1,6 +1,4 @@
-// POST /api/items/[id]/move-failed — worker reports the file move failed.
-// Body: { reason: string, kind: 'move_failed' | 'source_changed' | 'source_missing' }
-// Status transition: approved_pending_move → kind.
+// POST /api/items/[id]/move-failed — worker reports the mv failed.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -17,23 +15,18 @@ const Body = z.object({
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['machine'])
+    await requireAuth(['machine'])
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
     const updated = await prisma.item.updateMany({
-      where: {
-        id,
-        userId: identity.userId,
-        status: 'approved_pending_move',
-      },
+      where: { id, status: 'approved_pending_move' },
       data: { status: body.kind, leasedAt: null },
     })
 
     if (updated.count === 0) {
       return NextResponse.json({ error: 'not found or wrong status' }, { status: 409 })
     }
-
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (e) {
     if (isHttpError(e)) return NextResponse.json({ error: e.message }, { status: e.status })

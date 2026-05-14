@@ -1,6 +1,7 @@
-// Cortex v1 — triage queue rebuild
-// Source of truth: ~/.claude/plans/compressed-wobbling-treehouse.md
-// Design doc: ~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md
+// Cortex v1 — single-operator triage queue. No tenancy.
+// Auth: Clerk session (browser) OR Clerk M2M token (worker). The middleware
+// gates access by CORTEX_OWNER_CLERK_ID env var. There is no User table —
+// "the owner" is whoever is allowed past the gate.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,37 +9,16 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url is in prisma.config.ts per Prisma 7 conventions
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State machine (Item.status):
 //
-//   ┌───────────────────────────┐
-//   │ pending_classification    │  ← cortex add creates row here
-//   └────────────┬──────────────┘
-//                │ worker classifies via Anthropic SDK + Haiku
-//                ▼
-//   ┌───────────────────────────┐
-//   │ pending_review            │  ← triage UI shows this
-//   └────────────┬──────────────┘
-//                │ human picks: approve / move / reject / create-folder
-//                ▼
-//   ┌───────────────────────────┐    ┌─────────────┐
-//   │ approved_pending_move     │    │ rejected    │  (terminal)
-//   └────────────┬──────────────┘    └─────────────┘
-//                │ worker moves file on FS
-//                ▼
-//   ┌───────────────────────────┐
-//   │ filed                     │  (terminal — happy path)
-//   └───────────────────────────┘
+//   pending_classification → pending_review → approved_pending_move → filed
+//                          ↘ rejected
 //
-// Terminal failure lanes (surfaced in UI Failed tab with Retry/Re-add/Delete):
-//   classification_failed  ← attempts ≥ 3 during classify
-//   move_failed            ← mv ENOENT / EPERM / dest exists with diff sha
-//   source_missing         ← worker found source gone at classify time
-//   source_changed         ← worker re-hash at move time didn't match
-//   unsupported_type       ← text-extract returned 'unsupported'
+// Terminal failures: classification_failed, move_failed, source_missing,
+// source_changed, unsupported_type (surfaced in UI Failed tab).
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum ItemStatus {
@@ -71,29 +51,15 @@ enum ExtractionKind {
   unsupported
 }
 
-model User {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique
-  createdAt DateTime @default(now())
-
-  items     Item[]
-  folders   Folder[]
-  decisions Decision[]
-
-  @@map("User")
-}
-
 model Folder {
   id        String  @id @default(cuid())
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   parentId  String?
   parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children  Folder[] @relation("FolderTree")
 
   name      String
-  path      String  // app-maintained materialized path, e.g. /Finance/Taxes/2025
+  path      String  @unique  // global; e.g. /Finance/Taxes/2025
   isSeed    Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -103,35 +69,29 @@ model Folder {
   decisionsFrom    Decision[]  @relation("DecisionFromFolder")
   decisionsCreated Decision[]  @relation("DecisionFolderCreated")
 
-  @@unique([userId, path])
-  @@index([userId, parentId])
+  @@index([parentId])
   @@map("Folder")
 }
 
 model Item {
   id                 String          @id @default(cuid())
-  userId             String
-  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Source file (local FS)
   sourcePath         String
-  sha256             String
+  sha256             String          @unique
   mimeType           String?
   sizeBytes          Int
 
   capturedAt         DateTime        @default(now())
 
-  // State machine
   status             ItemStatus      @default(pending_classification)
 
-  // Lease for worker single-flight (managed by /api/items/claim)
+  // Worker single-flight (managed by /api/items/claim)
   leasedAt           DateTime?
   attempts           Int             @default(0)
 
   // Classification output (set by worker via /api/items/[id]/classification)
   proposalCandidates Json?
   proposedFolderId   String?
-  proposedNewFolder  String?
   confidence         Float?
   classifiedAt       DateTime?
   extractionKind     ExtractionKind?
@@ -143,15 +103,14 @@ model Item {
   folder             Folder?         @relation("ItemFinalFolder", fields: [folderId], references: [id], onDelete: SetNull)
   finalPath          String?
 
-  // Failure recovery (Re-add creates a new Item that supersedes the old one)
+  // Failure recovery (Re-add supersedes Item)
   supersededByItemId String?         @unique
   supersededBy       Item?           @relation("ItemSuperseded", fields: [supersededByItemId], references: [id], onDelete: SetNull)
   supersedes         Item?           @relation("ItemSuperseded")
 
   decisions          Decision[]
 
-  @@unique([userId, sha256])
-  @@index([userId, status])
+  @@index([status])
   @@index([status, leasedAt])
   @@map("Item")
 }
@@ -160,8 +119,6 @@ model Decision {
   id                 String         @id @default(cuid())
   itemId             String
   item               Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  userId             String
-  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   action             DecisionAction
   fromFolderId       String?

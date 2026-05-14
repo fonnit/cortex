@@ -1,7 +1,5 @@
-// POST /api/items/[id]/moved — worker reports file successfully moved.
-// Body: { finalPath: string }
-// Status transition: approved_pending_move → filed.
-// Server validates finalPath starts with CortexArchive prefix on the worker side.
+// POST /api/items/[id]/moved — worker reports file moved.
+// Body: { finalPath }
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -15,33 +13,19 @@ const Body = z.object({ finalPath: z.string().min(1) })
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['machine'])
+    await requireAuth(['machine'])
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
     const updated = await prisma.item.updateMany({
-      where: {
-        id,
-        userId: identity.userId,
-        status: 'approved_pending_move',
-      },
-      data: {
-        status: 'filed',
-        finalPath: body.finalPath,
-        leasedAt: null,
-      },
+      where: { id, status: 'approved_pending_move' },
+      data: { status: 'filed', finalPath: body.finalPath, leasedAt: null },
     })
 
     if (updated.count === 0) {
-      const exists = await prisma.item.findFirst({
-        where: { id, userId: identity.userId },
-        select: { status: true },
-      })
+      const exists = await prisma.item.findUnique({ where: { id }, select: { status: true } })
       if (!exists) return NextResponse.json({ error: 'not found' }, { status: 404 })
-      return NextResponse.json(
-        { error: 'wrong status', status: exists.status },
-        { status: 409 },
-      )
+      return NextResponse.json({ error: 'wrong status', status: exists.status }, { status: 409 })
     }
 
     return NextResponse.json({ ok: true }, { status: 200 })

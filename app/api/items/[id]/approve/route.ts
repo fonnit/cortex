@@ -1,13 +1,5 @@
 // POST /api/items/[id]/approve — human approves a ranked proposal.
-//
 // Body: { chosenProposalRank: 1..5 }
-//
-// Server reads Item.proposalCandidates[rank-1] and forks on kind:
-//   - existing: Decision(action=approve, toFolderId=proposal.folderId), file there.
-//   - new:      walk the path, create missing folders inside the transaction,
-//               Decision(action=create_folder, folderCreatedId=leaf, toFolderId=leaf), file there.
-//
-// In both cases: pending_review → approved_pending_move.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -19,33 +11,22 @@ import type { Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
 
-const Body = z.object({
-  chosenProposalRank: z.number().int().min(1).max(5),
-})
+const Body = z.object({ chosenProposalRank: z.number().int().min(1).max(5) })
 
 const ProposalShape = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('existing'),
-    folderId: z.string(),
-    path: z.string(),
-    confidence: z.number(),
-  }),
-  z.object({
-    kind: z.literal('new'),
-    path: z.string(),
-    confidence: z.number(),
-  }),
+  z.object({ kind: z.literal('existing'), folderId: z.string(), path: z.string(), confidence: z.number() }),
+  z.object({ kind: z.literal('new'), path: z.string(), confidence: z.number() }),
 ])
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const identity = await requireAuth(['user'])
+    await requireAuth(['user'])
     const { id } = await ctx.params
     const body = Body.parse(await req.json())
 
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const item = await tx.item.findFirst({
-        where: { id, userId: identity.userId },
+      const item = await tx.item.findUnique({
+        where: { id },
         select: { status: true, proposalCandidates: true, proposedFolderId: true },
       })
       if (!item) throw new HttpError(404, 'Item not found')
@@ -61,20 +42,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const chosen = proposals[idx]
 
       if (chosen.kind === 'existing') {
-        // Validate the folder still exists for this user (defense-in-depth;
-        // it was already validated at classification time, but the folder
-        // could have been deleted since).
-        const folder = await tx.folder.findFirst({
-          where: { id: chosen.folderId, userId: identity.userId },
+        const folder = await tx.folder.findUnique({
+          where: { id: chosen.folderId },
           select: { id: true },
         })
-        if (!folder) {
-          throw new HttpError(409, `Proposed folder no longer exists: ${chosen.path}`)
-        }
+        if (!folder) throw new HttpError(409, `Proposed folder no longer exists: ${chosen.path}`)
         await tx.decision.create({
           data: {
             itemId: id,
-            userId: identity.userId,
             action: 'approve',
             toFolderId: chosen.folderId,
             fromFolderId: item.proposedFolderId,
@@ -83,23 +58,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         })
         const updated = await tx.item.update({
           where: { id },
-          data: {
-            status: 'approved_pending_move',
-            folderId: chosen.folderId,
-          },
+          data: { status: 'approved_pending_move', folderId: chosen.folderId },
         })
         return { item: updated, kind: 'existing' as const, folderId: chosen.folderId }
       }
 
-      // chosen.kind === 'new' — walk the path, create missing folders.
+      // chosen.kind === 'new'
       if (!isValidNewPath(chosen.path)) {
         throw new HttpError(400, `invalid new-folder path: ${chosen.path}`)
       }
-      const ensured = await ensureFolderPath(tx, identity.userId, chosen.path)
+      const ensured = await ensureFolderPath(tx, chosen.path)
       await tx.decision.create({
         data: {
           itemId: id,
-          userId: identity.userId,
           action: 'create_folder',
           folderCreatedId: ensured.leafFolderId,
           toFolderId: ensured.leafFolderId,
@@ -108,10 +79,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       })
       const updated = await tx.item.update({
         where: { id },
-        data: {
-          status: 'approved_pending_move',
-          folderId: ensured.leafFolderId,
-        },
+        data: { status: 'approved_pending_move', folderId: ensured.leafFolderId },
       })
       return {
         item: updated,
