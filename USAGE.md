@@ -50,7 +50,7 @@ ANTHROPIC_API_KEY=<from console.anthropic.com — bills against your Max $100/mo
 Optional override:
 ```env
 CORTEX_ARCHIVE_ROOT=/Users/dfonnegrag/Documents/CortexArchive   # override resolved root
-CORTEX_CLASSIFY_MODEL=claude-haiku-4-5                          # default
+CORTEX_CLASSIFY_MODEL=claude-haiku-4-6                          # default
 ```
 
 ### 3. iCloud Documents toggle (already verified)

@@ -6,7 +6,7 @@ A personal AI-native information system that captures everything Daniel receives
 
 ## v1 scope (current)
 
-Manual `cortex add <file>` → server-side classify (Claude Haiku 4.5 via Anthropic SDK) → human approves in triage UI → file moved into `~/Documents/CortexArchive/<folder>/` (iCloud-synced).
+Manual `cortex add <file>` → server-side classify (Claude Haiku 4.6 via Anthropic SDK) → human approves in triage UI → file moved into `~/Documents/CortexArchive/<folder>/` (iCloud-synced).
 
 **Out of v1:** Gmail ingest, Drive blob store, embeddings, Q&A, OCR, chokidar watcher, MCP server, model-driven folder-proposal UI, ItemFact / structured extraction, Langfuse / observability.
 
@@ -19,7 +19,7 @@ The running spec lives in the plan file at `~/.claude/plans/compressed-wobbling-
 - **Auth:** Clerk with MFA for browser routes; Clerk Machine Tokens (M2M, client-credentials grant) for the worker.
 - **Worker boundary:** the Mac worker uses the HTTP API only. It does NOT have `DATABASE_URL`. All DB access goes through backend routes.
 - **Move target:** `~/Documents/CortexArchive/<folder.path>/<basename>`. iCloud-synced via the macOS "Desktop & Documents Folders" toggle; backup is automatic.
-- **Classification:** Claude Haiku 4.5 via `@anthropic-ai/sdk` directly. Multimodal content blocks for image and native-PDF input. After 2026-06-15 Claude CLI subscription billing ends; Max subscribers get $100/mo API credits which covers Cortex spend (~$5-50/year) many times over.
+- **Classification:** Claude Haiku 4.6 via `@anthropic-ai/sdk` directly. Multimodal content blocks for image and native-PDF input. After 2026-06-15 Claude CLI subscription billing ends; Max subscribers get $100/mo API credits which covers Cortex spend (~$5-50/year) many times over.
 - **Embeddings (v2):** OpenAI text-embedding-3-small, 512 dims, halfvec in pgvector. v2 migration creates the `ItemChunk` table AND enables the pgvector extension in the same migration.
 - **Observability:** `lib/trace.ts` is a noop wrapper in v1. LangSmith plug if observability surfaces a need (TODO in `TODOS.md`).
 
