@@ -5,9 +5,9 @@
   "main": "dist/worker.js",
   "scripts": {
     "build": "tsc",
-    "dev:worker": "tsx watch src/worker.ts",
-    "worker": "tsx src/worker.ts",
-    "add": "tsx src/cortex-add.ts"
+    "dev:worker": "tsx watch --env-file=.env.daemon src/worker.ts",
+    "worker": "tsx --env-file=.env.daemon src/worker.ts",
+    "add": "tsx --env-file=.env.daemon src/cortex-add.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",
