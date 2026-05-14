@@ -7,10 +7,27 @@
 // To re-seed for a different user, set CORTEX_SEED_USER_CLERK_ID before running.
 
 import { PrismaClient } from '@prisma/client'
+import { PrismaNeon } from '@prisma/adapter-neon'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { neonConfig } from '@neondatabase/serverless'
+import ws from 'ws'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const prisma = new PrismaClient()
+// Match lib/prisma.ts adapter selection so the seed works against both
+// Neon (prod via DATABASE_URL) and a local docker Postgres.
+neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket
+const url = process.env.DATABASE_URL ?? ''
+if (!url) {
+  console.error('DATABASE_URL not set. Source .env.local or .env first.')
+  process.exit(1)
+}
+const isNeon = url.includes('neon.tech') || url.includes('.neon.') || url.includes('pooler.')
+const adapter = isNeon
+  ? new PrismaNeon({ connectionString: url })
+  : new PrismaPg({ connectionString: url })
+
+const prisma = new PrismaClient({ adapter })
 
 type Anchor = { file: string; type: string; from: string | null; drivePath: string }
 type SeedDoc = { version: string; axes: Record<string, string[]>; anchors: Anchor[] }
