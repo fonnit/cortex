@@ -1,65 +1,36 @@
-import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
+// GET /api/taxonomy — folder tree for the current user.
+// Accepts user (browser triage picker) AND machine (worker classify prompt).
+// Returns ETag header; supports If-None-Match for 304 (worker caches).
+//
+// ETag is sha1(JSON.stringify(folders)) — fine for v1 scale (≤100 folders).
 
-export async function GET() {
+import { NextResponse } from 'next/server'
+import crypto from 'node:crypto'
+import { getFolderTreeForUser } from '@/lib/taxonomy'
+import { requireAuth } from '@/lib/require-auth'
+import { isHttpError } from '@/lib/http-error'
+
+export const runtime = 'nodejs'
+
+export async function GET(req: Request) {
   try {
-    const userId = await requireAuth()
+    const identity = await requireAuth(['user', 'machine'])
+    const folders = await getFolderTreeForUser(identity.userId)
+    const body = JSON.stringify({ folders })
+    const etag = '"' + crypto.createHash('sha1').update(body).digest('hex') + '"'
 
-    const [labels, mergeProposals] = await Promise.all([
-      prisma.taxonomyLabel.findMany({
-        where: { user_id: userId },
-        orderBy: { item_count: 'desc' },
-      }),
-      prisma.taxonomyMergeProposal.findMany({
-        where: { user_id: userId, status: 'pending' },
-        orderBy: { created_at: 'desc' },
-      }),
-    ])
-
-    const types = labels
-      .filter(l => l.axis === 'type')
-      .map(l => ({ name: l.name, count: l.item_count, lastUsed: l.last_used?.toISOString() ?? null }))
-
-    const entities = labels
-      .filter(l => l.axis === 'from')
-      .map(l => ({ name: l.name, count: l.item_count, lastUsed: l.last_used?.toISOString() ?? null }))
-
-    // SEED-v4-prod.md Decision 1 (260430-g6h): no `contexts` array — the
-    // context axis was dropped from runtime; only TaxonomyLabel rows from
-    // before the strip would appear and we no longer surface them.
-    return Response.json(
-      { types, entities, mergeProposals },
-      { headers: { 'Cache-Control': 'no-store' } },
-    )
-  } catch (err) {
-    if (err instanceof Response) return err
-    console.error('[/api/taxonomy] Unexpected error:', err)
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const userId = await requireAuth()
-    const parsed = z.object({
-      axis: z.enum(['type', 'from']),
-      name: z.string().min(1).max(200),
-    }).safeParse(await req.json())
-    if (!parsed.success) {
-      return Response.json(
-        { error: 'validation_failed', issues: parsed.error.issues },
-        { status: 400 },
-      )
+    const inm = req.headers.get('if-none-match')
+    if (inm === etag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: etag } })
     }
-    const { axis, name } = parsed.data
-    await prisma.taxonomyLabel.create({
-      data: { user_id: userId, axis, name, item_count: 0 },
+
+    return new NextResponse(body, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ETag: etag },
     })
-    return Response.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
-  } catch (err) {
-    if (err instanceof Response) return err
-    console.error('[POST /api/taxonomy] Unexpected error:', err)
-    return Response.json({ error: 'Internal server error' }, { status: 500 })
+  } catch (e) {
+    if (isHttpError(e)) return NextResponse.json({ error: e.message }, { status: e.status })
+    console.error('[GET /api/taxonomy] error', e)
+    return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }

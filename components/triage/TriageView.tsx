@@ -1,340 +1,383 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+// v1 TriageView — pending_review queue with top-proposal CTA + ranked
+// quick-pick (ranks 2-5) + folder picker + create-folder modal + Failed tab.
+
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Langfuse } from 'langfuse'
-import { ExpandedCard } from './ExpandedCard'
+import { basename as pathBasename } from './path'
 import { SourceBadge } from './SourceBadge'
-import type { TriageItem, TriageAction } from './ExpandedCard'
 
-interface TriageDecision {
-  itemId: string
-  type: 'keep' | 'ignore' | 'archive' | 'confirm' | 'skip'
-  picks?: { Type?: string; From?: string }
+type Proposal = { folderId: string; confidence: number }
+type FolderRow = { id: string; name: string; path: string; parentId: string | null; isSeed: boolean }
+
+type PendingItem = {
+  id: string
+  sourcePath: string
+  mimeType: string | null
+  sizeBytes: number
+  capturedAt: string
+  proposalCandidates: Proposal[] | null
+  proposedFolderId: string | null
+  proposedNewFolder: string | null
+  confidence: number | null
+  extractionKind: 'text' | 'image' | 'pdf_native' | 'unsupported' | null
 }
 
-interface ToastState {
-  tag: string
-  subject?: string
+type FailedItem = {
+  id: string
+  sourcePath: string
+  mimeType: string | null
+  status: 'classification_failed' | 'move_failed' | 'source_missing' | 'source_changed' | 'unsupported_type'
+  extractionKind: 'text' | 'image' | 'pdf_native' | 'unsupported' | null
+  attempts: number
+  capturedAt: string
 }
 
-function Kbd({ children, dim }: { children: React.ReactNode; dim?: boolean }) {
-  return <kbd className={'cx-kbd' + (dim ? ' cx-kbd-faint' : '')}>{children}</kbd>
+type TriageResponse = {
+  pending: PendingItem[]
+  failed: FailedItem[]
+  folders: FolderRow[]
+  folderById: Record<string, FolderRow>
 }
 
-function EmptyHint({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="cx-empty">
-      <div className="cx-empty-title">{title}</div>
-      <div>{children}</div>
-    </div>
-  )
+const STATUS_LABEL: Record<FailedItem['status'], string> = {
+  classification_failed: 'classify failed',
+  move_failed: 'move failed',
+  source_missing: 'source missing',
+  source_changed: 'source changed',
+  unsupported_type: 'unsupported',
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return <kbd className="cx-kbd">{children}</kbd>
 }
 
 export function TriageView() {
   const queryClient = useQueryClient()
+  const [tab, setTab] = useState<'pending' | 'failed'>('pending')
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null)
+  const [createOpenFor, setCreateOpenFor] = useState<string | null>(null)
+  const [createName, setCreateName] = useState('')
+  const [createParentId, setCreateParentId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [decided, setDecided] = useState<Record<string, string>>({})
-  const [picks, setPicks] = useState<Record<string, string>>({})
-  const [newOpen, setNewOpen] = useState<string | null>(null)
-  const [toast, setToast] = useState<ToastState | null>(null)
-
-  const lastAction = useRef<{ prev: Record<string, string> } | null>(null)
-  const rowRefs = useRef<Record<number, HTMLLIElement | null>>({})
-  const openedAt = useRef<number>(Date.now())
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const { data: items = [] } = useQuery<TriageItem[]>({
+  const { data, refetch } = useQuery<TriageResponse>({
     queryKey: ['triage'],
     queryFn: () => fetch('/api/triage').then((r) => r.json()),
     refetchInterval: 10_000,
   })
 
-  const { data: identities = [] } = useQuery<Array<{ name: string; type: string }>>({
-    queryKey: ['identity'],
-    queryFn: () => fetch('/api/identity').then((r) => r.json()),
-    staleTime: 60_000,
-  })
+  const pending = data?.pending ?? []
+  const failed = data?.failed ?? []
+  const folderById = data?.folderById ?? {}
+  const folders = data?.folders ?? []
 
-  const mutation = useMutation({
-    mutationFn: (d: TriageDecision) =>
-      fetch('/api/triage', {
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2400)
+  }
+
+  const approve = useMutation({
+    mutationFn: ({ itemId, folderId, rank }: { itemId: string; folderId: string; rank: number }) =>
+      fetch(`/api/items/${itemId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(d),
-      }).then((r) => r.json()),
-    onMutate: (vars) => {
-      // Optimistic: mark item decided locally (skip does nothing)
-      if (vars.type !== 'skip') {
-        const tag =
-          vars.type === 'keep' ? 'kept'
-          : vars.type === 'ignore' ? 'ignored'
-          : 'archived'
-        setDecided((d) => ({ ...d, [vars.itemId]: tag }))
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['triage'] })
-    },
+        body: JSON.stringify({ folderId, chosenProposalRank: rank }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => { showToast('approved'); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
+    onError: (e) => showToast(`error: ${(e as Error).message.slice(0, 80)}`),
   })
 
-  // Reset per-item state and record openedAt when active item changes
+  const move = useMutation({
+    mutationFn: ({ itemId, folderId }: { itemId: string; folderId: string }) =>
+      fetch(`/api/items/${itemId}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => { showToast('moved'); setPickerOpenFor(null); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
+    onError: (e) => showToast(`error: ${(e as Error).message.slice(0, 80)}`),
+  })
+
+  const reject = useMutation({
+    mutationFn: (itemId: string) =>
+      fetch(`/api/items/${itemId}/reject`, { method: 'POST' }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => { showToast('rejected'); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
+    onError: (e) => showToast(`error: ${(e as Error).message.slice(0, 80)}`),
+  })
+
+  const createFolder = useMutation({
+    mutationFn: ({ itemId, name, parentId }: { itemId: string; name: string; parentId: string | null }) =>
+      fetch(`/api/items/${itemId}/create-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parentId }),
+      }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => {
+      showToast('folder created + filed')
+      setCreateOpenFor(null); setCreateName(''); setCreateParentId(null)
+      queryClient.invalidateQueries({ queryKey: ['triage'] })
+    },
+    onError: (e) => showToast(`error: ${(e as Error).message.slice(0, 80)}`),
+  })
+
+  const retry = useMutation({
+    mutationFn: (itemId: string) =>
+      fetch(`/api/items/${itemId}/retry`, { method: 'POST' }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => { showToast('retrying'); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
+  })
+
+  const delItem = useMutation({
+    mutationFn: (itemId: string) =>
+      fetch(`/api/items/${itemId}/delete`, { method: 'POST' }).then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
+      }),
+    onSuccess: () => { showToast('deleted'); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
+  })
+
+  // Keyboard shortcuts on the pending tab: 1-5 picks proposal N on the first card.
   useEffect(() => {
-    setPicks({})
-    setNewOpen(null)
-    openedAt.current = Date.now()
-    const el = rowRefs.current[activeIdx]
-    if (el && el.scrollIntoView) {
-      const rect = el.getBoundingClientRect()
-      if (rect.top < 80 || rect.bottom > window.innerHeight - 20) {
-        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
-    }
-  }, [activeIdx])
-
-  // Clear stale decided entries when server no longer returns those items
-  useEffect(() => {
-    const serverIds = new Set(items.map((it) => it.id))
-    setDecided((prev) => {
-      const next: Record<string, string> = {}
-      for (const [id, tag] of Object.entries(prev)) {
-        if (serverIds.has(id)) next[id] = tag
-      }
-      return Object.keys(next).length === Object.keys(prev).length ? prev : next
-    })
-  }, [items])
-
-  const item = items[activeIdx]
-
-  const showToast = (t: ToastState) => {
-    setToast(t)
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 2200)
-  }
-
-  const advance = () => {
-    const next = items.findIndex((it, i) => i > activeIdx && !decided[it.id])
-    if (next >= 0) { setActiveIdx(next); return }
-    const anyLeft = items.findIndex((it) => !decided[it.id])
-    if (anyLeft >= 0) setActiveIdx(anyLeft)
-  }
-
-  const pickAxis = (axis: string, val: string) => {
-    setPicks((p) => ({ ...p, [axis]: val }))
-    setNewOpen(null)
-  }
-
-  const handleAction = (a: TriageAction) => {
-    if (a.type === 'skip') {
-      setActiveIdx((i) => Math.min(items.length - 1, i + 1))
-      mutation.mutate({ itemId: a.item.id, type: 'skip' })
-      return
-    }
-
-    const tag =
-      a.type === 'keep' ? 'kept'
-      : a.type === 'ignore' ? 'ignored'
-      : a.type === 'archive' ? 'archived'
-      : a.type === 'confirm' ? 'archived'
-      : null
-    if (!tag) return
-
-    lastAction.current = { prev: decided }
-    setDecided((d) => ({ ...d, [a.item.id]: tag }))
-    showToast({ tag, subject: a.item.source_metadata?.subject ?? a.item.filename ?? '' })
-    setTimeout(advance, 80)
-
-    // Langfuse decision timing (TRI-10)
-    const langfuse = new Langfuse()
-    langfuse.event({
-      traceId: a.item.id,
-      name: 'triage.decision',
-      metadata: { type: a.type, durationMs: Date.now() - openedAt.current },
-    })
-
-    mutation.mutate({
-      itemId: a.item.id,
-      type: a.type,
-      picks: a.picks
-        ? {
-            Type: a.picks['Type'],
-            From: a.picks['From'],
-          }
-        : undefined,
-    })
-  }
-
-  // Global keyboard handler
-  useEffect(() => {
+    if (tab !== 'pending') return
     const onKey = (e: KeyboardEvent) => {
-      if (newOpen) return
-      if (e.target instanceof Element) {
-        const tag = (e.target as Element).tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      }
+      const tgt = e.target as Element
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (document.querySelector('[data-clerk-modal]')) return
-
-      const k = e.key.toLowerCase()
-
-      if (k === 'j') {
-        setActiveIdx((i) => Math.min(items.length - 1, i + 1))
-        e.preventDefault()
-        return
+      const first = pending[0]
+      if (!first || !first.proposalCandidates) return
+      const idx = Number(e.key) - 1
+      if (idx >= 0 && idx < first.proposalCandidates.length) {
+        const p = first.proposalCandidates[idx]
+        approve.mutate({ itemId: first.id, folderId: p.folderId, rank: idx + 1 })
+      } else if (e.key.toLowerCase() === 'r') {
+        reject.mutate(first.id)
+      } else if (e.key.toLowerCase() === 'n') {
+        setCreateOpenFor(first.id); setCreateParentId(null); setCreateName('')
       }
-      if (k === 'h') {
-        setActiveIdx((i) => Math.max(0, i - 1))
-        e.preventDefault()
-        return
-      }
-      if (k === 'u' && lastAction.current) {
-        setDecided(lastAction.current.prev)
-        showToast({ tag: 'undone', subject: '' })
-        lastAction.current = null
-        return
-      }
-
-      if (!item) return
-      const isLabel = item.stage === 'label'
-
-      if (!isLabel) {
-        if (k === 'k') handleAction({ type: 'keep', item })
-        else if (k === 'x') handleAction({ type: 'ignore', item })
-        else if (k === 's') handleAction({ type: 'skip', item })
-      } else {
-        if (k === 'a') handleAction({ type: 'archive', item })
-        else if (k === 'i') handleAction({ type: 'ignore', item })
-        else if (k === 's') handleAction({ type: 'skip', item })
-        else if (['1', '2'].includes(k)) {
-          const axes = ['Type', 'From']
-          const confidentRaw = item.classification_trace?.stage2?.confident ?? []
-          const confidentNorm = confidentRaw.map((c) => c[0].toUpperCase() + c.slice(1))
-          const unresolved = axes.find((a) => !confidentNorm.includes(a) && !picks[a])
-          if (unresolved) {
-            const idx = Number(k) - 1
-            const axisKey = unresolved.toLowerCase() as 'type' | 'from'
-            const props = item.classification_trace?.stage2?.proposals?.[axisKey]
-            if (props && props[idx]) pickAxis(unresolved, props[idx].value)
-          }
-        } else if (k === 'n') {
-          const axes = ['Type', 'From']
-          const confidentRaw = item.classification_trace?.stage2?.confident ?? []
-          const confidentNorm = confidentRaw.map((c) => c[0].toUpperCase() + c.slice(1))
-          const unresolved = axes.find((a) => !confidentNorm.includes(a) && !picks[a])
-          if (unresolved) setNewOpen(unresolved)
-        }
-      }
-
-      if (e.key === 'Enter') handleAction({ type: 'confirm', item, picks })
     }
-
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items, item, picks, newOpen, decided])
-
-  const total = items.length
-  const doneCount = Object.keys(decided).length
-  const remaining = total - doneCount
+  }, [pending, tab])
 
   return (
-    <div className="cx-triage-inline cx-density-regular">
+    <div className="cx-triage-inline">
       <div className="cx-triage-topbar">
         <div className="cx-triage-counts">
-          <span className="cx-triage-remaining">{remaining}</span>
-          <span className="cx-triage-remaining-k">left</span>
-          <span className="cx-triage-dot">·</span>
-          <span className="cx-mono cx-muted">{doneCount} decided</span>
-          <span className="cx-triage-dot">·</span>
-          <span className="cx-mono cx-muted">{total} total</span>
+          <button
+            className={tab === 'pending' ? 'cx-action cx-action-primary' : 'cx-action cx-action-ghost'}
+            onClick={() => setTab('pending')}
+          >
+            Pending <span className="cx-mono">{pending.length}</span>
+          </button>
+          <button
+            className={tab === 'failed' ? 'cx-action cx-action-primary' : 'cx-action cx-action-ghost'}
+            onClick={() => setTab('failed')}
+          >
+            Failed <span className="cx-mono">{failed.length}</span>
+          </button>
         </div>
         <div className="cx-legend">
-          <span><Kbd>J</Kbd>/<Kbd>H</Kbd> navigate</span>
-          <span><Kbd>K</Kbd> keep</span>
-          <span><Kbd>X</Kbd> ignore</span>
-          <span><Kbd>↵</Kbd> confirm</span>
-          <span><Kbd>U</Kbd> undo</span>
+          <span><Kbd>1-5</Kbd> approve rank N</span>
+          <span><Kbd>N</Kbd> new folder</span>
+          <span><Kbd>R</Kbd> reject</span>
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <EmptyHint title="Queue clear.">
-          You&apos;re at inbox zero. New items flow in automatically.
-        </EmptyHint>
-      ) : (
+      {tab === 'pending' && pending.length === 0 && (
+        <div className="cx-empty">
+          <div className="cx-empty-title">Queue clear.</div>
+          <div>Drop a file with <span className="cx-mono">cortex add &lt;path&gt;</span> on your Mac.</div>
+        </div>
+      )}
+
+      {tab === 'pending' && pending.length > 0 && (
         <ol className="cx-qlist">
-          {items.map((it, i) => {
-            const isActive = i === activeIdx
-            const d = decided[it.id]
-            const isLabel = it.stage === 'label'
+          {pending.map((it, i) => {
+            const isActive = i === 0
+            const candidates = (it.proposalCandidates ?? []).slice(0, 5)
+            const top = candidates[0]
+            const topFolder = top ? folderById[top.folderId] : null
             return (
-              <li
-                key={it.id}
-                ref={(el) => { rowRefs.current[i] = el }}
-                onClick={isActive ? undefined : () => setActiveIdx(i)}
-                className={
-                  'cx-card ' +
-                  (isActive ? 'is-active ' : 'is-collapsed ') +
-                  (d ? 'is-decided ' : '')
-                }
-              >
+              <li key={it.id} className={'cx-card ' + (isActive ? 'is-active' : 'is-collapsed')}>
                 <div className="cx-card-rail">
                   <div className="cx-card-rail-n">{String(i + 1).padStart(2, '0')}</div>
-                  <div className="cx-card-rail-of">/ {String(items.length).padStart(2, '0')}</div>
+                  <div className="cx-card-rail-of">/ {String(pending.length).padStart(2, '0')}</div>
                   <div className="cx-card-rail-mode">
-                    <span className={'cx-mode-pill ' + (isLabel ? 'cx-mode-label' : 'cx-mode-relevance')}>
-                      {isLabel ? 'label' : 'relevance'}
-                    </span>
+                    <span className="cx-mode-pill cx-mode-label">{it.extractionKind ?? 'text'}</span>
                   </div>
-                  {d && (
-                    <span className={'cx-queue-tag cx-queue-tag-' + d}>{d}</span>
-                  )}
                 </div>
 
                 <div className="cx-card-main">
                   <div className="cx-card-head">
                     <div className="cx-card-meta">
-                      <SourceBadge source={it.source} />
+                      <SourceBadge source="downloads" />
                       <span className="cx-meta-sep">·</span>
-                      <span className="cx-mono">{it.source_metadata?.received ?? it.ingested_at}</span>
-                      {isActive && it.source_metadata?.from && (
-                        <>
-                          <span className="cx-meta-sep">·</span>
-                          <span className="cx-mono cx-muted">from {it.source_metadata.from}</span>
-                        </>
-                      )}
+                      <span className="cx-mono">{new Date(it.capturedAt).toLocaleString()}</span>
                     </div>
-                    <h2 className="cx-card-title">
-                      {it.source_metadata?.subject ?? it.filename ?? it.id}
-                    </h2>
+                    <h2 className="cx-card-title">{pathBasename(it.sourcePath)}</h2>
                     <div className="cx-card-sub">
-                      {it.source === 'gmail' && it.source_metadata?.from && (
-                        <>
-                          <span className="cx-mono">from</span>{' '}
-                          {it.source_metadata.from}
-                          <span className="cx-meta-sep">·</span>
-                        </>
-                      )}
-                      <span className="cx-mono">{it.filename}</span>
-                      {it.size_bytes && (
+                      <span className="cx-mono">{it.sourcePath}</span>
+                      {it.sizeBytes > 0 && (
                         <>
                           <span className="cx-meta-sep">·</span>
-                          <span className="cx-mono cx-muted">{it.mime_type} · {(it.size_bytes / 1000).toFixed(0)} KB</span>
+                          <span className="cx-mono cx-muted">{it.mimeType ?? '?'} · {(it.sizeBytes / 1024).toFixed(1)} KB</span>
                         </>
                       )}
                     </div>
                   </div>
 
-                  {isActive && !d && (
-                    <ExpandedCard
-                      item={it}
-                      picks={picks}
-                      newOpen={newOpen}
-                      setNewOpen={setNewOpen}
-                      onPick={pickAxis}
-                      onAction={handleAction}
-                      identities={identities}
-                    />
+                  {isActive && top && topFolder && (
+                    <div className="cx-axes">
+                      <div className="cx-axis">
+                        <div className="cx-axis-head">
+                          <span className="cx-axis-name">Top proposal</span>
+                          <span className="cx-axis-status cx-axis-confident">
+                            confidence {(top.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="cx-axis-body">
+                          <button
+                            className="cx-action cx-action-primary"
+                            onClick={() => approve.mutate({ itemId: it.id, folderId: top.folderId, rank: 1 })}
+                          >
+                            <Kbd>1</Kbd> Approve into <span className="cx-mono">{topFolder.path}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {candidates.length > 1 && (
+                        <div className="cx-axis">
+                          <div className="cx-axis-head">
+                            <span className="cx-axis-name">Other ranked options</span>
+                          </div>
+                          <div className="cx-axis-body">
+                            {candidates.slice(1).map((c, idx) => {
+                              const f = folderById[c.folderId]
+                              if (!f) return null
+                              const rank = idx + 2
+                              return (
+                                <button
+                                  key={c.folderId}
+                                  className="cx-action cx-action-sm cx-action-ghost"
+                                  onClick={() => approve.mutate({ itemId: it.id, folderId: c.folderId, rank })}
+                                >
+                                  <Kbd>{rank}</Kbd> {f.path} · <span className="cx-mono cx-muted">{(c.confidence * 100).toFixed(0)}%</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="cx-card-actions">
+                        <button
+                          className="cx-action cx-action-ghost"
+                          onClick={() => setPickerOpenFor(it.id)}
+                        >
+                          Pick different folder
+                        </button>
+                        <button
+                          className="cx-action cx-action-ghost"
+                          onClick={() => {
+                            setCreateOpenFor(it.id)
+                            setCreateParentId(null)
+                            setCreateName('')
+                          }}
+                        >
+                          <Kbd>N</Kbd> Create new folder
+                        </button>
+                        <button
+                          className="cx-action cx-action-ghost"
+                          onClick={() => reject.mutate(it.id)}
+                        >
+                          <Kbd>R</Kbd> Reject
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {pickerOpenFor === it.id && (
+                    <div className="cx-prop-newinput" style={{ marginTop: '1rem' }}>
+                      <input
+                        className="cx-ask-input"
+                        type="text"
+                        list="folder-paths"
+                        placeholder="Type a folder path, e.g. /Finance/Taxes/2025"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const value = (e.target as HTMLInputElement).value.trim()
+                            const f = folders.find((f) => f.path === value)
+                            if (f) move.mutate({ itemId: it.id, folderId: f.id })
+                            else showToast('no folder with that exact path')
+                          } else if (e.key === 'Escape') {
+                            setPickerOpenFor(null)
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <datalist id="folder-paths">
+                        {folders.map((f) => (
+                          <option key={f.id} value={f.path} />
+                        ))}
+                      </datalist>
+                      <button className="cx-linkbtn" onClick={() => setPickerOpenFor(null)}>cancel</button>
+                    </div>
+                  )}
+
+                  {createOpenFor === it.id && (
+                    <div className="cx-prop-newinput" style={{ marginTop: '1rem' }}>
+                      <label className="cx-card-sub">
+                        Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
+                      </label>
+                      <input
+                        className="cx-ask-input"
+                        type="text"
+                        list="folder-parents"
+                        placeholder="Parent folder path or blank for top-level"
+                        onBlur={(e) => {
+                          const value = e.target.value.trim()
+                          if (!value) { setCreateParentId(null); return }
+                          const f = folders.find((f) => f.path === value)
+                          setCreateParentId(f?.id ?? null)
+                        }}
+                      />
+                      <datalist id="folder-parents">
+                        {folders.map((f) => (
+                          <option key={f.id} value={f.path} />
+                        ))}
+                      </datalist>
+                      <input
+                        className="cx-ask-input"
+                        type="text"
+                        placeholder="New folder name (letters / digits / space / - / _ — max 60 chars)"
+                        value={createName}
+                        onChange={(e) => setCreateName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && createName.trim()) {
+                            createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId })
+                          } else if (e.key === 'Escape') {
+                            setCreateOpenFor(null)
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        className="cx-action cx-action-sm cx-action-primary"
+                        disabled={!createName.trim()}
+                        onClick={() => createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId })}
+                      >Create + file</button>
+                      <button className="cx-linkbtn" onClick={() => setCreateOpenFor(null)}>cancel</button>
+                    </div>
                   )}
                 </div>
               </li>
@@ -343,11 +386,56 @@ export function TriageView() {
         </ol>
       )}
 
+      {tab === 'failed' && failed.length === 0 && (
+        <div className="cx-empty">
+          <div className="cx-empty-title">No failures.</div>
+          <div>Anything that fails classification or move appears here.</div>
+        </div>
+      )}
+
+      {tab === 'failed' && failed.length > 0 && (
+        <ul className="cx-qlist">
+          {failed.map((it) => (
+            <li key={it.id} className="cx-card is-collapsed">
+              <div className="cx-card-rail">
+                <span className="cx-mode-pill cx-mode-label">{STATUS_LABEL[it.status]}</span>
+              </div>
+              <div className="cx-card-main">
+                <div className="cx-card-head">
+                  <h2 className="cx-card-title">{pathBasename(it.sourcePath)}</h2>
+                  <div className="cx-card-sub">
+                    <span className="cx-mono">{it.sourcePath}</span>
+                    <span className="cx-meta-sep">·</span>
+                    <span className="cx-mono cx-muted">attempts: {it.attempts}</span>
+                    {it.extractionKind && (
+                      <>
+                        <span className="cx-meta-sep">·</span>
+                        <span className="cx-mono cx-muted">kind: {it.extractionKind}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="cx-card-actions">
+                  {(it.status === 'classification_failed' || it.status === 'move_failed') && (
+                    <button className="cx-action cx-action-sm cx-action-primary" onClick={() => retry.mutate(it.id)}>
+                      Retry
+                    </button>
+                  )}
+                  {(it.status === 'unsupported_type' || it.status === 'source_missing' || it.status === 'source_changed') && (
+                    <button className="cx-action cx-action-sm cx-action-ghost" onClick={() => delItem.mutate(it.id)}>
+                      Delete record
+                    </button>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {toast && (
-        <div className={'cx-toast cx-toast-' + toast.tag}>
-          <span className="cx-toast-tag">{toast.tag}</span>
-          {toast.subject && <span className="cx-toast-sub">{toast.subject}</span>}
-          <span className="cx-toast-undo"><Kbd>U</Kbd> undo</span>
+        <div className="cx-toast">
+          <span className="cx-toast-tag">{toast}</span>
         </div>
       )}
     </div>

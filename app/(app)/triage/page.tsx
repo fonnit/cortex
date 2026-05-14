@@ -1,14 +1,15 @@
-import { Topbar } from '@/components/shell/Topbar'
 import { TriageView } from '@/components/triage/TriageView'
 
 export default function TriagePage() {
   return (
-    <>
-      <Topbar
-        title="Triage"
-        subtitle="Single card at a time. Keyboard-first. Compounding rules, not growing backlog."
-      />
+    <div>
+      <header className="cx-topbar">
+        <div>
+          <div className="cx-topbar-eyebrow">Cortex / Triage</div>
+          <div className="cx-topbar-sub">One card at a time. Press 1-5 to approve a proposal.</div>
+        </div>
+      </header>
       <TriageView />
-    </>
+    </div>
   )
 }

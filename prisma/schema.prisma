@@ -1,150 +1,180 @@
-// Source: Prisma 7 docs + project architecture decisions
-// prisma/schema.prisma
+// Cortex v1 — triage queue rebuild
+// Source of truth: ~/.claude/plans/compressed-wobbling-treehouse.md
+// Design doc: ~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  extensions = [pgvector(map: "vector", schema: "public")]
+  provider = "postgresql"
+  // url is in prisma.config.ts per Prisma 7 conventions
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State machine (Item.status):
+//
+//   ┌───────────────────────────┐
+//   │ pending_classification    │  ← cortex add creates row here
+//   └────────────┬──────────────┘
+//                │ worker classifies via Anthropic SDK + Haiku
+//                ▼
+//   ┌───────────────────────────┐
+//   │ pending_review            │  ← triage UI shows this
+//   └────────────┬──────────────┘
+//                │ human picks: approve / move / reject / create-folder
+//                ▼
+//   ┌───────────────────────────┐    ┌─────────────┐
+//   │ approved_pending_move     │    │ rejected    │  (terminal)
+//   └────────────┬──────────────┘    └─────────────┘
+//                │ worker moves file on FS
+//                ▼
+//   ┌───────────────────────────┐
+//   │ filed                     │  (terminal — happy path)
+//   └───────────────────────────┘
+//
+// Terminal failure lanes (surfaced in UI Failed tab with Retry/Re-add/Delete):
+//   classification_failed  ← attempts ≥ 3 during classify
+//   move_failed            ← mv ENOENT / EPERM / dest exists with diff sha
+//   source_missing         ← worker found source gone at classify time
+//   source_changed         ← worker re-hash at move time didn't match
+//   unsupported_type       ← text-extract returned 'unsupported'
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ItemStatus {
+  pending_classification
+  pending_review
+  approved_pending_move
+  filed
+  rejected
+  classification_failed
+  move_failed
+  source_missing
+  source_changed
+  unsupported_type
+}
+
+enum DecisionAction {
+  approve
+  move
+  reject
+  create_folder
+  retry
+  readd
+  delete_record
+}
+
+enum ExtractionKind {
+  text
+  image
+  pdf_native
+  unsupported
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  createdAt DateTime @default(now())
+
+  items     Item[]
+  folders   Folder[]
+  decisions Decision[]
+
+  @@map("User")
+}
+
+model Folder {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentId  String?
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children  Folder[] @relation("FolderTree")
+
+  name      String
+  path      String  // app-maintained materialized path, e.g. /Finance/Taxes/2025
+  isSeed    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  items            Item[]      @relation("ItemFinalFolder")
+  decisionsTo      Decision[]  @relation("DecisionToFolder")
+  decisionsFrom    Decision[]  @relation("DecisionFromFolder")
+  decisionsCreated Decision[]  @relation("DecisionFolderCreated")
+
+  @@unique([userId, path])
+  @@index([userId, parentId])
+  @@map("Folder")
 }
 
 model Item {
-  id                      String   @id @default(cuid())
-  user_id                 String   // tenancy-ready from day one
-  content_hash            String   @unique
-  source                  String   // 'downloads' | 'gmail'
-  status                  String   // 'ignored' | 'uncertain' | 'certain' | 'resolved' | 'filed'
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Metadata
-  filename                String?
-  mime_type               String?
-  size_bytes              Int?
-  source_metadata         Json?    // email headers, sender, subject etc.
+  // Source file (local FS)
+  sourcePath         String
+  sha256             String
+  mimeType           String?
+  sizeBytes          Int
 
-  // Classification — CLS-08: full trace stored before any filing
-  classification_trace    Json?    // { stage1: {...}, stage2: {...} }
-  proposed_drive_path     String?
-  confirmed_drive_path    String?
-  drive_inbox_id          String?  // Drive file ID at _Inbox/{content_hash}
-  drive_filed_id          String?  // Drive file ID after resolve
-  resolve_error           String?  // JSON {message, at} — set on Drive move failure; cleared on success
+  capturedAt         DateTime        @default(now())
 
-  // Taxonomy axes
-  axis_type               String?
-  axis_from               String?
-  axis_context            String?
-  axis_type_confidence    Float?
-  axis_from_confidence    Float?
-  axis_context_confidence Float?
+  // State machine
+  status             ItemStatus      @default(pending_classification)
 
-  // Dedup — near-duplicate detection
-  near_duplicate_of       String?
-  near_duplicate_of_item  Item?    @relation("NearDuplicate", fields: [near_duplicate_of], references: [id])
-  near_duplicates         Item[]   @relation("NearDuplicate")
+  // Lease for worker single-flight (managed by /api/items/claim)
+  leasedAt           DateTime?
+  attempts           Int             @default(0)
 
-  // Embedding (Phase 4 — column exists from day one for schema stability)
-  embedding               Unsupported("halfvec(512)")?
+  // Classification output (set by worker via /api/items/[id]/classification)
+  proposalCandidates Json?
+  proposedFolderId   String?
+  proposedNewFolder  String?
+  confidence         Float?
+  classifiedAt       DateTime?
+  extractionKind     ExtractionKind?
+  extractionMs       Int?
+  extractedCharCount Int?
 
-  ingested_at             DateTime @default(now())
-  updated_at              DateTime @updatedAt
+  // Final filing destination
+  folderId           String?
+  folder             Folder?         @relation("ItemFinalFolder", fields: [folderId], references: [id], onDelete: SetNull)
+  finalPath          String?
 
-  @@index([user_id, status])
-  @@index([content_hash])
+  // Failure recovery (Re-add creates a new Item that supersedes the old one)
+  supersededByItemId String?         @unique
+  supersededBy       Item?           @relation("ItemSuperseded", fields: [supersededByItemId], references: [id], onDelete: SetNull)
+  supersedes         Item?           @relation("ItemSuperseded")
+
+  decisions          Decision[]
+
+  @@unique([userId, sha256])
+  @@index([userId, status])
+  @@index([status, leasedAt])
+  @@map("Item")
 }
 
-model GmailCursor {
-  id                      String    @id @default(cuid())
-  user_id                 String    @unique
-  last_history_id         String?
-  last_successful_poll_at DateTime?
-  updated_at              DateTime  @updatedAt
-}
+model Decision {
+  id                 String         @id @default(cuid())
+  itemId             String
+  item               Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model TaxonomyLabel {
-  id         String    @id @default(cuid())
-  user_id    String
-  axis       String    // 'type' | 'from' | 'context'
-  name       String
-  item_count Int       @default(0)
-  last_used  DateTime?
-  deprecated Boolean   @default(false)
-  created_at DateTime  @default(now())
+  action             DecisionAction
+  fromFolderId       String?
+  fromFolder         Folder?        @relation("DecisionFromFolder", fields: [fromFolderId], references: [id], onDelete: SetNull)
+  toFolderId         String?
+  toFolder           Folder?        @relation("DecisionToFolder", fields: [toFolderId], references: [id], onDelete: SetNull)
+  folderCreatedId    String?
+  folderCreated      Folder?        @relation("DecisionFolderCreated", fields: [folderCreatedId], references: [id], onDelete: SetNull)
+  chosenProposalRank Int?
+  rationale          String?
 
-  @@unique([user_id, axis, name])
-  @@index([user_id, axis])
-}
+  createdAt          DateTime       @default(now())
 
-model MetricSnapshot {
-  id              String   @id @default(cuid())
-  user_id         String
-  captured_at     DateTime @default(now())
-  uncertain_rate  Float    // uncertain items / total items processed that day
-  auto_filed_rate Float    // certain items / (certain + uncertain) items that day
-  total_ingested  Int
-  total_uncertain Int
-  total_certain   Int
-  total_ignored   Int
-
-  @@index([user_id, captured_at])
-}
-
-model TaxonomyMergeProposal {
-  id                  String   @id @default(cuid())
-  user_id             String
-  axis                String   // 'type' | 'from' | 'context' | 'rule'
-  a                   String   // source label name
-  b                   String   // target label name
-  evidence            String   // human-readable evidence string
-  suggested_canonical String
-  status              String   @default("pending") // 'pending' | 'accepted' | 'rejected'
-  created_at          DateTime @default(now())
-  updated_at          DateTime @updatedAt
-
-  @@index([user_id, status])
-  @@index([user_id, axis])
-}
-
-model Rule {
-  id               String    @id @default(cuid())
-  user_id          String
-  text             String    // full predicate string, e.g. 'ext=dmg size>1MB → ignore'
-  prefilter_bucket String    // key derived from rule predicates for bucket grouping, e.g. 'ext:dmg'
-  fires            Int       @default(0)
-  last_fired_at    DateTime?
-  provenance       String    @default("manual")
-  status           String    @default("active") // 'active' | 'dormant' (computed at read time, stored for fast filter)
-  created_at       DateTime  @default(now())
-  updated_at       DateTime  @updatedAt
-
-  @@index([user_id, status])
-  @@index([user_id, prefilter_bucket])
-}
-
-model RuleConsolidationProposal {
-  id           String   @id @default(cuid())
-  user_id      String
-  rule_a_id    String
-  rule_b_id    String
-  evidence     String
-  status       String   @default("pending") // 'pending' | 'accepted' | 'rejected'
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
-
-  @@index([user_id, status])
-}
-
-model IdentityProfile {
-  id         String   @id @default(cuid())
-  user_id    String
-  name       String
-  type       String   // free-text e.g. "owner", "company", "partner"
-  email      String?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@unique([user_id, name])
-  @@index([user_id, type])
+  @@index([itemId, createdAt])
+  @@map("Decision")
 }
