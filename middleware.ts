@@ -23,6 +23,7 @@ const isWorkerRoute = createRouteMatcher([
   '/api/items/(.*)/move-failed',
   '/api/items/(.*)/source-missing',
   '/api/items/(.*)/unsupported',
+  '/api/items/(.*)/chunks',
   '/api/taxonomy',  // worker reads taxonomy; also reachable from the browser
 ])
 

@@ -18,6 +18,9 @@ const REFRESH_MARGIN_MS = 60_000  // refresh 60s before expiry
 
 type CachedToken = { value: string; expiresAt: number }
 let cached: CachedToken | null = null
+// Shared in-flight mint so concurrent loops don't each hit Clerk independently
+// when the cache is empty/stale. First caller starts the mint; others await it.
+let inFlightMint: Promise<string> | null = null
 
 async function mintM2MToken(): Promise<string> {
   const secret = process.env.CLERK_MACHINE_SECRET_KEY
@@ -46,7 +49,15 @@ async function getM2MToken(): Promise<string> {
   if (cached && Date.now() < cached.expiresAt - REFRESH_MARGIN_MS) {
     return cached.value
   }
-  return mintM2MToken()
+  if (inFlightMint) return inFlightMint
+  inFlightMint = (async () => {
+    try {
+      return await mintM2MToken()
+    } finally {
+      inFlightMint = null
+    }
+  })()
+  return inFlightMint
 }
 
 export async function apiFetch(

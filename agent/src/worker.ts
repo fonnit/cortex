@@ -1,10 +1,12 @@
-// Cortex worker — stateless poll loops (classify + move).
+// Cortex worker — three stateless poll loops (classify + move + embed).
 //
-// Each tick: POST /api/items/claim → if 200, process; if 204, sleep.
+// Each loop ticks independently via Promise.all; each tick:
+//   POST /api/items/claim?stage=<stage> → if 200, process; if 204, sleep.
 // On any failure, log and leave the server-side lease set; the sweep inside
-// /api/items/claim resets stale leases on the next poll. After 3 attempts the
-// sweep transitions the item to a terminal failure state, surfaced in the UI
-// Failed tab with Retry / Re-add / Delete.
+// /api/items/claim resets stale leases on the next poll. After 3 attempts:
+//   - classify/move: status transitions to a terminal failure state
+//   - embed: sets Item.chunkError, status untouched (classify+move are
+//     decoupled — embed failures don't block triage or move).
 //
 // Runs foreground via `npm run worker` from agent/, or under macOS launchd
 // via agent/launchd/com.cortex.daemon.plist (uses agent/.env.daemon).
@@ -14,13 +16,14 @@ import { extract, type ExtractResult } from './text-extract.js'
 import { classify } from './classify.js'
 import { fetchTaxonomy } from './taxonomy-cache.js'
 import { sha256File } from './hash.js'
+import { chunkText, embed } from './embed.js'
 import { rename, mkdir, stat, access } from 'node:fs/promises'
 import { join, dirname, basename, extname, sep } from 'node:path'
-import { homedir, constants as fsConstants } from 'node:os'
+import { homedir } from 'node:os'
 import * as fsConstantsNS from 'node:fs/promises'
 
 const POLL_MS = 30_000  // 30 seconds between ticks
-const STAGES = ['classification', 'move'] as const
+const STAGES = ['classification', 'move', 'embed'] as const
 
 type Stage = (typeof STAGES)[number]
 
@@ -33,6 +36,8 @@ type ClaimedItem = {
   folderId: string | null
   finalFilename: string | null
   attempts: number
+  // Only present when stage === 'embed' (server strips it otherwise).
+  extractedText?: string | null
 }
 
 async function tickStage(stage: Stage): Promise<'worked' | 'idle' | 'error'> {
@@ -56,6 +61,7 @@ async function tickStage(stage: Stage): Promise<'worked' | 'idle' | 'error'> {
 
   if (stage === 'classification') return await classifyItem(item)
   if (stage === 'move') return await moveItem(item)
+  if (stage === 'embed') return await embedItem(item)
   return 'error'
 }
 
@@ -253,6 +259,47 @@ async function moveItem(item: ClaimedItem): Promise<'worked' | 'error'> {
   return 'worked'
 }
 
+async function embedItem(item: ClaimedItem): Promise<'worked' | 'error'> {
+  // Server only returns extractedText for stage=embed claims, so this should
+  // always be populated. Guard defensively in case of races.
+  const text = (item.extractedText ?? '').trim()
+  if (text.length === 0) {
+    console.error(`[embed] ${item.id} has empty extractedText; skipping`)
+    return 'error'
+  }
+
+  const chunks = chunkText(text)
+  if (chunks.length === 0) {
+    console.error(`[embed] ${item.id} chunkText() produced 0 chunks; skipping`)
+    return 'error'
+  }
+
+  let embeddings: number[][]
+  try {
+    embeddings = await embed(chunks.map((c) => c.text))
+  } catch (e) {
+    console.error(`[embed] ${item.id} OpenAI call failed:`, (e as Error).message)
+    return 'error'  // sweep retries; chunkAttempts caps at 3
+  }
+
+  if (embeddings.length !== chunks.length) {
+    console.error(`[embed] ${item.id} embeddings/chunks mismatch (${embeddings.length} vs ${chunks.length})`)
+    return 'error'
+  }
+
+  const body = {
+    chunks: chunks.map((c, i) => ({ ord: c.ord, text: c.text, embedding: embeddings[i] })),
+  }
+  const res = await apiFetch(`/api/items/${item.id}/chunks`, { method: 'POST', json: body })
+  if (!res.ok) {
+    const t = await res.text().catch(() => '')
+    console.error(`[embed] POST chunks ${res.status}: ${t.slice(0, 200)}`)
+    return 'error'
+  }
+  console.log(`[embed] ${item.id} → ${chunks.length} chunks`)
+  return 'worked'
+}
+
 function resolveArchiveRoot(): string {
   // Prefer iCloud Documents if Desktop & Documents Folders toggle is ON,
   // otherwise fall back to ~/Documents/CortexArchive
@@ -271,25 +318,32 @@ function resolveArchiveRoot(): string {
   return join(localDocs, 'CortexArchive')
 }
 
+async function runLoop(stage: Stage): Promise<void> {
+  // Independent per-stage loop. Drains bursts (immediate next tick on
+  // success), otherwise sleeps the full interval. Network errors get logged
+  // but don't kill the loop; the lease+sweep machinery handles recovery.
+  while (true) {
+    let r: 'worked' | 'idle' | 'error' = 'idle'
+    try {
+      r = await tickStage(stage)
+    } catch (e) {
+      console.error(`[${stage}] tick threw:`, e)
+    }
+    if (r !== 'worked') {
+      await new Promise((res) => setTimeout(res, POLL_MS))
+    }
+  }
+}
+
 async function main() {
-  console.log(`cortex worker starting; poll interval ${POLL_MS}ms`)
+  console.log(`cortex worker starting; poll interval ${POLL_MS}ms; stages: ${STAGES.join(', ')}`)
   console.log(`archive root: ${resolveArchiveRoot()}`)
 
-  // Run both stages in lockstep — each tick checks classify, then move.
-  while (true) {
-    let workedAny = false
-    for (const stage of STAGES) {
-      try {
-        const r = await tickStage(stage)
-        if (r === 'worked') workedAny = true
-      } catch (e) {
-        console.error(`[${stage}] tick threw:`, e)
-      }
-    }
-    // If we did work this round, immediately try another round (drain bursts).
-    // Otherwise sleep the full interval.
-    if (!workedAny) await new Promise((r) => setTimeout(r, POLL_MS))
-  }
+  // Three independent loops in one process. Node's event loop interleaves
+  // them naturally; each is network-bound. Per-stage lease columns
+  // (leasedAt for classify+move; chunkLeasedAt for embed) prevent races on
+  // the same Item.
+  await Promise.all(STAGES.map((s) => runLoop(s)))
 }
 
 main().catch((e) => {

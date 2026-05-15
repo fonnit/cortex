@@ -14,6 +14,7 @@
     "@anthropic-ai/sdk": "^0.91.0",
     "@clerk/backend": "^2.18.0",
     "mammoth": "^1.8.0",
+    "openai": "^6.34.0",
     "pdf-parse": "^1.1.1",
     "zod": "4.3.6"
   },
