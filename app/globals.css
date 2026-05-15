@@ -451,7 +451,10 @@ kbd.cx-kbd {
 .cx-axis {
   border: 1px solid var(--cx-rule); border-radius: 8px;
   background: var(--cx-bg);
-  overflow: hidden;
+  /* `overflow: visible` so the FolderCombobox dropdown (position: absolute)
+     can extend past the axis bottom edge. Children don't otherwise spill,
+     so the rounded corners still look right. */
+  overflow: visible;
 }
 .cx-axis.is-resolved { opacity: .8; background: transparent; border-style: dashed; }
 .cx-axis-head {
