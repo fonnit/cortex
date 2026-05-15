@@ -34,6 +34,7 @@ export async function GET() {
           confidence: true,
           extractionKind: true,
           suggestedFilename: true,
+          finalFilename: true,
         },
       }),
       prisma.item.findMany({

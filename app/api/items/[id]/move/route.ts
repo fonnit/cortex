@@ -7,10 +7,14 @@ import { transitionItem } from '@/lib/transition-item'
 import { requireAuth } from '@/lib/require-auth'
 import { isHttpError } from '@/lib/http-error'
 import { prisma } from '@/lib/prisma'
+import { FinalFilenameSchema } from '@/lib/final-filename'
 
 export const runtime = 'nodejs'
 
-const Body = z.object({ folderId: z.string().min(1) })
+const Body = z.object({
+  folderId: z.string().min(1),
+  finalFilename: FinalFilenameSchema,
+})
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -37,7 +41,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         fromFolderId: current?.proposedFolderId ?? null,
         toFolderId: body.folderId,
       },
-      itemUpdate: { status: 'approved_pending_move', folderId: body.folderId },
+      itemUpdate: {
+        status: 'approved_pending_move',
+        folderId: body.folderId,
+        finalFilename: body.finalFilename,
+      },
     })
 
     return NextResponse.json({ item }, { status: 200 })

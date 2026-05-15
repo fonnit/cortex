@@ -15,7 +15,7 @@ import { classify } from './classify.js'
 import { fetchFolders } from './taxonomy-cache.js'
 import { sha256File } from './hash.js'
 import { rename, mkdir, stat, access } from 'node:fs/promises'
-import { join, dirname, basename, sep } from 'node:path'
+import { join, dirname, basename, extname, sep } from 'node:path'
 import { homedir, constants as fsConstants } from 'node:os'
 import * as fsConstantsNS from 'node:fs/promises'
 
@@ -31,6 +31,7 @@ type ClaimedItem = {
   mimeType: string | null
   sizeBytes: number
   folderId: string | null
+  finalFilename: string | null
   attempts: number
 }
 
@@ -175,7 +176,13 @@ async function moveItem(item: ClaimedItem): Promise<'worked' | 'error'> {
   const archiveRoot = resolveArchiveRoot()
   // target.path is "/Finance/Taxes/2025" — strip leading slash and split.
   const folderDir = join(archiveRoot, ...target.path.replace(/^\/+/, '').split('/'))
-  const finalPath = join(folderDir, basename(item.sourcePath))
+  // Use the user-confirmed finalFilename + the original extension. Fall back to
+  // the source basename if finalFilename is null (legacy rows pre-v2 or any
+  // route that forgot to persist it).
+  const srcBase = basename(item.sourcePath)
+  const ext = extname(srcBase)  // includes leading dot, lowercased upstream of comparisons
+  const destBase = item.finalFilename ? item.finalFilename + ext : srcBase
+  const finalPath = join(folderDir, destBase)
 
   await mkdir(folderDir, { recursive: true })
 

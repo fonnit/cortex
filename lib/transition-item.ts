@@ -30,6 +30,7 @@ export type TransitionInput = {
     status: ItemStatus
     folderId: string | null
     finalPath: string | null
+    finalFilename: string | null
     leasedAt: Date | null
     attempts: number
     supersededByItemId: string | null

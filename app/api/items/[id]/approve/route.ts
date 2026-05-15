@@ -7,11 +7,15 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/require-auth'
 import { isHttpError, HttpError } from '@/lib/http-error'
 import { ensureFolderPath, isValidNewPath } from '@/lib/folder-path'
+import { FinalFilenameSchema } from '@/lib/final-filename'
 import type { Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
 
-const Body = z.object({ chosenProposalRank: z.number().int().min(1).max(5) })
+const Body = z.object({
+  chosenProposalRank: z.number().int().min(1).max(5),
+  finalFilename: FinalFilenameSchema,
+})
 
 const ProposalShape = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('existing'), folderId: z.string(), path: z.string(), confidence: z.number() }),
@@ -58,7 +62,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         })
         const updated = await tx.item.update({
           where: { id },
-          data: { status: 'approved_pending_move', folderId: chosen.folderId },
+          data: {
+            status: 'approved_pending_move',
+            folderId: chosen.folderId,
+            finalFilename: body.finalFilename,
+          },
         })
         return { item: updated, kind: 'existing' as const, folderId: chosen.folderId }
       }
@@ -79,7 +87,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       })
       const updated = await tx.item.update({
         where: { id },
-        data: { status: 'approved_pending_move', folderId: ensured.leafFolderId },
+        data: {
+          status: 'approved_pending_move',
+          folderId: ensured.leafFolderId,
+          finalFilename: body.finalFilename,
+        },
       })
       return {
         item: updated,

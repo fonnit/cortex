@@ -13,6 +13,10 @@ type Proposal =
   | { kind: 'new'; path: string; confidence: number }
 type FolderRow = { id: string; name: string; path: string; parentId: string | null; isSeed: boolean }
 
+type ExtractionKind =
+  | 'plain_text' | 'docx' | 'pdf_text' | 'ocr_image' | 'ocr_pdf'
+  | 'text' | 'image' | 'pdf_native' | 'unsupported'
+
 type PendingItem = {
   id: string
   sourcePath: string
@@ -22,7 +26,9 @@ type PendingItem = {
   proposalCandidates: Proposal[] | null
   proposedFolderId: string | null
   confidence: number | null
-  extractionKind: 'text' | 'image' | 'pdf_native' | 'unsupported' | null
+  extractionKind: ExtractionKind | null
+  suggestedFilename: string | null
+  finalFilename: string | null
 }
 
 type FailedItem = {
@@ -30,7 +36,7 @@ type FailedItem = {
   sourcePath: string
   mimeType: string | null
   status: 'classification_failed' | 'move_failed' | 'source_missing' | 'source_changed' | 'unsupported_type'
-  extractionKind: 'text' | 'image' | 'pdf_native' | 'unsupported' | null
+  extractionKind: ExtractionKind | null
   attempts: number
   capturedAt: string
 }
@@ -54,6 +60,27 @@ function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="cx-kbd">{children}</kbd>
 }
 
+// Mirror of lib/final-filename.ts — strip extension, collapse whitespace,
+// allowlist. Lets the input show real-time errors before POST.
+function sanitizeFilenameDraft(raw: string): { value: string; valid: boolean; reason?: string } {
+  const stripped = raw.replace(/\.[^.]+$/, '').replace(/\s+/g, ' ').trim()
+  if (stripped.length === 0) return { value: '', valid: false, reason: 'required' }
+  if (stripped.length > 60) return { value: stripped, valid: false, reason: 'max 60 chars' }
+  if (!/^[A-Za-z0-9 _-]+$/.test(stripped)) {
+    return { value: stripped, valid: false, reason: 'letters / digits / space / - / _ only' }
+  }
+  return { value: stripped, valid: true }
+}
+
+// Default the input to the model's suggestion; fall back to the source basename
+// (extension stripped) if Haiku didn't supply one (legacy rows pre-v2).
+function defaultFilename(it: PendingItem): string {
+  if (it.finalFilename) return it.finalFilename
+  if (it.suggestedFilename) return it.suggestedFilename
+  const base = it.sourcePath.split('/').pop() ?? ''
+  return base.replace(/\.[^.]+$/, '')
+}
+
 export function TriageView() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<'pending' | 'failed'>('pending')
@@ -62,6 +89,8 @@ export function TriageView() {
   const [createName, setCreateName] = useState('')
   const [createParentId, setCreateParentId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  // Per-item filename draft. Keyed by Item.id. Absent = use defaultFilename(it).
+  const [filenameDrafts, setFilenameDrafts] = useState<Record<string, string>>({})
 
   const { data, refetch } = useQuery<TriageResponse>({
     queryKey: ['triage'],
@@ -79,12 +108,16 @@ export function TriageView() {
     setTimeout(() => setToast(null), 2400)
   }
 
+  // Pull the latest filename for an item — draft if user edited, else default.
+  const currentFilename = (it: PendingItem): string =>
+    filenameDrafts[it.id] ?? defaultFilename(it)
+
   const approve = useMutation({
-    mutationFn: ({ itemId, rank }: { itemId: string; rank: number }) =>
+    mutationFn: ({ itemId, rank, finalFilename }: { itemId: string; rank: number; finalFilename: string }) =>
       fetch(`/api/items/${itemId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chosenProposalRank: rank }),
+        body: JSON.stringify({ chosenProposalRank: rank, finalFilename }),
       }).then(async (r) => {
         if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
       }),
@@ -93,11 +126,11 @@ export function TriageView() {
   })
 
   const move = useMutation({
-    mutationFn: ({ itemId, folderId }: { itemId: string; folderId: string }) =>
+    mutationFn: ({ itemId, folderId, finalFilename }: { itemId: string; folderId: string; finalFilename: string }) =>
       fetch(`/api/items/${itemId}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId }),
+        body: JSON.stringify({ folderId, finalFilename }),
       }).then(async (r) => {
         if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
       }),
@@ -115,11 +148,11 @@ export function TriageView() {
   })
 
   const createFolder = useMutation({
-    mutationFn: ({ itemId, name, parentId }: { itemId: string; name: string; parentId: string | null }) =>
+    mutationFn: ({ itemId, name, parentId, finalFilename }: { itemId: string; name: string; parentId: string | null; finalFilename: string }) =>
       fetch(`/api/items/${itemId}/create-folder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, parentId }),
+        body: JSON.stringify({ name, parentId, finalFilename }),
       }).then(async (r) => {
         if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
       }),
@@ -158,7 +191,9 @@ export function TriageView() {
       if (!first || !first.proposalCandidates) return
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < first.proposalCandidates.length) {
-        approve.mutate({ itemId: first.id, rank: idx + 1 })
+        const s = sanitizeFilenameDraft(currentFilename(first))
+        if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+        approve.mutate({ itemId: first.id, rank: idx + 1, finalFilename: s.value })
       } else if (e.key.toLowerCase() === 'r') {
         reject.mutate(first.id)
       } else if (e.key.toLowerCase() === 'n') {
@@ -167,7 +202,7 @@ export function TriageView() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pending, tab])
+  }, [pending, tab, filenameDrafts])
 
   return (
     <div className="cx-triage-inline">
@@ -237,6 +272,38 @@ export function TriageView() {
 
                   {isActive && top && (
                     <div className="cx-axes">
+                      {(() => {
+                        const draft = currentFilename(it)
+                        const s = sanitizeFilenameDraft(draft)
+                        const ext = (it.sourcePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase()
+                        return (
+                          <div className="cx-axis">
+                            <div className="cx-axis-head">
+                              <span className="cx-axis-name">Filename on disk</span>
+                              {!s.valid && (
+                                <span className="cx-axis-status" style={{ color: '#c33' }}>
+                                  {s.reason}
+                                </span>
+                              )}
+                            </div>
+                            <div className="cx-axis-body">
+                              <input
+                                className="cx-ask-input"
+                                type="text"
+                                value={draft}
+                                onChange={(e) =>
+                                  setFilenameDrafts((prev) => ({ ...prev, [it.id]: e.target.value }))
+                                }
+                                placeholder={it.suggestedFilename ?? 'enter a filename'}
+                                spellCheck={false}
+                                style={{ minWidth: '24rem' }}
+                              />
+                              <span className="cx-mono cx-muted">{ext || '(no extension)'}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
                       <div className="cx-axis">
                         <div className="cx-axis-head">
                           <span className="cx-axis-name">Top proposal</span>
@@ -247,7 +314,11 @@ export function TriageView() {
                         <div className="cx-axis-body">
                           <button
                             className="cx-action cx-action-primary"
-                            onClick={() => approve.mutate({ itemId: it.id, rank: 1 })}
+                            onClick={() => {
+                              const s = sanitizeFilenameDraft(currentFilename(it))
+                              if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                              approve.mutate({ itemId: it.id, rank: 1, finalFilename: s.value })
+                            }}
                           >
                             <Kbd>1</Kbd>{' '}
                             {top.kind === 'existing'
@@ -270,7 +341,11 @@ export function TriageView() {
                                 <button
                                   key={key}
                                   className="cx-action cx-action-sm cx-action-ghost"
-                                  onClick={() => approve.mutate({ itemId: it.id, rank })}
+                                  onClick={() => {
+                                    const s = sanitizeFilenameDraft(currentFilename(it))
+                                    if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                                    approve.mutate({ itemId: it.id, rank, finalFilename: s.value })
+                                  }}
                                 >
                                   <Kbd>{rank}</Kbd>{' '}
                                   {c.kind === 'new' && <span className="cx-mono cx-muted">[new] </span>}
@@ -320,8 +395,10 @@ export function TriageView() {
                           if (e.key === 'Enter') {
                             const value = (e.target as HTMLInputElement).value.trim()
                             const f = folders.find((f) => f.path === value)
-                            if (f) move.mutate({ itemId: it.id, folderId: f.id })
-                            else showToast('no folder with that exact path')
+                            if (!f) { showToast('no folder with that exact path'); return }
+                            const s = sanitizeFilenameDraft(currentFilename(it))
+                            if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                            move.mutate({ itemId: it.id, folderId: f.id, finalFilename: s.value })
                           } else if (e.key === 'Escape') {
                             setPickerOpenFor(null)
                           }
@@ -367,7 +444,9 @@ export function TriageView() {
                         onChange={(e) => setCreateName(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && createName.trim()) {
-                            createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId })
+                            const s = sanitizeFilenameDraft(currentFilename(it))
+                            if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                            createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId, finalFilename: s.value })
                           } else if (e.key === 'Escape') {
                             setCreateOpenFor(null)
                           }
@@ -377,7 +456,11 @@ export function TriageView() {
                       <button
                         className="cx-action cx-action-sm cx-action-primary"
                         disabled={!createName.trim()}
-                        onClick={() => createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId })}
+                        onClick={() => {
+                          const s = sanitizeFilenameDraft(currentFilename(it))
+                          if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                          createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId, finalFilename: s.value })
+                        }}
                       >Create + file</button>
                       <button className="cx-linkbtn" onClick={() => setCreateOpenFor(null)}>cancel</button>
                     </div>

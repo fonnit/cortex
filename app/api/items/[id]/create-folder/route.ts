@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/require-auth'
 import { isHttpError, HttpError } from '@/lib/http-error'
 import { computeFolderPath } from '@/lib/taxonomy'
+import { FinalFilenameSchema } from '@/lib/final-filename'
 import type { Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
@@ -20,7 +21,11 @@ const FolderName = z
   .transform((s) => s.replace(/\s+/g, ' '))
   .refine((s) => !['.', '..', '_rejected'].includes(s), 'Reserved name')
 
-const Body = z.object({ name: FolderName, parentId: z.string().nullable().optional() })
+const Body = z.object({
+  name: FolderName,
+  parentId: z.string().nullable().optional(),
+  finalFilename: FinalFilenameSchema,
+})
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -61,7 +66,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       const updatedItem = await tx.item.update({
         where: { id },
-        data: { status: 'approved_pending_move', folderId: folder.id },
+        data: {
+          status: 'approved_pending_move',
+          folderId: folder.id,
+          finalFilename: body.finalFilename,
+        },
       })
 
       return { folder, item: updatedItem }
