@@ -194,8 +194,20 @@ kbd.cx-kbd {
   padding: 8px var(--cx-pad) 80px;
   min-height: calc(100vh - 170px);
   position: relative;
+  /* Cap content width on very wide displays so the filename input and
+     proposal buttons stay at a readable width. Topbar stays full-width. */
+  max-width: 1100px;
+  margin: 0 auto;
 }
 .cx-density-compact .cx-triage-inline { padding: 4px var(--cx-pad) 40px; }
+
+/* Filename-on-disk row: input + extension label inline on the same line. */
+.cx-filename-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cx-filename-row .cx-ask-input { margin-bottom: 0; flex: 1; min-width: 0; }
 
 .cx-triage-topbar {
   display: flex; align-items: center; justify-content: space-between;

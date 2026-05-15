@@ -198,7 +198,8 @@ export function TriageView() {
       } else if (e.key.toLowerCase() === 'r') {
         reject.mutate(first.id)
       } else if (e.key.toLowerCase() === 'n') {
-        setCreateOpenFor(first.id); setCreateParentId(null); setCreateName('')
+        setCreateOpenFor(first.id); setPickerOpenFor(null)
+        setCreateParentId(null); setCreateName('')
       }
     }
     window.addEventListener('keydown', onKey)
@@ -288,18 +289,19 @@ export function TriageView() {
                               )}
                             </div>
                             <div className="cx-axis-body">
-                              <input
-                                className="cx-ask-input"
-                                type="text"
-                                value={draft}
-                                onChange={(e) =>
-                                  setFilenameDrafts((prev) => ({ ...prev, [it.id]: e.target.value }))
-                                }
-                                placeholder={it.suggestedFilename ?? 'enter a filename'}
-                                spellCheck={false}
-                                style={{ minWidth: '24rem' }}
-                              />
-                              <span className="cx-mono cx-muted">{ext || '(no extension)'}</span>
+                              <div className="cx-filename-row">
+                                <input
+                                  className="cx-ask-input"
+                                  type="text"
+                                  value={draft}
+                                  onChange={(e) =>
+                                    setFilenameDrafts((prev) => ({ ...prev, [it.id]: e.target.value }))
+                                  }
+                                  placeholder={it.suggestedFilename ?? 'enter a filename'}
+                                  spellCheck={false}
+                                />
+                                <span className="cx-mono cx-muted">{ext || '(no extension)'}</span>
+                              </div>
                             </div>
                           </div>
                         )
@@ -361,7 +363,10 @@ export function TriageView() {
                       <div className="cx-card-actions">
                         <button
                           className="cx-action cx-action-ghost"
-                          onClick={() => setPickerOpenFor(it.id)}
+                          onClick={() => {
+                            setPickerOpenFor(it.id)
+                            setCreateOpenFor(null)
+                          }}
                         >
                           Pick different folder
                         </button>
@@ -369,6 +374,7 @@ export function TriageView() {
                           className="cx-action cx-action-ghost"
                           onClick={() => {
                             setCreateOpenFor(it.id)
+                            setPickerOpenFor(null)
                             setCreateParentId(null)
                             setCreateName('')
                           }}
