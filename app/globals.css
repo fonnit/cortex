@@ -640,7 +640,11 @@ kbd.cx-kbd {
   gap: 0;
   min-height: calc(100vh - 170px);
 }
-.cx-ask-main { padding: 32px var(--cx-pad) 80px; max-width: 840px; }
+.cx-ask-main {
+  padding: 32px var(--cx-pad) 80px;
+  max-width: 840px;
+  margin: 0 auto;
+}
 .cx-ask-input {
   display: flex; align-items: center; gap: 12px;
   padding: 14px 16px;

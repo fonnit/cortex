@@ -82,6 +82,45 @@ function defaultFilename(it: PendingItem): string {
   return base.replace(/\.[^.]+$/, '')
 }
 
+// The user's currently-selected destination for an item. Three shapes:
+//   - 'rank': accept one of the model's ranked proposals (existing or new)
+//   - 'folder': override with a specific existing folder (from FolderCombobox)
+//   - 'newPath': override with a typed nested path (resolved to absolute)
+// Default per-item is { kind: 'rank', rank: 1 } — i.e., the top proposal.
+type FolderChoice =
+  | { kind: 'rank'; rank: number }
+  | { kind: 'folder'; folderId: string }
+  | { kind: 'newPath'; absolutePath: string }
+
+function destinationLabel(
+  choice: FolderChoice,
+  it: PendingItem,
+  folderById: Record<string, FolderRow>,
+): string {
+  if (choice.kind === 'rank') {
+    return it.proposalCandidates?.[choice.rank - 1]?.path ?? '(no proposal)'
+  }
+  if (choice.kind === 'folder') return folderById[choice.folderId]?.path ?? '(unknown folder)'
+  return choice.absolutePath
+}
+
+// Resolve a "create new folder" panel state into an absolute path:
+//   "fonnit/branding" under parent /business → "/business/fonnit/branding"
+//   "fonnit/branding" with no parent          → "/fonnit/branding"
+function resolveCreatePath(
+  name: string,
+  parentId: string | null,
+  folderById: Record<string, FolderRow>,
+): string {
+  const cleaned = name.trim().replace(/^\/+|\/+$/g, '').replace(/\/{2,}/g, '/')
+  if (!cleaned) return ''
+  if (parentId) {
+    const parent = folderById[parentId]
+    if (parent) return parent.path.replace(/\/$/, '') + '/' + cleaned
+  }
+  return '/' + cleaned
+}
+
 export function TriageView() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<'pending' | 'failed'>('pending')
@@ -92,6 +131,8 @@ export function TriageView() {
   const [toast, setToast] = useState<string | null>(null)
   // Per-item filename draft. Keyed by Item.id. Absent = use defaultFilename(it).
   const [filenameDrafts, setFilenameDrafts] = useState<Record<string, string>>({})
+  // Per-item folder selection. Keyed by Item.id. Absent = default to rank 1.
+  const [folderChoices, setFolderChoices] = useState<Record<string, FolderChoice>>({})
 
   const { data, refetch } = useQuery<TriageResponse>({
     queryKey: ['triage'],
@@ -112,6 +153,32 @@ export function TriageView() {
   // Pull the latest filename for an item — draft if user edited, else default.
   const currentFilename = (it: PendingItem): string =>
     filenameDrafts[it.id] ?? defaultFilename(it)
+
+  // Pull the latest folder choice for an item — explicit if user changed it,
+  // else the default (top proposal, rank 1).
+  const currentChoice = (it: PendingItem): FolderChoice =>
+    folderChoices[it.id] ?? { kind: 'rank', rank: 1 }
+
+  // Commit the current selection. Branches by choice kind to the correct
+  // backend route. All three paths accept finalFilename.
+  function commitApprove(it: PendingItem) {
+    const s = sanitizeFilenameDraft(currentFilename(it))
+    if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+    const choice = currentChoice(it)
+    if (choice.kind === 'rank') {
+      const candidate = it.proposalCandidates?.[choice.rank - 1]
+      if (!candidate) { showToast('proposal not found'); return }
+      approve.mutate({ itemId: it.id, rank: choice.rank, finalFilename: s.value })
+    } else if (choice.kind === 'folder') {
+      move.mutate({ itemId: it.id, folderId: choice.folderId, finalFilename: s.value })
+    } else {
+      // newPath: send the absolute path (sans leading /) with parentId=null;
+      // the create-folder route handles nested creation via ensureFolderPath.
+      const rel = choice.absolutePath.replace(/^\/+/, '')
+      if (!rel) { showToast('enter a folder path'); return }
+      createFolder.mutate({ itemId: it.id, name: rel, parentId: null, finalFilename: s.value })
+    }
+  }
 
   const approve = useMutation({
     mutationFn: ({ itemId, rank, finalFilename }: { itemId: string; rank: number; finalFilename: string }) =>
@@ -181,7 +248,14 @@ export function TriageView() {
     onSuccess: () => { showToast('deleted'); queryClient.invalidateQueries({ queryKey: ['triage'] }) },
   })
 
-  // Keyboard shortcuts on the pending tab: 1-5 picks proposal N on the first card.
+  // Keyboard shortcuts on the pending tab. Distinct from form-input typing:
+  //   1-5  select rank N as the destination (no submit)
+  //   Enter approve with the current destination + filename
+  //   R    reject
+  //   N    open the create-new-folder panel
+  // Inputs/textareas swallow these on their own (so typing in the filename
+  // field doesn't trigger global shortcuts), except Enter — handled inline
+  // on the filename input via onKeyDown.
   useEffect(() => {
     if (tab !== 'pending') return
     const onKey = (e: KeyboardEvent) => {
@@ -192,9 +266,9 @@ export function TriageView() {
       if (!first || !first.proposalCandidates) return
       const idx = Number(e.key) - 1
       if (idx >= 0 && idx < first.proposalCandidates.length) {
-        const s = sanitizeFilenameDraft(currentFilename(first))
-        if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-        approve.mutate({ itemId: first.id, rank: idx + 1, finalFilename: s.value })
+        setFolderChoices((prev) => ({ ...prev, [first.id]: { kind: 'rank', rank: idx + 1 } }))
+      } else if (e.key === 'Enter') {
+        commitApprove(first)
       } else if (e.key.toLowerCase() === 'r') {
         reject.mutate(first.id)
       } else if (e.key.toLowerCase() === 'n') {
@@ -204,7 +278,9 @@ export function TriageView() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [pending, tab, filenameDrafts])
+    // commitApprove closes over state; rebind when relevant pieces change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, tab, filenameDrafts, folderChoices])
 
   return (
     <div className="cx-triage-inline">
@@ -224,7 +300,8 @@ export function TriageView() {
           </button>
         </div>
         <div className="cx-legend">
-          <span><Kbd>1-5</Kbd> approve rank N</span>
+          <span><Kbd>1-5</Kbd> select rank</span>
+          <span><Kbd>↵</Kbd> approve</span>
           <span><Kbd>N</Kbd> new folder</span>
           <span><Kbd>R</Kbd> reject</span>
         </div>
@@ -272,83 +349,65 @@ export function TriageView() {
                     </div>
                   </div>
 
-                  {isActive && top && (
-                    <div className="cx-axes">
-                      {(() => {
-                        const draft = currentFilename(it)
-                        const s = sanitizeFilenameDraft(draft)
-                        const ext = (it.sourcePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase()
-                        return (
-                          <div className="cx-axis">
-                            <div className="cx-axis-head">
-                              <span className="cx-axis-name">Filename on disk</span>
-                              {!s.valid && (
-                                <span className="cx-axis-status" style={{ color: '#c33' }}>
-                                  {s.reason}
-                                </span>
-                              )}
-                            </div>
-                            <div className="cx-axis-body">
-                              <div className="cx-filename-row">
-                                <input
-                                  className="cx-ask-input"
-                                  type="text"
-                                  value={draft}
-                                  onChange={(e) =>
-                                    setFilenameDrafts((prev) => ({ ...prev, [it.id]: e.target.value }))
-                                  }
-                                  placeholder={it.suggestedFilename ?? 'enter a filename'}
-                                  spellCheck={false}
-                                />
-                                <span className="cx-mono cx-muted">{ext || '(no extension)'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })()}
+                  {isActive && top && (() => {
+                    const draft = currentFilename(it)
+                    const s = sanitizeFilenameDraft(draft)
+                    const ext = (it.sourcePath.match(/\.[^./]+$/)?.[0] ?? '').toLowerCase()
+                    const choice = currentChoice(it)
+                    const destLabel = destinationLabel(choice, it, folderById)
 
-                      <div className="cx-axis">
-                        <div className="cx-axis-head">
-                          <span className="cx-axis-name">Top proposal</span>
-                          <span className="cx-axis-status cx-axis-confident">
-                            confidence {(top.confidence * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                        <div className="cx-axis-body">
-                          <button
-                            className="cx-action cx-action-primary"
-                            onClick={() => {
-                              const s = sanitizeFilenameDraft(currentFilename(it))
-                              if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                              approve.mutate({ itemId: it.id, rank: 1, finalFilename: s.value })
-                            }}
-                          >
-                            <Kbd>1</Kbd>{' '}
-                            {top.kind === 'existing'
-                              ? <>Approve into <span className="cx-mono">{top.path}</span></>
-                              : <>Create + file in <span className="cx-mono">{top.path}</span></>}
-                          </button>
-                        </div>
-                      </div>
-
-                      {candidates.length > 1 && (
+                    return (
+                      <div className="cx-axes">
+                        {/* Filename row */}
                         <div className="cx-axis">
                           <div className="cx-axis-head">
-                            <span className="cx-axis-name">Other ranked options</span>
+                            <span className="cx-axis-name">Filename on disk</span>
+                            {!s.valid && (
+                              <span className="cx-axis-status" style={{ color: '#c33' }}>
+                                {s.reason}
+                              </span>
+                            )}
                           </div>
                           <div className="cx-axis-body">
-                            {candidates.slice(1).map((c, idx) => {
-                              const rank = idx + 2
+                            <div className="cx-filename-row">
+                              <input
+                                className="cx-ask-input"
+                                type="text"
+                                value={draft}
+                                onChange={(e) =>
+                                  setFilenameDrafts((prev) => ({ ...prev, [it.id]: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    commitApprove(it)
+                                  }
+                                }}
+                                placeholder={it.suggestedFilename ?? 'enter a filename'}
+                                spellCheck={false}
+                              />
+                              <span className="cx-mono cx-muted">{ext || '(no extension)'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Where to file: all proposals + picker + create-folder all SELECT, none submit. */}
+                        <div className="cx-axis">
+                          <div className="cx-axis-head">
+                            <span className="cx-axis-name">Where to file</span>
+                          </div>
+                          <div className="cx-axis-body">
+                            {candidates.map((c, idx) => {
+                              const rank = idx + 1
+                              const selected = choice.kind === 'rank' && choice.rank === rank
                               const key = c.kind === 'existing' ? c.folderId : `new-${c.path}`
                               return (
                                 <button
                                   key={key}
-                                  className="cx-action cx-action-sm cx-action-ghost"
-                                  onClick={() => {
-                                    const s = sanitizeFilenameDraft(currentFilename(it))
-                                    if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                                    approve.mutate({ itemId: it.id, rank, finalFilename: s.value })
-                                  }}
+                                  className={'cx-action cx-action-sm ' + (selected ? 'cx-action-primary' : 'cx-action-ghost')}
+                                  onClick={() =>
+                                    setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'rank', rank } }))
+                                  }
                                 >
                                   <Kbd>{rank}</Kbd>{' '}
                                   {c.kind === 'new' && <span className="cx-mono cx-muted">[new] </span>}
@@ -356,103 +415,153 @@ export function TriageView() {
                                 </button>
                               )
                             })}
+
+                            {/* Show overrides (picked existing folder / typed new path) as selectable too. */}
+                            {choice.kind === 'folder' && (
+                              <button
+                                className="cx-action cx-action-sm cx-action-primary"
+                                onClick={() => { /* no-op; it's already selected */ }}
+                              >
+                                {folderById[choice.folderId]?.path ?? '(unknown)'} <span className="cx-mono cx-muted">(picked)</span>
+                              </button>
+                            )}
+                            {choice.kind === 'newPath' && (
+                              <button
+                                className="cx-action cx-action-sm cx-action-primary"
+                                onClick={() => { /* no-op; it's already selected */ }}
+                              >
+                                <span className="cx-mono cx-muted">[new]</span> {choice.absolutePath} <span className="cx-mono cx-muted">(typed)</span>
+                              </button>
+                            )}
+
+                            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                              <button
+                                className="cx-linkbtn"
+                                onClick={() => {
+                                  setPickerOpenFor(it.id === pickerOpenFor ? null : it.id)
+                                  setCreateOpenFor(null)
+                                }}
+                              >
+                                {pickerOpenFor === it.id ? 'close picker' : 'pick a different folder'}
+                              </button>
+                              <button
+                                className="cx-linkbtn"
+                                onClick={() => {
+                                  setCreateOpenFor(it.id === createOpenFor ? null : it.id)
+                                  setPickerOpenFor(null)
+                                  setCreateParentId(null)
+                                  setCreateName('')
+                                }}
+                              >
+                                {createOpenFor === it.id ? 'close new folder' : <><Kbd>N</Kbd> create a new folder</>}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      )}
 
-                      <div className="cx-card-actions">
-                        <button
-                          className="cx-action cx-action-ghost"
-                          onClick={() => {
-                            setPickerOpenFor(it.id)
-                            setCreateOpenFor(null)
-                          }}
-                        >
-                          Pick different folder
-                        </button>
-                        <button
-                          className="cx-action cx-action-ghost"
-                          onClick={() => {
-                            setCreateOpenFor(it.id)
-                            setPickerOpenFor(null)
-                            setCreateParentId(null)
-                            setCreateName('')
-                          }}
-                        >
-                          <Kbd>N</Kbd> Create new folder
-                        </button>
-                        <button
-                          className="cx-action cx-action-ghost"
-                          onClick={() => reject.mutate(it.id)}
-                        >
-                          <Kbd>R</Kbd> Reject
-                        </button>
+                        {/* Single commit row. Approve uses the current selection. */}
+                        <div className="cx-card-actions">
+                          <button
+                            className="cx-action cx-action-primary"
+                            onClick={() => commitApprove(it)}
+                          >
+                            <Kbd>↵</Kbd>{' '}
+                            Approve into <span className="cx-mono">{destLabel}</span>
+                          </button>
+                          <button
+                            className="cx-action cx-action-ghost"
+                            onClick={() => reject.mutate(it.id)}
+                          >
+                            <Kbd>R</Kbd> Reject
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {pickerOpenFor === it.id && (
-                    <div className="cx-prop-newinput" style={{ marginTop: '1rem' }}>
+                    <div className="cx-prop-newinput" style={{ marginTop: '0.5rem' }}>
+                      <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
+                        Pick a folder. It becomes the destination; click Approve to commit.
+                      </div>
                       <FolderCombobox
                         folders={folders}
-                        value={null}
+                        value={currentChoice(it).kind === 'folder' ? (currentChoice(it) as { kind: 'folder'; folderId: string }).folderId : null}
                         autoFocus
                         placeholder="Type to filter folders, e.g. finance"
-                        onChange={() => { /* selection committed via onConfirm */ }}
+                        onChange={(folderId) => {
+                          if (folderId) {
+                            setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
+                          }
+                        }}
                         onConfirm={(folderId) => {
-                          if (!folderId) return
-                          const s = sanitizeFilenameDraft(currentFilename(it))
-                          if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                          move.mutate({ itemId: it.id, folderId, finalFilename: s.value })
+                          if (folderId) {
+                            setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
+                            setPickerOpenFor(null)
+                          }
                         }}
                         onEscape={() => setPickerOpenFor(null)}
                       />
-                      <button className="cx-linkbtn" onClick={() => setPickerOpenFor(null)}>cancel</button>
                     </div>
                   )}
 
-                  {createOpenFor === it.id && (
-                    <div className="cx-prop-newinput" style={{ marginTop: '1rem' }}>
-                      <label className="cx-card-sub">
-                        Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
-                      </label>
-                      <FolderCombobox
-                        folders={folders}
-                        value={createParentId}
-                        allowNone
-                        noneLabel="(top-level)"
-                        placeholder="Parent folder path or leave blank for top-level"
-                        onChange={(folderId) => setCreateParentId(folderId)}
-                      />
-                      <input
-                        className="cx-ask-input"
-                        type="text"
-                        placeholder="New folder — single name or nested path (e.g. fonnit/branding)"
-                        value={createName}
-                        onChange={(e) => setCreateName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && createName.trim()) {
-                            const s = sanitizeFilenameDraft(currentFilename(it))
-                            if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                            createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId, finalFilename: s.value })
-                          } else if (e.key === 'Escape') {
-                            setCreateOpenFor(null)
-                          }
-                        }}
-                        autoFocus
-                      />
-                      <button
-                        className="cx-action cx-action-sm cx-action-primary"
-                        disabled={!createName.trim()}
-                        onClick={() => {
-                          const s = sanitizeFilenameDraft(currentFilename(it))
-                          if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                          createFolder.mutate({ itemId: it.id, name: createName.trim(), parentId: createParentId, finalFilename: s.value })
-                        }}
-                      >Create + file</button>
-                      <button className="cx-linkbtn" onClick={() => setCreateOpenFor(null)}>cancel</button>
-                    </div>
-                  )}
+                  {createOpenFor === it.id && (() => {
+                    // As user types / picks a parent, resolve the absolute path and
+                    // sync it into the current folder choice. Approve commits.
+                    const absolutePath = resolveCreatePath(createName, createParentId, folderById)
+                    const syncChoice = (path: string) => {
+                      if (path) {
+                        setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'newPath', absolutePath: path } }))
+                      }
+                    }
+                    return (
+                      <div className="cx-prop-newinput" style={{ marginTop: '0.5rem' }}>
+                        <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
+                          New folder. Pick a parent + type a name (or nested path). Click Approve to create + file.
+                        </div>
+                        <label className="cx-card-sub">
+                          Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
+                        </label>
+                        <FolderCombobox
+                          folders={folders}
+                          value={createParentId}
+                          allowNone
+                          noneLabel="(top-level)"
+                          placeholder="Parent folder path or leave blank for top-level"
+                          onChange={(folderId) => {
+                            setCreateParentId(folderId)
+                            syncChoice(resolveCreatePath(createName, folderId, folderById))
+                          }}
+                        />
+                        <input
+                          className="cx-ask-input"
+                          type="text"
+                          placeholder="New folder — single name or nested path (e.g. fonnit/branding)"
+                          value={createName}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setCreateName(v)
+                            syncChoice(resolveCreatePath(v, createParentId, folderById))
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              syncChoice(absolutePath)
+                              commitApprove(it)
+                            } else if (e.key === 'Escape') {
+                              setCreateOpenFor(null)
+                            }
+                          }}
+                          autoFocus
+                        />
+                        {absolutePath && (
+                          <div className="cx-card-sub">
+                            Will create: <span className="cx-mono">{absolutePath}</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </li>
             )
