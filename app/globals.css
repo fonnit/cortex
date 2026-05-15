@@ -923,3 +923,54 @@ kbd.cx-kbd {
   font-size: 13px;
   list-style: none;
 }
+
+/* ── Ask page — answer card + citations ──────────────────── */
+.cx-citations {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cx-rule);
+}
+.cx-citation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cx-citation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cx-citation-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--cx-panel);
+  border: 1px solid var(--cx-rule);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--cx-ink);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.cx-citation-pill:hover { background: var(--cx-ink-10); }
+.cx-citation-pill.is-open {
+  border-color: var(--cx-accent-soft);
+  background: var(--cx-ink-10);
+}
+.cx-citation-snippet {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--cx-bg);
+  border: 1px solid var(--cx-rule);
+  border-radius: 6px;
+  font-family: var(--cx-ff-mono);
+  font-size: 12.5px;
+  color: var(--cx-ink-80);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
