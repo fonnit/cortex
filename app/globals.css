@@ -561,6 +561,16 @@ kbd.cx-kbd {
 .cx-action-ghost { background: transparent; border-color: transparent; color: var(--cx-ink-60); }
 .cx-action-ghost:hover { background: var(--cx-ink-10); color: var(--cx-ink); }
 .cx-action-sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+/* Selected state — used for the currently-chosen folder option. Reserved style:
+   no fill (the filled black is for primary commit buttons only), just a ring
+   shadow and a stronger border. Sits on top of .cx-action-ghost. */
+.cx-action-selected {
+  background: var(--cx-panel);
+  color: var(--cx-ink);
+  border-color: var(--cx-accent-ink);
+  box-shadow: 0 0 0 1px var(--cx-accent-ink) inset;
+}
+.cx-action-selected:hover { background: var(--cx-ink-10); }
 
 /* toast */
 .cx-toast {

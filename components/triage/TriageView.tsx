@@ -404,7 +404,7 @@ export function TriageView() {
                               return (
                                 <button
                                   key={key}
-                                  className={'cx-action cx-action-sm ' + (selected ? 'cx-action-primary' : 'cx-action-ghost')}
+                                  className={'cx-action cx-action-sm ' + (selected ? 'cx-action-selected' : 'cx-action-ghost')}
                                   onClick={() =>
                                     setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'rank', rank } }))
                                   }
@@ -416,10 +416,10 @@ export function TriageView() {
                               )
                             })}
 
-                            {/* Show overrides (picked existing folder / typed new path) as selectable too. */}
+                            {/* Show overrides (picked existing folder / typed new path) as selectable chips. */}
                             {choice.kind === 'folder' && (
                               <button
-                                className="cx-action cx-action-sm cx-action-primary"
+                                className="cx-action cx-action-sm cx-action-selected"
                                 onClick={() => { /* no-op; it's already selected */ }}
                               >
                                 {folderById[choice.folderId]?.path ?? '(unknown)'} <span className="cx-mono cx-muted">(picked)</span>
@@ -427,25 +427,25 @@ export function TriageView() {
                             )}
                             {choice.kind === 'newPath' && (
                               <button
-                                className="cx-action cx-action-sm cx-action-primary"
+                                className="cx-action cx-action-sm cx-action-selected"
                                 onClick={() => { /* no-op; it's already selected */ }}
                               >
                                 <span className="cx-mono cx-muted">[new]</span> {choice.absolutePath} <span className="cx-mono cx-muted">(typed)</span>
                               </button>
                             )}
 
-                            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                               <button
-                                className="cx-linkbtn"
+                                className="cx-action cx-action-ghost"
                                 onClick={() => {
                                   setPickerOpenFor(it.id === pickerOpenFor ? null : it.id)
                                   setCreateOpenFor(null)
                                 }}
                               >
-                                {pickerOpenFor === it.id ? 'close picker' : 'pick a different folder'}
+                                {pickerOpenFor === it.id ? 'Close picker' : 'Pick a different folder'}
                               </button>
                               <button
-                                className="cx-linkbtn"
+                                className="cx-action cx-action-ghost"
                                 onClick={() => {
                                   setCreateOpenFor(it.id === createOpenFor ? null : it.id)
                                   setPickerOpenFor(null)
@@ -453,13 +453,95 @@ export function TriageView() {
                                   setCreateName('')
                                 }}
                               >
-                                {createOpenFor === it.id ? 'close new folder' : <><Kbd>N</Kbd> create a new folder</>}
+                                <Kbd>N</Kbd> {createOpenFor === it.id ? 'Close new folder' : 'Create a new folder'}
                               </button>
                             </div>
+
+                            {pickerOpenFor === it.id && (
+                              <div className="cx-prop-newinput" style={{ marginTop: '0.75rem' }}>
+                                <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
+                                  Pick a folder. It becomes the destination; click Approve to commit.
+                                </div>
+                                <FolderCombobox
+                                  folders={folders}
+                                  value={choice.kind === 'folder' ? choice.folderId : null}
+                                  autoFocus
+                                  placeholder="Type to filter folders, e.g. finance"
+                                  onChange={(folderId) => {
+                                    if (folderId) {
+                                      setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
+                                    }
+                                  }}
+                                  onConfirm={(folderId) => {
+                                    if (folderId) {
+                                      setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
+                                      setPickerOpenFor(null)
+                                    }
+                                  }}
+                                  onEscape={() => setPickerOpenFor(null)}
+                                />
+                              </div>
+                            )}
+
+                            {createOpenFor === it.id && (() => {
+                              const absolutePath = resolveCreatePath(createName, createParentId, folderById)
+                              const syncChoice = (path: string) => {
+                                if (path) {
+                                  setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'newPath', absolutePath: path } }))
+                                }
+                              }
+                              return (
+                                <div className="cx-prop-newinput" style={{ marginTop: '0.75rem' }}>
+                                  <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
+                                    New folder. Pick a parent + type a name (or nested path). Click Approve to create + file.
+                                  </div>
+                                  <label className="cx-card-sub">
+                                    Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
+                                  </label>
+                                  <FolderCombobox
+                                    folders={folders}
+                                    value={createParentId}
+                                    allowNone
+                                    noneLabel="(top-level)"
+                                    placeholder="Parent folder path or leave blank for top-level"
+                                    onChange={(folderId) => {
+                                      setCreateParentId(folderId)
+                                      syncChoice(resolveCreatePath(createName, folderId, folderById))
+                                    }}
+                                  />
+                                  <input
+                                    className="cx-ask-input"
+                                    type="text"
+                                    placeholder="New folder — single name or nested path (e.g. fonnit/branding)"
+                                    value={createName}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      setCreateName(v)
+                                      syncChoice(resolveCreatePath(v, createParentId, folderById))
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault()
+                                        syncChoice(absolutePath)
+                                        commitApprove(it)
+                                      } else if (e.key === 'Escape') {
+                                        setCreateOpenFor(null)
+                                      }
+                                    }}
+                                    autoFocus
+                                  />
+                                  {absolutePath && (
+                                    <div className="cx-card-sub">
+                                      Will create: <span className="cx-mono">{absolutePath}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         </div>
 
-                        {/* Single commit row. Approve uses the current selection. */}
+                        {/* Single commit row — always last in the card. */}
                         <div className="cx-card-actions">
                           <button
                             className="cx-action cx-action-primary"
@@ -475,90 +557,6 @@ export function TriageView() {
                             <Kbd>R</Kbd> Reject
                           </button>
                         </div>
-                      </div>
-                    )
-                  })()}
-
-                  {pickerOpenFor === it.id && (
-                    <div className="cx-prop-newinput" style={{ marginTop: '0.5rem' }}>
-                      <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
-                        Pick a folder. It becomes the destination; click Approve to commit.
-                      </div>
-                      <FolderCombobox
-                        folders={folders}
-                        value={currentChoice(it).kind === 'folder' ? (currentChoice(it) as { kind: 'folder'; folderId: string }).folderId : null}
-                        autoFocus
-                        placeholder="Type to filter folders, e.g. finance"
-                        onChange={(folderId) => {
-                          if (folderId) {
-                            setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
-                          }
-                        }}
-                        onConfirm={(folderId) => {
-                          if (folderId) {
-                            setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'folder', folderId } }))
-                            setPickerOpenFor(null)
-                          }
-                        }}
-                        onEscape={() => setPickerOpenFor(null)}
-                      />
-                    </div>
-                  )}
-
-                  {createOpenFor === it.id && (() => {
-                    // As user types / picks a parent, resolve the absolute path and
-                    // sync it into the current folder choice. Approve commits.
-                    const absolutePath = resolveCreatePath(createName, createParentId, folderById)
-                    const syncChoice = (path: string) => {
-                      if (path) {
-                        setFolderChoices((prev) => ({ ...prev, [it.id]: { kind: 'newPath', absolutePath: path } }))
-                      }
-                    }
-                    return (
-                      <div className="cx-prop-newinput" style={{ marginTop: '0.5rem' }}>
-                        <div className="cx-card-sub cx-muted" style={{ marginBottom: 6 }}>
-                          New folder. Pick a parent + type a name (or nested path). Click Approve to create + file.
-                        </div>
-                        <label className="cx-card-sub">
-                          Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
-                        </label>
-                        <FolderCombobox
-                          folders={folders}
-                          value={createParentId}
-                          allowNone
-                          noneLabel="(top-level)"
-                          placeholder="Parent folder path or leave blank for top-level"
-                          onChange={(folderId) => {
-                            setCreateParentId(folderId)
-                            syncChoice(resolveCreatePath(createName, folderId, folderById))
-                          }}
-                        />
-                        <input
-                          className="cx-ask-input"
-                          type="text"
-                          placeholder="New folder — single name or nested path (e.g. fonnit/branding)"
-                          value={createName}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            setCreateName(v)
-                            syncChoice(resolveCreatePath(v, createParentId, folderById))
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              syncChoice(absolutePath)
-                              commitApprove(it)
-                            } else if (e.key === 'Escape') {
-                              setCreateOpenFor(null)
-                            }
-                          }}
-                          autoFocus
-                        />
-                        {absolutePath && (
-                          <div className="cx-card-sub">
-                            Will create: <span className="cx-mono">{absolutePath}</span>
-                          </div>
-                        )}
                       </div>
                     )
                   })()}
