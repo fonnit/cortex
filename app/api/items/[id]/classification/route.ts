@@ -27,11 +27,35 @@ const NewProposal = z.object({
 
 const Proposal = z.discriminatedUnion('kind', [ExistingProposal, NewProposal])
 
+const SuggestedFilenameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(60)
+  .transform((s) => s.replace(/\.[^.]+$/, ''))  // strip any extension Haiku slipped in
+  .refine((s) => /^[A-Za-z0-9 _-]+$/.test(s) && s.length >= 1, {
+    message: 'filename must match /^[A-Za-z0-9 _-]+$/ after extension stripping',
+  })
+
+const ExtractionKindEnum = z.enum([
+  'plain_text',
+  'docx',
+  'pdf_text',
+  'ocr_image',
+  'ocr_pdf',
+  // legacy values, accepted for backward-compat with any v1-format POSTs in flight
+  'text',
+  'image',
+  'pdf_native',
+])
+
 const Body = z.object({
   proposalCandidates: z.array(Proposal).min(1).max(5),
-  extractionKind: z.enum(['text', 'image', 'pdf_native']),
+  suggestedFilename: SuggestedFilenameSchema,
+  extractionKind: ExtractionKindEnum,
   extractionMs: z.number().int().nonnegative(),
   extractedCharCount: z.number().int().nonnegative().nullable(),
+  extractedText: z.string().nullable().optional(),
 })
 
 function isValidNewPath(p: string): boolean {
@@ -93,6 +117,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         extractionKind: body.extractionKind,
         extractionMs: body.extractionMs,
         extractedCharCount: body.extractedCharCount,
+        extractedText: body.extractedText ?? null,
+        suggestedFilename: body.suggestedFilename,
         leasedAt: null,
       },
     })

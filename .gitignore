@@ -28,6 +28,7 @@ skills-lock.json
 
 # macOS
 .DS_Store
+.build
 
 # Logs
 *.log
@@ -35,3 +36,4 @@ npm-debug.log*
 .vercel
 .env*.local
 .env
+

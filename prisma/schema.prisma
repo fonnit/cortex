@@ -1,25 +1,15 @@
-// Cortex v1 — single-operator triage queue. No tenancy.
-// Auth: Clerk session (browser) OR Clerk M2M token (worker). The middleware
-// gates access by CORTEX_OWNER_CLERK_ID env var. There is no User table —
-// "the owner" is whoever is allowed past the gate.
+// Cortex v1 — single-operator triage queue + Q&A.
+// Embeddings: OpenAI text-embedding-3-small @ 512 dims, halfvec in pgvector.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [pgvector(map: "vector", schema: "public")]
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// State machine (Item.status):
-//
-//   pending_classification → pending_review → approved_pending_move → filed
-//                          ↘ rejected
-//
-// Terminal failures: classification_failed, move_failed, source_missing,
-// source_changed, unsupported_type (surfaced in UI Failed tab).
-// ─────────────────────────────────────────────────────────────────────────────
 
 enum ItemStatus {
   pending_classification
@@ -45,10 +35,18 @@ enum DecisionAction {
 }
 
 enum ExtractionKind {
+  // v1 legacy values (kept for historical rows; new ingest uses the source-specific values below)
   text
   image
   pdf_native
   unsupported
+
+  // v2 source-specific values — the source of the extracted text
+  plain_text   // .txt / .md (fs.readFile)
+  docx         // .docx (mammoth)
+  pdf_text     // .pdf via pdf-parse (text layer present)
+  ocr_image    // .png/.jpg/.heic via macOS Vision OCR
+  ocr_pdf      // .pdf via PDFKit page rasterize + Vision OCR (scan-only)
 }
 
 model Folder {
@@ -59,7 +57,7 @@ model Folder {
   children  Folder[] @relation("FolderTree")
 
   name      String
-  path      String  @unique  // global; e.g. /Finance/Taxes/2025
+  path      String  @unique
   isSeed    Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -85,11 +83,11 @@ model Item {
 
   status             ItemStatus      @default(pending_classification)
 
-  // Worker single-flight (managed by /api/items/claim)
+  // Worker single-flight (classify + move stages share these — sequential lifecycle)
   leasedAt           DateTime?
   attempts           Int             @default(0)
 
-  // Classification output (set by worker via /api/items/[id]/classification)
+  // Classification output
   proposalCandidates Json?
   proposedFolderId   String?
   confidence         Float?
@@ -97,11 +95,22 @@ model Item {
   extractionKind     ExtractionKind?
   extractionMs       Int?
   extractedCharCount Int?
+  extractedText      String?         // FULL extracted text — classify truncates at prompt-build only; RAG uses full
+
+  // Filename suggestion + final filename
+  suggestedFilename  String?         // Haiku-proposed, 1-60 chars, no extension
+  finalFilename      String?         // user-confirmed/edited; basename for move
 
   // Final filing destination
   folderId           String?
   folder             Folder?         @relation("ItemFinalFolder", fields: [folderId], references: [id], onDelete: SetNull)
   finalPath          String?
+
+  // Embedding state (independent of classify/move lifecycle — needs its own lease/attempts)
+  chunkedAt          DateTime?       // NULL = not yet chunked + embedded
+  chunkError         String?         // last embedding error (for retry surfacing)
+  chunkLeasedAt      DateTime?
+  chunkAttempts      Int             @default(0)
 
   // Failure recovery (Re-add supersedes Item)
   supersededByItemId String?         @unique
@@ -109,10 +118,28 @@ model Item {
   supersedes         Item?           @relation("ItemSuperseded")
 
   decisions          Decision[]
+  chunks             ItemChunk[]
 
   @@index([status])
   @@index([status, leasedAt])
+  @@index([status, chunkedAt])
+  @@index([chunkedAt, chunkLeasedAt])
   @@map("Item")
+}
+
+model ItemChunk {
+  id        String @id @default(cuid())
+  itemId    String
+  item      Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  ord       Int     // chunk order within item (0, 1, 2, ...)
+  text      String  // raw chunk text (for citation snippets)
+  embedding Unsupported("halfvec(512)")
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId, ord])
+  @@map("ItemChunk")
 }
 
 model Decision {

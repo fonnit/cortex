@@ -1,4 +1,4 @@
-// Cortex worker — two stateless poll loops (classify + move).
+// Cortex worker — stateless poll loops (classify + move).
 //
 // Each tick: POST /api/items/claim → if 200, process; if 204, sleep.
 // On any failure, log and leave the server-side lease set; the sweep inside
@@ -6,7 +6,8 @@
 // sweep transitions the item to a terminal failure state, surfaced in the UI
 // Failed tab with Retry / Re-add / Delete.
 //
-// Runs under macOS launchd (see agent/launchd/com.cortex.consumer.plist).
+// Runs foreground via `npm run worker` from agent/, or under macOS launchd
+// via agent/launchd/com.cortex.daemon.plist (uses agent/.env.daemon).
 
 import { apiFetch } from './clerk-m2m.js'
 import { extract, type ExtractResult } from './text-extract.js'
@@ -113,13 +114,17 @@ async function classifyItem(item: ClaimedItem): Promise<'worked' | 'error'> {
   }
 
   // 4) Post classification back
+  // extracted.kind is always 'text' here (unsupported short-circuits above);
+  // extracted.source carries the actual ExtractionKind enum value.
   const postRes = await apiFetch(`/api/items/${item.id}/classification`, {
     method: 'POST',
     json: {
       proposalCandidates: result.proposals,
-      extractionKind: extracted.kind,
+      suggestedFilename: result.suggestedFilename,
+      extractionKind: extracted.source,
       extractionMs: extracted.ms,
-      extractedCharCount: extracted.kind === 'text' ? extracted.extractedCharCount : null,
+      extractedCharCount: extracted.extractedCharCount,
+      extractedText: extracted.content,
     },
   })
   if (!postRes.ok) {

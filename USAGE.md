@@ -10,13 +10,16 @@ your Mac                                   cortex.fonnit.com (Vercel)
 $ cortex add file.pdf                  POST /api/items
                                        ────────────────►    Item row at pending_classification
 
-worker (launchd, polling every 30s):
+worker (foreground or launchd, polling every 30s):
   POST /api/items/claim                ────────────────►    SELECT FOR UPDATE SKIP LOCKED;
                                                             sweep stale leases, return one row
   reads file from local FS
-  Claude Haiku classify (multimodal)
+  Vision OCR (images + scan PDFs) → text
+  Claude Haiku classify (text mode) → proposals + suggestedFilename
   POST /api/items/[id]/classification  ────────────────►    Item → pending_review,
-                                                            proposalCandidates set
+                                                            proposalCandidates +
+                                                            suggestedFilename +
+                                                            extractedText set
 
 browser triage UI                          GET /api/triage
                                        ◄────────────────    list of pending_review items
@@ -79,7 +82,18 @@ The existing `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `DATABASE_
 
 "Desktop & Documents Folders" is ON in iCloud settings. The worker resolves the archive root to `~/Documents/CortexArchive/` (which macOS syncs to iCloud transparently). No code change needed.
 
-### 5. Seed (one-time, already run)
+### 5. Build the Vision OCR binary (one-time)
+
+The worker shells out to a Swift binary for on-device OCR of images and scan-only PDFs. Build it once:
+
+```bash
+cd ~/Projects/cortex/agent
+npm run build:ocr
+```
+
+This compiles `agent/macos-bin/Sources/vision-ocr` against the macOS Vision framework. macOS-only; on other platforms the script is a no-op. Rebuild if the Swift source changes or after a Swift toolchain upgrade.
+
+### 6. Seed (one-time, already run)
 
 The 22-folder taxonomy is already seeded against prod. If you ever need to re-seed (e.g. against a different Neon branch), set DATABASE_URL and run:
 
@@ -87,7 +101,7 @@ The 22-folder taxonomy is already seeded against prod. If you ever need to re-se
 npm run seed
 ```
 
-The seed creates the placeholder User on first run; your first browser sign-in upserts your real `clerkId` into that row. **Or** set `CORTEX_SEED_USER_CLERK_ID=user_xxx` to use a specific Clerk user before running.
+Cortex is single-operator (no `User` table), so the seed only writes Folder rows. The first browser sign-in is gated by Clerk dashboard; any authenticated session is the owner.
 
 ## Day-to-day commands
 
@@ -104,24 +118,36 @@ enqueued: some-receipt.pdf (id=cmp..., status=pending_classification)
 ```
 
 Supported file types (everything else goes to `unsupported_type` and shows in the Failed tab):
-- `.pdf` (with or without text layer — Claude does OCR on text-less PDFs natively)
-- `.png`, `.jpg`, `.jpeg`, `.webp` (image content sent to Claude as multimodal)
-- `.heic` (preconverted to JPEG via macOS `sips`)
-- `.txt`, `.md`
-- `.docx`
+- `.txt`, `.md`, `.markdown` — `fs.readFile`
+- `.docx` — `mammoth` raw text extract
+- `.pdf` with a text layer — `pdf-parse`
+- `.pdf` scan-only (no text layer) — Vision OCR per page (PDFKit + `VNRecognizeTextRequest`)
+- `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, `.heif`, `.tiff`, `.gif`, `.bmp` — Vision OCR on the bitmap
+
+Every supported file becomes plain text on the Mac before classify. Claude Haiku always receives text-mode input plus file metadata; multimodal blocks are not used.
 
 Duplicate (same SHA256, same user): returns 409, prints `duplicate: already added as <id> (status=...)`.
 
 ### Start the worker
+
+Foreground (for dogfooding — Ctrl-C stops it):
 
 ```bash
 cd ~/Projects/cortex/agent
 npm run worker
 ```
 
-Runs the two poll loops (classify + move). Polls every 30 seconds. Logs each tick to stderr.
+Runs the poll loops (classify + move). Polls every 30 seconds. Logs each tick to stderr.
 
-For production: register under launchd with `agent/launchd/com.cortex.consumer.plist`. The existing plist needs its `ProgramArguments` updated to call `tsx src/worker.ts` instead of the old `src/index.js`. (Will write this in a follow-up if you want autostart.)
+To run as a background launchd service, copy the bundled plist and load it:
+
+```bash
+cp agent/launchd/com.cortex.daemon.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cortex.daemon.plist
+launchctl kickstart -k gui/$(id -u)/com.cortex.daemon   # start (or restart) it
+```
+
+Logs land at `/tmp/cortex-worker.log` and `/tmp/cortex-worker-error.log`. To unload: `launchctl bootout gui/$(id -u)/com.cortex.daemon`. If you upgrade node via nvm, edit the absolute path in the plist before reloading.
 
 ### Triage
 
@@ -216,31 +242,34 @@ SELECT
 FROM "Decision"
 WHERE "createdAt" > NOW() - INTERVAL '7 days';
 
--- did the classifier ever emit proposedNewFolder?
-SELECT COUNT(*) FILTER (WHERE "proposedNewFolder" IS NOT NULL) AS emitted,
-       COUNT(*)                                                AS total
+-- how often does the classifier propose a brand-new folder (any rank)?
+SELECT
+  COUNT(*) FILTER (WHERE EXISTS (
+    SELECT 1 FROM jsonb_array_elements("proposalCandidates") p WHERE p->>'kind' = 'new'
+  )) AS emitted_new_folder,
+  COUNT(*) AS total
 FROM "Item"
 WHERE status != 'pending_classification';
 ```
 
 ### Anthropic billing
 
-After 2026-06-15 the Claude CLI subscription billing ends. Your Max tier gives $100/month in API credits. Cortex's classify spend is roughly:
-- Text-mode classification: ~$0.005 per item
-- Image / native-PDF: ~$0.005-$0.012 per item
-
-At 10-20 items/day, you'll use $1-5/month of credit. Well inside the pool.
+After 2026-06-15 the Claude CLI subscription billing ends. Your Max tier gives $100/month in API credits. With Vision OCR on the Mac, every classify call is text-mode (no multimodal upload), so cost is roughly $0.003-$0.005 per item regardless of input type. At 10-20 items/day, you'll use $1-3/month of credit. Well inside the pool.
 
 ### What's deliberately NOT in v1 (deferred to v2)
 
 - Gmail ingest
 - Drive blob store (files stay on local FS, iCloud-synced)
-- Embeddings + Q&A ("What's my passport number?" Q&A)
-- OCR for scan-only PDFs without text layers (Claude native PDF handles most of this already)
-- Model-driven folder proposals in the UI (the `proposedNewFolder` field is collected on every classification but hidden in v1; v2 decides whether to surface it)
-- The Mac watcher (chokidar) — v1 uses manual `cortex add`; once the loop is rock-solid for a week, add the watcher
+- Mac watcher (chokidar) — v1 uses manual `cortex add`; once the loop is rock-solid for a week, add the watcher
 - LangSmith / observability — `lib/trace.ts` is a noop wrapper; swap a real client there when needed
 - `cortex add --hint <folder-id>` shortcut (TODO captured)
+
+### What's landing in v2 (in progress)
+
+- macOS Vision OCR pipeline for images and scan-only PDFs (✅ shipped)
+- Haiku-suggested filename, editable in `/triage` (✅ schema + classify shipped; UI input next batch)
+- RAG embedding loop with OpenAI `text-embedding-3-small` @ 512 dims into `ItemChunk` halfvec (in flight)
+- `POST /api/ask` Q&A endpoint with citations + dedicated `/ask` page (in flight)
 
 ## Troubleshooting
 
@@ -253,18 +282,19 @@ CORTEX_API_BASE_URL=https://cortex.fonnit.com CLERK_MACHINE_SECRET_KEY=ak_... AN
 
 ### Worker returns 401 on every claim
 
-Clerk machine-token exchange failed. Verify:
-- `CLERK_DOMAIN` matches your instance (no trailing slash; usually `https://<slug>.clerk.accounts.dev` or your custom subdomain).
-- The Machine in Clerk dashboard is enabled.
-- The client_secret hasn't been rotated.
+Clerk M2M verification failed on the backend. Verify:
+- Worker's `CLERK_MACHINE_SECRET_KEY` in `agent/.env.daemon` matches the `cortex-worker` machine's `ak_` secret in the Clerk dashboard.
+- Vercel's `CLERK_MACHINE_SECRET_KEY` matches the `cortex-backend` machine's `ak_` secret.
+- The dashboard scope `cortex-worker → cortex-backend` exists. Without it, `m2m.verify()` returns 401 even with a valid token.
+- Neither secret has been rotated since the worker started (worker caches minted `mt_` tokens for their lifetime).
 
 ### Worker claims an item but returns 409 on POST /classification
 
 Race: the user retried the item via the UI while the worker was classifying. Worker should log and move on; the sweep handles the retry.
 
-### "No folders for user — run prisma seed first"
+### "No folders — run prisma seed first"
 
-Sign in to the triage UI once (creates the User row from your Clerk identity), then run `npm run seed` against the same DATABASE_URL with `CORTEX_SEED_USER_CLERK_ID=user_xxx` set to your Clerk user ID. Or copy the 22 folders from the placeholder User to your real one via SQL.
+Run `npm run seed` against the prod `DATABASE_URL` to insert the 22-folder taxonomy. Cortex is single-operator so the seed only writes `Folder` rows; no User row needed.
 
 ### File ended up in `source_missing` or `source_changed`
 
@@ -272,13 +302,13 @@ The worker re-hashes the source file at classification time AND at move time. If
 
 ### "Already added" on a file you don't see in triage
 
-Uniqueness is on `(userId, sha256)`. If you previously added the same content under a different filename, the duplicate is caught at ingest. Check status via the API or SQL.
+Uniqueness is on `Item.sha256` globally. If you previously added the same content under a different filename, the duplicate is caught at ingest. Check status via the API or SQL.
 
 ## Architecture pointers
 
-- **Plan file** (running spec): [/Users/dfonnegrag/.claude/plans/compressed-wobbling-treehouse.md](/Users/dfonnegrag/.claude/plans/compressed-wobbling-treehouse.md)
-- **Design doc** (office-hours output): [~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md](~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md)
-- **Test plan artifact**: [~/.gstack/projects/fonnit-cortex/dfonnegrag-main-eng-review-test-plan-20260514-111410.md](~/.gstack/projects/fonnit-cortex/dfonnegrag-main-eng-review-test-plan-20260514-111410.md)
+- **Plan file** (v1 spec): [/Users/dfonnegrag/.claude/plans/compressed-wobbling-treehouse.md](/Users/dfonnegrag/.claude/plans/compressed-wobbling-treehouse.md)
+- **v1 design doc**: [~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md](~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260512-233606.md)
+- **v2 design doc** (filename + Vision OCR + RAG): [~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260515-010949.md](~/.gstack/projects/fonnit-cortex/dfonnegrag-main-design-20260515-010949.md)
 - **CLAUDE.md** (project conventions for future agents): [./CLAUDE.md](./CLAUDE.md)
 
 ## Week 1 success criteria (dogfood retro)
@@ -287,7 +317,7 @@ By end of dogfood week 1 (run `~/.gstack/projects/fonnit-cortex/retro-week-1.md`
 
 - ✅ Triage cleared (zero `pending_review`) at least 3 times across the week.
 - ✅ Misclassification rate (resolved via `move` rather than `approve`) under 30%, trending down by end of week.
-- ✅ `proposedNewFolder` emission rate measurable (> 0%) — confirms the prompt is asking for it.
+- ✅ "new-folder" proposal rate measurable (> 0%) — confirms the prompt is asking for them as ranked candidates.
 - ✅ `create-folder` rate measurable — input to v2 "do we need automated folder-proposal UI" decision.
 - ✅ Anthropic billing dashboard flat — Max $100/mo credit covers everything.
 - ✅ No items stuck in `pending_classification` for > 1 hour (sweep is working).

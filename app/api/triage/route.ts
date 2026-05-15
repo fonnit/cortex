@@ -33,6 +33,7 @@ export async function GET() {
           proposedFolderId: true,
           confidence: true,
           extractionKind: true,
+          suggestedFilename: true,
         },
       }),
       prisma.item.findMany({

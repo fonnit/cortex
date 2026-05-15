@@ -5,6 +5,7 @@
   "main": "dist/worker.js",
   "scripts": {
     "build": "tsc",
+    "build:ocr": "./macos-bin/build.sh",
     "dev:worker": "tsx watch --env-file=.env.daemon src/worker.ts",
     "worker": "tsx --env-file=.env.daemon src/worker.ts",
     "add": "tsx --env-file=.env.daemon src/cortex-add.ts"
