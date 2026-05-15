@@ -1,0 +1,13 @@
+{
+  "version": "v5",
+  "generated_at": "2026-05-15",
+  "convention": "lowercase-kebab",
+  "folders": [
+    "/business",
+    "/education",
+    "/finance",
+    "/identity",
+    "/legal",
+    "/real-estate"
+  ]
+}

@@ -12,7 +12,7 @@
 import { apiFetch } from './clerk-m2m.js'
 import { extract, type ExtractResult } from './text-extract.js'
 import { classify } from './classify.js'
-import { fetchFolders } from './taxonomy-cache.js'
+import { fetchTaxonomy } from './taxonomy-cache.js'
 import { sha256File } from './hash.js'
 import { rename, mkdir, stat, access } from 'node:fs/promises'
 import { join, dirname, basename, extname, sep } from 'node:path'
@@ -94,17 +94,17 @@ async function classifyItem(item: ClaimedItem): Promise<'worked' | 'error'> {
     return 'worked'
   }
 
-  // 2) Fetch folder tree
-  const folders = await fetchFolders()
-  if (folders.length === 0) {
-    console.error(`[classify] no folders for user — run prisma seed first`)
+  // 2) Fetch folder tree + recent-filename samples (ETag-cached)
+  const taxonomy = await fetchTaxonomy()
+  if (taxonomy.folders.length === 0) {
+    console.error(`[classify] no folders — run prisma seed first`)
     return 'error'
   }
 
   // 3) Classify
   let result
   try {
-    result = await classify(extracted, folders, {
+    result = await classify(extracted, taxonomy, {
       basename: basename(item.sourcePath),
       mimeType: item.mimeType,
       sizeBytes: item.sizeBytes,
@@ -163,8 +163,8 @@ async function moveItem(item: ClaimedItem): Promise<'worked' | 'error'> {
   }
 
   // Resolve destination via the cached folder tree
-  const folders = await fetchFolders()
-  const target = folders.find((f) => f.id === item.folderId)
+  const taxonomy = await fetchTaxonomy()
+  const target = taxonomy.folders.find((f) => f.id === item.folderId)
   if (!target) {
     await apiFetch(`/api/items/${item.id}/move-failed`, {
       method: 'POST',

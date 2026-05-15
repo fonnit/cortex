@@ -31,6 +31,15 @@ export const FolderEntrySchema = z.object({
 })
 export type FolderEntry = z.infer<typeof FolderEntrySchema>
 
+// Taxonomy snapshot returned by /api/taxonomy. sampleFilenames keys are
+// top-level folder paths (e.g. "/business"); values are the most recent
+// Item.finalFilename filed anywhere under that top level. Empty {} on cold
+// start — the prompt omits the RECENT FILENAMES section in that case.
+export type Taxonomy = {
+  folders: FolderEntry[]
+  sampleFilenames: Record<string, string>
+}
+
 const ProposalRawSchema = z.object({
   kind: z.enum(['existing', 'new']),
   path: z.string().min(1),
@@ -60,8 +69,20 @@ export type ResolvedClassification = {
   suggestedFilename: string
 }
 
-function buildSystemPrompt(folders: FolderEntry[]): string {
-  const tree = folders.map((f) => `  ${f.path}`).join('\n')
+function buildSystemPrompt(taxonomy: Taxonomy): string {
+  const tree = taxonomy.folders.map((f) => `  ${f.path}`).join('\n')
+
+  const sampleEntries = Object.entries(taxonomy.sampleFilenames)
+    .filter(([, fn]) => !!fn)
+    .sort(([a], [b]) => a.localeCompare(b))
+  const samplesBlock = sampleEntries.length === 0
+    ? ''
+    : [
+        ``,
+        `RECENT FILENAMES (one example per top-level area; mirror this style):`,
+        ...sampleEntries.map(([top, fn]) => `  ${top.padEnd(14)} → ${fn}`),
+      ].join('\n')
+
   return [
     `You are a personal archive classifier for a user named Daniel Fonnegra.`,
     `Given a document, you propose:`,
@@ -83,27 +104,30 @@ function buildSystemPrompt(folders: FolderEntry[]): string {
     `- Otherwise return 2-5 ranked alternatives across both kinds.`,
     `- "existing": path MUST match one of the EXISTING FOLDERS below verbatim.`,
     `- "new": path is a folder path you'd create. It can extend an existing parent`,
-    `  (e.g. "/Finance/Insurance/Auto" when only "/Finance/Insurance" exists) or be`,
-    `  entirely new (e.g. "/Vehicles/Registrations").`,
-    `- Path rules for new folders: ASCII letters, digits, spaces, hyphens, underscores`,
-    `  only in each segment; each segment <= 60 chars; Title-Case, hyphenated lowercase,`,
-    `  or snake_case (be consistent with siblings); don't propose a new folder identical`,
+    `  (e.g. "/business/fonnit" when only "/business" exists) or be entirely new`,
+    `  (e.g. "/vehicles/registrations").`,
+    `- Path rules for new folders: lowercase-kebab only — ASCII letters, digits,`,
+    `  and hyphens; words separated by single hyphens; no spaces, no underscores,`,
+    `  no capitals. Each segment <= 60 chars. Don't propose a new folder identical`,
     `  to an existing one — use "existing" for that.`,
+    `- Avoid folders that would plausibly hold only 1-2 documents. Prefer the next`,
+    `  level up; the user will deepen the tree when volume justifies it.`,
     ``,
     `FILENAME RULES:`,
-    `- 1-60 characters; ASCII letters, digits, spaces, hyphens, underscores only.`,
+    `- 1-60 characters; lowercase-kebab — ASCII letters, digits, hyphens; words`,
+    `  separated by single hyphens. No spaces, underscores, or capitals.`,
     `- Descriptive but compact. Include key identifiers visible in the document`,
     `  (e.g. invoice number, vendor, year) when present.`,
     `- DO NOT include a file extension (no ".pdf", ".jpg", etc.).`,
-    `- Prefer kebab-case for multi-word names (e.g. "passport-fonnegra-2025-renewal").`,
     `- Do NOT include the user's full name verbatim if it's clearly Daniel's own`,
-    `  document (their archive — name is implicit); include only when it disambiguates`,
-    `  (e.g. spouse's passport, employer name).`,
+    `  document (their archive — name is implicit); include it only when it`,
+    `  disambiguates (e.g. spouse's passport, employer name).`,
     ``,
     `- Do NOT add commentary. Output ONLY the JSON object.`,
     ``,
     `EXISTING FOLDERS:`,
     tree,
+    samplesBlock,
   ].join('\n')
 }
 
@@ -130,7 +154,7 @@ function buildUserContent(
 
 export async function classify(
   extracted: ExtractResult,
-  folders: FolderEntry[],
+  taxonomy: Taxonomy,
   meta: FileMeta,
 ): Promise<ResolvedClassification> {
   if (extracted.kind === 'unsupported') {
@@ -142,7 +166,7 @@ export async function classify(
     {
       model: MODEL,
       max_tokens: 1024,
-      system: buildSystemPrompt(folders),
+      system: buildSystemPrompt(taxonomy),
       messages: [{ role: 'user', content: buildUserContent(extracted, meta) }],
     },
     { timeout: TIMEOUT_MS },
@@ -158,7 +182,7 @@ export async function classify(
   const parsed = ClassificationRawSchema.parse(json)
   parsed.proposals.sort((a, b) => b.confidence - a.confidence)
 
-  const pathToId = new Map(folders.map((f) => [f.path, f.id]))
+  const pathToId = new Map(taxonomy.folders.map((f) => [f.path, f.id]))
   const resolved: ResolvedProposal[] = parsed.proposals.map((p) => {
     const cleanPath = normalizePath(p.path)
     if (p.kind === 'existing') {

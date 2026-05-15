@@ -1,8 +1,10 @@
-// GET /api/taxonomy — folder tree. Accepts user or machine. ETag-cached.
+// GET /api/taxonomy — folder tree + sample filenames per top-level folder.
+// Accepts user or machine. ETag-cached; the ETag covers both folders and
+// samples, so it invalidates when either changes.
 
 import { NextResponse } from 'next/server'
 import crypto from 'node:crypto'
-import { getFolderTree } from '@/lib/taxonomy'
+import { getFolderTree, getSampleFilenames } from '@/lib/taxonomy'
 import { requireAuth } from '@/lib/require-auth'
 import { isHttpError } from '@/lib/http-error'
 
@@ -11,8 +13,11 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   try {
     await requireAuth(['user', 'machine'])
-    const folders = await getFolderTree()
-    const body = JSON.stringify({ folders })
+    const [folders, sampleFilenames] = await Promise.all([
+      getFolderTree(),
+      getSampleFilenames(),
+    ])
+    const body = JSON.stringify({ folders, sampleFilenames })
     const etag = '"' + crypto.createHash('sha1').update(body).digest('hex') + '"'
 
     const inm = req.headers.get('if-none-match')

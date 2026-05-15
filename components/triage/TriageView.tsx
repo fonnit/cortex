@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { basename as pathBasename } from './path'
 import { SourceBadge } from './SourceBadge'
+import { FolderCombobox } from './FolderCombobox'
 
 type Proposal =
   | { kind: 'existing'; folderId: string; path: string; confidence: number }
@@ -386,30 +387,20 @@ export function TriageView() {
 
                   {pickerOpenFor === it.id && (
                     <div className="cx-prop-newinput" style={{ marginTop: '1rem' }}>
-                      <input
-                        className="cx-ask-input"
-                        type="text"
-                        list="folder-paths"
-                        placeholder="Type a folder path, e.g. /Finance/Taxes/2025"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const value = (e.target as HTMLInputElement).value.trim()
-                            const f = folders.find((f) => f.path === value)
-                            if (!f) { showToast('no folder with that exact path'); return }
-                            const s = sanitizeFilenameDraft(currentFilename(it))
-                            if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
-                            move.mutate({ itemId: it.id, folderId: f.id, finalFilename: s.value })
-                          } else if (e.key === 'Escape') {
-                            setPickerOpenFor(null)
-                          }
-                        }}
+                      <FolderCombobox
+                        folders={folders}
+                        value={null}
                         autoFocus
+                        placeholder="Type to filter folders, e.g. finance"
+                        onChange={() => { /* selection committed via onConfirm */ }}
+                        onConfirm={(folderId) => {
+                          if (!folderId) return
+                          const s = sanitizeFilenameDraft(currentFilename(it))
+                          if (!s.valid) { showToast(`fix filename: ${s.reason}`); return }
+                          move.mutate({ itemId: it.id, folderId, finalFilename: s.value })
+                        }}
+                        onEscape={() => setPickerOpenFor(null)}
                       />
-                      <datalist id="folder-paths">
-                        {folders.map((f) => (
-                          <option key={f.id} value={f.path} />
-                        ))}
-                      </datalist>
                       <button className="cx-linkbtn" onClick={() => setPickerOpenFor(null)}>cancel</button>
                     </div>
                   )}
@@ -419,23 +410,14 @@ export function TriageView() {
                       <label className="cx-card-sub">
                         Parent: <span className="cx-mono">{createParentId ? folderById[createParentId]?.path : '(top-level)'}</span>
                       </label>
-                      <input
-                        className="cx-ask-input"
-                        type="text"
-                        list="folder-parents"
-                        placeholder="Parent folder path or blank for top-level"
-                        onBlur={(e) => {
-                          const value = e.target.value.trim()
-                          if (!value) { setCreateParentId(null); return }
-                          const f = folders.find((f) => f.path === value)
-                          setCreateParentId(f?.id ?? null)
-                        }}
+                      <FolderCombobox
+                        folders={folders}
+                        value={createParentId}
+                        allowNone
+                        noneLabel="(top-level)"
+                        placeholder="Parent folder path or leave blank for top-level"
+                        onChange={(folderId) => setCreateParentId(folderId)}
                       />
-                      <datalist id="folder-parents">
-                        {folders.map((f) => (
-                          <option key={f.id} value={f.path} />
-                        ))}
-                      </datalist>
                       <input
                         className="cx-ask-input"
                         type="text"

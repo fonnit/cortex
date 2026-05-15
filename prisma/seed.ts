@@ -1,9 +1,10 @@
-// Cortex v1 — seed taxonomy v4 → Folder rows.
+// Cortex v2 — seed taxonomy v5 → Folder rows.
 //
-// Reads prisma/seeds/taxonomy-v4.json and synthesizes a hierarchical folder
-// tree from the unique drivePath dirnames of the anchor list.
+// Reads prisma/seeds/taxonomy-v5.json and creates a Folder row per path.
+// Lowercase-kebab convention; the classify prompt expects the same.
 //
-// Idempotent: existing folders (matched by global path) are skipped.
+// Idempotent: existing folders (matched by `path`) are skipped, so this is
+// safe to re-run after a partial deploy.
 
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
@@ -26,45 +27,38 @@ const adapter = isNeon
 
 const prisma = new PrismaClient({ adapter })
 
-type Anchor = { file: string; type: string; from: string | null; drivePath: string }
-type SeedDoc = { version: string; axes: Record<string, string[]>; anchors: Anchor[] }
+type SeedDoc = { version: string; folders: string[] }
 
 function loadSeed(): SeedDoc {
-  const p = join(process.cwd(), 'prisma/seeds/taxonomy-v4.json')
+  const p = join(process.cwd(), 'prisma/seeds/taxonomy-v5.json')
   return JSON.parse(readFileSync(p, 'utf-8')) as SeedDoc
 }
 
-function collectFolderPaths(anchors: Anchor[]): string[] {
+function expandPaths(folders: string[]): string[] {
+  // Every ancestor must exist before its child. Given ["/a/b/c"], emit
+  // ["/a", "/a/b", "/a/b/c"]. The v5 seed only has 1-level folders today,
+  // but keeping this helper future-proofs against deeper nesting.
   const set = new Set<string>()
-  for (const a of anchors) {
-    const parts = a.drivePath.replace(/^\/+/, '').split('/').slice(0, -1)
-    while (parts.length > 0) {
-      set.add('/' + parts.join('/'))
-      parts.pop()
+  for (const path of folders) {
+    const parts = path.replace(/^\/+/, '').split('/')
+    for (let i = 1; i <= parts.length; i++) {
+      set.add('/' + parts.slice(0, i).join('/'))
     }
   }
-  return Array.from(set).sort()
+  return Array.from(set).sort((a, b) => a.split('/').length - b.split('/').length)
 }
 
 async function main() {
   const seed = loadSeed()
-  console.log(`[seed] taxonomy ${seed.version}: ${seed.anchors.length} anchors`)
+  console.log(`[seed] taxonomy ${seed.version}: ${seed.folders.length} folders declared`)
 
-  const paths = collectFolderPaths(seed.anchors)
-  console.log(`[seed] ${paths.length} folder paths to ensure`)
-
-  // Insert in path-length order so parents exist before children.
-  const sorted = [...paths].sort((a, b) => a.split('/').length - b.split('/').length)
-
+  const paths = expandPaths(seed.folders)
   let created = 0
   let skipped = 0
 
-  for (const path of sorted) {
+  for (const path of paths) {
     const existing = await prisma.folder.findUnique({ where: { path } })
-    if (existing) {
-      skipped++
-      continue
-    }
+    if (existing) { skipped++; continue }
 
     const parts = path.replace(/^\/+/, '').split('/')
     const name = parts[parts.length - 1]
@@ -73,9 +67,7 @@ async function main() {
     let parentId: string | null = null
     if (parentPath) {
       const parent = await prisma.folder.findUnique({ where: { path: parentPath } })
-      if (!parent) {
-        throw new Error(`Parent folder not found for ${path} (expected ${parentPath})`)
-      }
+      if (!parent) throw new Error(`Parent folder not found for ${path} (expected ${parentPath})`)
       parentId = parent.id
     }
 
@@ -87,10 +79,5 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
-    console.error(e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+  .catch((e) => { console.error(e); process.exit(1) })
+  .finally(async () => { await prisma.$disconnect() })

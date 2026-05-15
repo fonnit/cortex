@@ -6,7 +6,7 @@
     "build": "prisma generate && prisma db push --accept-data-loss && next build",
     "start": "next start",
     "postinstall": "prisma generate",
-    "seed": "tsx prisma/seed.ts",
+    "seed": "tsx --env-file=.env.local prisma/seed.ts",
     "test": "jest",
     "typecheck": "tsc --noEmit"
   },
