@@ -427,7 +427,7 @@ export function TriageView() {
                       <input
                         className="cx-ask-input"
                         type="text"
-                        placeholder="New folder name (letters / digits / space / - / _ — max 60 chars)"
+                        placeholder="New folder — single name or nested path (e.g. fonnit/branding)"
                         value={createName}
                         onChange={(e) => setCreateName(e.target.value)}
                         onKeyDown={(e) => {
